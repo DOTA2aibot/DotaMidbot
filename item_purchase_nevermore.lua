@@ -1,16 +1,22 @@
 ----------------------------------------------------------------------------------------------------
--- MIDBOT: закупка SF. Очередь продвигается только после подтверждённой покупки.
+-- MIDBOT: закупка SF. Очередь продвигается после подтверждённой покупки;
+-- недоступные предметы скипаются, временные отказы отправляют предмет в конец очереди.
 ----------------------------------------------------------------------------------------------------
 local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, не вызывать магазин каждый кадр
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
+local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> скипаем предмет, не встаём насмерть
+-- Порядок по гайду Олега: танго -> варды -> ветки -> ботл -> дальше по сборке
 local tableItemsToBuy = {
-	"item_tango", "item_wraith_band", "item_bottle", "item_flask", "item_magic_wand",
+	"item_tango", "item_ward_observer", "item_ward_sentry", -- п.5 гайда: жёлтый+синий вард на старте
+	"item_branches", "item_branches", "item_bottle", "item_flask",
+	"item_wraith_band", "item_magic_wand",
 	"item_power_treads", "item_dragon_lance", "item_black_king_bar", "item_desolator",
 	"item_butterfly", "item_satanic",
 };
 local pendingComponents = nil;
 local nextAttemptTime = -math.huge;
 local lastMessage = nil;
+local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
 
 local function Report( message )
 	if ( message ~= lastMessage ) then
@@ -97,13 +103,16 @@ function ItemPurchaseThink()
 	if ( #pendingComponents == 0 ) then
 		table.remove( tableItemsToBuy, 1 );
 		pendingComponents = nil;
+		componentFailures = 0;
 		bot:SetNextItemPurchaseValue( 0 );
 		Report( "plan_complete target=" .. target .. " (assembly/delivery not verified)" );
 		return;
 	end
 	local component = pendingComponents[1];
 	local cost = GetItemCost( component );
-	if ( type( cost ) ~= "number" or cost <= 0 or cost ~= cost or cost == math.huge ) then
+	-- Цена 0 — ВАЛИДНА: observer ward в текущем патче бесплатный (фикс аудита GPT:
+	-- раньше cost<=0 считался ошибкой и очередь навсегда вставала на варде).
+	if ( type( cost ) ~= "number" or cost < 0 or cost ~= cost or cost == math.huge ) then
 		Report( "blocked: invalid cost item=" .. component );
 		return;
 	end
@@ -113,5 +122,33 @@ function ItemPurchaseThink()
 	Report( "target=" .. target .. " item=" .. component .. " result=" .. tostring( result ) );
 	if ( result == PURCHASE_ITEM_SUCCESS ) then
 		table.remove( pendingComponents, 1 );
+		componentFailures = 0;
+		return;
+	end
+	-- Кросс-зона фикс [kimi] по репорту Олега: варды выкупили со склада другие боты,
+	-- и бот вечно ретраил вард, не идя дальше по списку.
+	-- Предмет недоступен принципиально (нет на складе / запрещён / невалиден) —
+	-- скипаем его целиком и идём к следующему.
+	if ( result == PURCHASE_ITEM_OUT_OF_STOCK
+		or result == PURCHASE_ITEM_INVALID_ITEM_NAME
+		or result == PURCHASE_ITEM_DISALLOWED_ITEM ) then
+		Report( "skip target=" .. target .. " reason=unavailable result=" .. tostring( result ) );
+		pendingComponents = nil;
+		componentFailures = 0;
+		table.remove( tableItemsToBuy, 1 );
+		return;
+	end
+	-- Остальные неудачи (нет золота в моменте, не у лавки и т.п.) — ретраим,
+	-- но с предохранителем: 20 подряд (~10 сек) -> скип, чтобы закупка не вставала насмерть.
+	componentFailures = componentFailures + 1;
+	if ( componentFailures >= MAX_COMPONENT_FAILURES ) then
+		-- Фикс аудита GPT: временные отказы не должны необратимо удалять предмет
+		-- (можно потерять сборку, уже оплатив часть компонентов). Переносим цель
+		-- в КОНЕЦ очереди — попробуем позже, а пока покупаем остальное.
+		Report( "defer target=" .. target .. " reason=too_many_failures last_result=" .. tostring( result ) );
+		pendingComponents = nil;
+		componentFailures = 0;
+		table.remove( tableItemsToBuy, 1 );
+		table.insert( tableItemsToBuy, target );
 	end
 end
