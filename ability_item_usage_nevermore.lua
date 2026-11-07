@@ -27,20 +27,22 @@ local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
 -- T018: явная прокачка. Дефолтный ИИ в 1v1 mid очки может не тратить вообще,
--- поэтому раскладываем первые 10 уровней сами: рейзы равномерно, ульта на 6.
--- Дальше 10-го уровня список молчит — прокачку подхватывает стандартный ИИ.
+-- поэтому раскладываем первые 10 уровней сами.
+-- ВАЖНО: все три рейза делят ОДИН уровень (качаем любой — качаются все),
+-- поэтому качаем только shadowraze1. Дальше 10-го уровня список молчит —
+-- прокачку подхватывает стандартный ИИ.
 ----------------------------------------------------------------------------------------------------
 local SKILL_ORDER = {
-	"nevermore_shadowraze1",  -- 1
-	"nevermore_shadowraze2",  -- 2
-	"nevermore_shadowraze3",  -- 3
-	"nevermore_shadowraze1",  -- 4
-	"nevermore_shadowraze2",  -- 5
-	"nevermore_requiem",      -- 6
-	"nevermore_shadowraze3",  -- 7
-	"nevermore_shadowraze1",  -- 8
-	"nevermore_shadowraze2",  -- 9
-	"nevermore_shadowraze3",  -- 10
+	"nevermore_shadowraze1",      -- 1
+	"nevermore_shadowraze1",      -- 2
+	"nevermore_shadowraze1",      -- 3
+	"nevermore_shadowraze1",      -- 4 (рейзы максимум)
+	"nevermore_necromastery",     -- 5
+	"nevermore_requiem",          -- 6
+	"nevermore_necromastery",     -- 7
+	"nevermore_necromastery",     -- 8
+	"nevermore_necromastery",     -- 9
+	"nevermore_dark_lord",        -- 10
 };
 
 function LevelUpThink( npcBot )
