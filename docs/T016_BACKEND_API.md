@@ -35,7 +35,7 @@ lease конкретного плана жив (TTL) и подтверждён A
 | `ConsiderRazeOnHero( bot )` → desire, loc, ability | скоринг каста по герою (+крипы в зоне) |
 | `ConsiderRazeOnCreeps( bot )` → desire, loc, ability | дальний крип / вышка / добивание / пачка |
 | `ConsiderRequiem( bot )` → desire, target | добивание / отпорка ультой |
-| `CastRaze( bot, ability, loc )` | правильный no-target каст: разворот `Action_AttackMove(loc)` + `Action_UseAbility` |
+| `CastRaze( bot, ability, loc )` | no-target каст с подтверждением разворота: если не `IsFacingLocation(loc, 20°)` — только `Action_MoveToLocation(loc)` (доворот), каст следующим тиком; иначе `Action_UseAbility` |
 | `GetRazeImpactPoint( bot, target, i )` → vector | геометрия: центр удара i-го рейза (200/450/700, радиус 250) |
 | `EffectiveRazeDamage( rawDamage, unit )` → number | урон с магрезистами (герои ×0.75, siege ×0.20) |
 | `GetSoulsCount( bot )` → number\|nil | души Necromastery (стаки модификатора) |

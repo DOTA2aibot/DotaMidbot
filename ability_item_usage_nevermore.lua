@@ -190,11 +190,20 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Каст рейза. Рейзы — NO_TARGET способности: бьют на фикс. дистанции
 -- в направлении, КУДА СМОТРИТ герой. Action_UseAbilityOnLocation тут не работает
--- (фикс аудита GPT). Делаем как эталонный bot_nevermore от Valve:
--- сначала AttackMove в сторону цели (разворачивает героя), затем каст.
+-- (фикс аудита GPT).
+-- Фикс 2 (ревью GPT по логу observe): AttackMove -> каст в одном тике НЕ
+-- гарантирует, что герой успел развернуться — рейз уходит по старому взгляду.
+-- Поэтому: если ещё не смотрим на цель — только доворачиваемся этим тиком;
+-- каст уходит следующим тиком, когда IsFacingLocation подтвердит разворот.
 ----------------------------------------------------------------------------------------------------
+local RAZE_FACING_TOLERANCE_DEG = 20; -- допуск разворота перед кастом
+
 function CastRaze( npcBot, razeAbility, vLoc )
-	npcBot:Action_AttackMove( vLoc );
+	if ( not npcBot:IsFacingLocation( vLoc, RAZE_FACING_TOLERANCE_DEG ) )
+	then
+		npcBot:Action_MoveToLocation( vLoc ); -- доворот; каст НЕ отправляем
+		return;
+	end
 	npcBot:Action_UseAbility( razeAbility );
 end
 
