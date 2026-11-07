@@ -4,7 +4,8 @@
 local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, не вызывать магазин каждый кадр
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
 local tableItemsToBuy = {
-	"item_tango", "item_wraith_band", "item_bottle", "item_flask", "item_magic_wand",
+	"item_tango", "item_ward_observer", "item_ward_sentry", -- п.5 гайда: жёлтый+синий вард на старте
+	"item_wraith_band", "item_bottle", "item_flask", "item_magic_wand",
 	"item_power_treads", "item_dragon_lance", "item_black_king_bar", "item_desolator",
 	"item_butterfly", "item_satanic",
 };

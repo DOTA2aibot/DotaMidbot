@@ -164,14 +164,41 @@ function ConsiderRequiem( npcBot )
 end
 
 ----------------------------------------------------------------------------------------------------
--- Рейз по герою: ближайший видимый враг в зоне досягаемости любого рейза
+-- Хелперы геометрии рейзов.
+-- ВАЖНО про механику: рейз бьёт на ФИКСИРОВАННОЙ дистанции от героя
+-- (200/450/700) в направлении точки каста. Поэтому целимся не "в точку",
+-- а выбираем направление так, чтобы в зону удара попало максимум целей.
+----------------------------------------------------------------------------------------------------
+function Dist2D( vA, vB )
+	local dx = vA.x - vB.x;
+	local dy = vA.y - vB.y;
+	return math.sqrt( dx * dx + dy * dy );
+end
+
+-- Центр удара i-го рейза, если кастовать в направлении vTarget
+function GetRazeImpactPoint( npcBot, vTarget, i )
+	local vBot = npcBot:GetLocation();
+	local dx = vTarget.x - vBot.x;
+	local dy = vTarget.y - vBot.y;
+	local len = math.sqrt( dx * dx + dy * dy );
+	if ( len < 1 ) then len = 1 end;
+	return vBot + Vector( dx / len * RAZE_DIST[i], dy / len * RAZE_DIST[i], 0 );
+end
+
+----------------------------------------------------------------------------------------------------
+-- Рейз по герою (гайд Олега, п.1): ищем каст, который заденет И врага, И крипов.
+-- Скорим все три рейза: попадание по герою + крипы в зоне удара (бонус за добиваемых).
 ----------------------------------------------------------------------------------------------------
 function ConsiderRazeOnHero( npcBot )
 
-	-- Не жечь ману в ноль на харасс; на добивание (враг почти мёртв) ману не жалеем
 	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
-
 	local tableEnemyHeroes = npcBot:GetNearbyHeroes( RAZE_DIST[3] + RAZE_RADIUS, true, BOT_MODE_NONE );
+	local tableEnemyCreeps = npcBot:GetNearbyLaneCreeps( RAZE_DIST[3] + RAZE_RADIUS, true );
+
+	local bestScore = 0;
+	local bestLoc = nil;
+	local bestRaze = nil;
+	local bestKill = false;
 
 	for _, npcEnemy in pairs( tableEnemyHeroes )
 	do
@@ -184,30 +211,60 @@ function ConsiderRazeOnHero( npcBot )
 				vLoc = vLoc + npcEnemy:GetVelocity() * RAZE_CAST_POINT;
 			end
 
-			local nDist = GetUnitToLocationDistance( npcBot, vLoc );
-			local raze = GetRazeForDistance( nDist );
+			for i = 1, 3
+			do
+				if ( abilityRaze[i] ~= nil and abilityRaze[i]:IsFullyCastable() )
+				then
+					local vImpact = GetRazeImpactPoint( npcBot, vLoc, i );
 
-			if ( raze ~= nil )
-			then
-				local enemyPct = npcEnemy:GetHealth() / npcEnemy:GetMaxHealth();
-				-- Добивание — всегда; харасс — только если маны хватает
-				if ( enemyPct <= 0.25 and manaPct > 0.15 )
-				then
-					return BOT_ACTION_DESIRE_HIGH, vLoc, raze;
-				end
-				if ( manaPct >= RAZE_MANA_PCT_HARASS )
-				then
-					return BOT_ACTION_DESIRE_MODERATE, vLoc, raze;
+					-- Герой должен попасть в зону удара
+					if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS )
+					then
+						local nDamage = abilityRaze[i]:GetAbilityDamage();
+						local score = 10; -- база за попадание по герою
+
+						-- П.1 гайда: тот же рейз должен по возможности бить и крипов
+						for _, npcCreep in pairs( tableEnemyCreeps )
+						do
+							if ( Dist2D( npcCreep:GetLocation(), vImpact ) <= RAZE_RADIUS )
+							then
+								if ( npcCreep:GetHealth() <= nDamage )
+								then
+									score = score + 2; -- крип ещё и умрёт
+								else
+									score = score + 1;
+								end
+							end
+						end
+
+						if ( score > bestScore )
+						then
+							bestScore = score;
+							bestLoc = vLoc;
+							bestRaze = abilityRaze[i];
+							bestKill = ( npcEnemy:GetHealth() / npcEnemy:GetMaxHealth() ) <= 0.25;
+						end
+					end
 				end
 			end
 		end
 	end
 
+	if ( bestRaze == nil ) then return BOT_ACTION_DESIRE_NONE, nil, nil end;
+
+	-- Добивание — всегда; харасс — только если маны хватает
+	if ( bestKill and manaPct > 0.15 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
+	if ( manaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
+
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
 end
 
 ----------------------------------------------------------------------------------------------------
--- Рейз по крипам: 2+ крипа в полосе одного рейза или гарантированное добивание
+-- Рейз по крипам. Приоритеты (гайд Олега, п.3-4):
+--   1. Добить ДАЛЬНЕГО крипа (мага) дальним рейзом — безопасно и выгодно
+--   2. Добить крипа под НАШЕЙ вышкой, если с руки не достать
+--   3. Любое гарантированное добивание
+--   4. Задеть пачку из 3+ одним рейзом
 ----------------------------------------------------------------------------------------------------
 function ConsiderRazeOnCreeps( npcBot )
 
@@ -219,51 +276,93 @@ function ConsiderRazeOnCreeps( npcBot )
 	end
 
 	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
-	if ( manaPct < RAZE_MANA_PCT_HARASS )
+	if ( manaPct < 0.25 ) -- жёсткий минимум: под вышкой добиваем и на малой мане
 	then
 		return BOT_ACTION_DESIRE_NONE, nil, nil;
 	end
 
-	local tableEnemyCreeps = npcBot:GetNearbyLaneCreeps( RAZE_DIST[3] + RAZE_RADIUS, true );
+	local nSearchRadius = RAZE_DIST[3] + RAZE_RADIUS;
+	local tableEnemyCreeps = npcBot:GetNearbyLaneCreeps( nSearchRadius, true );
+	local tableAlliedTowers = npcBot:GetNearbyTowers( 1400, false );
 
-	-- Считаем крипов по полосам каждого рейза
+	-- Собираем статистику по полосам каждого рейза
+	local rangedSecure = nil;  -- {loc, raze} дальний крип
+	local towerSecure = nil;   -- {loc, raze} крип под нашей вышкой
+	local killSecure = nil;    -- {loc, raze} любое добивание
+	local packBest = nil;      -- {loc, raze, count} пачка
+
 	for i = 1, 3
 	do
 		if ( abilityRaze[i] ~= nil and abilityRaze[i]:IsFullyCastable() )
 		then
 			local nDamage = abilityRaze[i]:GetAbilityDamage();
 			local count = 0;
-			local killTarget = nil;
+			local packCenter = nil;
 
 			for _, npcCreep in pairs( tableEnemyCreeps )
 			do
-				local nDist = GetUnitToUnitDistance( npcBot, npcCreep );
-				if ( math.abs( nDist - RAZE_DIST[i] ) <= RAZE_RADIUS )
+				local vCreepLoc = npcCreep:GetLocation();
+				local nDist = GetUnitToLocationDistance( npcBot, vCreepLoc );
+				local vImpact = GetRazeImpactPoint( npcBot, vCreepLoc, i );
+
+				-- Крип реально попадает в зону удара этого рейза
+				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
 				then
 					count = count + 1;
+					packCenter = vCreepLoc;
+
 					if ( npcCreep:GetHealth() <= nDamage )
 					then
-						killTarget = npcCreep;
+						-- П.3: дальний крип (маг) — приоритет. Дальность атаки > 200 = ranged/сiege
+						if ( npcCreep:GetAttackRange() > 200 and rangedSecure == nil )
+						then
+							rangedSecure = { loc = vCreepLoc, raze = abilityRaze[i] };
+						end
+
+						-- П.4: крип рядом с НАШЕЙ вышкой — добиваем скиллом
+						if ( towerSecure == nil )
+						then
+							for _, npcTower in pairs( tableAlliedTowers )
+							do
+								if ( GetUnitToLocationDistance( npcTower, vCreepLoc ) <= 800 )
+								then
+									towerSecure = { loc = vCreepLoc, raze = abilityRaze[i] };
+									break;
+								end
+							end
+						end
+
+						if ( killSecure == nil )
+						then
+							killSecure = { loc = vCreepLoc, raze = abilityRaze[i] };
+						end
 					end
 				end
 			end
 
-			-- Добивание одного крипа
-			if ( killTarget ~= nil )
+			if ( count >= 3 and packBest == nil and manaPct >= RAZE_MANA_PCT_HARASS )
 			then
-				return BOT_ACTION_DESIRE_MODERATE, killTarget:GetLocation(), abilityRaze[i];
-			end
-
-			-- Или задеть пачку из 3+
-			if ( count >= 3 )
-			then
-				-- Кастуем в центр полосы перед собой
-				local vForward = npcBot:GetFacing();
-				local rad = math.rad( vForward );
-				local vLoc = npcBot:GetLocation() + Vector( math.cos( rad ), math.sin( rad ), 0 ) * RAZE_DIST[i];
-				return BOT_ACTION_DESIRE_LOW, vLoc, abilityRaze[i];
+				packBest = { loc = packCenter, raze = abilityRaze[i], count = count };
 			end
 		end
+	end
+
+	-- Выдаём по приоритету
+	if ( rangedSecure ~= nil )
+	then
+		return BOT_ACTION_DESIRE_MODERATE, rangedSecure.loc, rangedSecure.raze;
+	end
+	if ( towerSecure ~= nil )
+	then
+		return BOT_ACTION_DESIRE_MODERATE, towerSecure.loc, towerSecure.raze;
+	end
+	if ( killSecure ~= nil and manaPct >= RAZE_MANA_PCT_HARASS )
+	then
+		return BOT_ACTION_DESIRE_LOW, killSecure.loc, killSecure.raze;
+	end
+	if ( packBest ~= nil )
+	then
+		return BOT_ACTION_DESIRE_LOW, packBest.loc, packBest.raze;
 	end
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
