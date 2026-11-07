@@ -23,6 +23,7 @@ local RAZE_CAST_POINT = 0.55;        -- задержка каста для уп�
 
 local abilityRaze = { nil, nil, nil };
 local abilityRequiem = nil;
+local abilityFeast = nil; -- Feast of Souls (7.4x): самобафф, скорость атаки/передвижения
 local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
@@ -119,6 +120,7 @@ function InitAbilities( npcBot )
 	abilityRaze[2] = npcBot:GetAbilityByName( "nevermore_shadowraze2" );
 	abilityRaze[3] = npcBot:GetAbilityByName( "nevermore_shadowraze3" );
 	abilityRequiem = npcBot:GetAbilityByName( "nevermore_requiem" );
+	abilityFeast = npcBot:GetAbilityByName( "nevermore_feast_of_souls" ); -- 7.4x, активка на D
 	bAbilitiesInit = true;
 end
 
@@ -174,6 +176,13 @@ function AbilityUsageThink()
 	if ( desireRaze > 0 )
 	then
 		CastRaze( npcBot, razeAbility, locRaze );
+		return;
+	end
+
+	-- 3. Feast of Souls — самобафф перед дракой или под пачку крипов
+	if ( ConsiderFeastOfSouls( npcBot ) > 0 )
+	then
+		npcBot:Action_UseAbility( abilityFeast );
 		return;
 	end
 
@@ -274,6 +283,49 @@ function GetRazeImpactPoint( npcBot, vTarget, i )
 	local len = math.sqrt( dx * dx + dy * dy );
 	if ( len < 1 ) then len = 1 end;
 	return vBot + Vector( dx / len * RAZE_DIST[i], dy / len * RAZE_DIST[i], 0 );
+end
+
+----------------------------------------------------------------------------------------------------
+-- Feast of Souls (7.4x, активка на D): самобафф скорости атаки/передвижения.
+-- Прожимаем перед боем (враг рядом) или под жирную пачку крипов.
+-- Ману на рейзы бережём: ниже 50% маны не баффаемся.
+-- Имя способности в патче не подтверждено игрой: если GetAbilityByName вернул
+-- nil — функция молча выключена (nil-safe), проверка через игровой probe.
+----------------------------------------------------------------------------------------------------
+local FEAST_MANA_PCT = 0.50;      -- минимум маны для баффа
+local FEAST_ENEMY_RADIUS = 900;   -- враг в этом радиусе = скоро драка
+local FEAST_CREEP_PACK = 4;       -- столько крипов рядом = фарм-бафф
+
+function ConsiderFeastOfSouls( npcBot )
+
+	if ( abilityFeast == nil or not abilityFeast:IsFullyCastable() )
+	then
+		return BOT_ACTION_DESIRE_NONE;
+	end
+
+	if ( npcBot:GetMana() / npcBot:GetMaxMana() < FEAST_MANA_PCT )
+	then
+		return BOT_ACTION_DESIRE_NONE;
+	end
+
+	-- Враг рядом — бафф перед дракой (приоритет)
+	local tableEnemyHeroes = npcBot:GetNearbyHeroes( FEAST_ENEMY_RADIUS, true, BOT_MODE_NONE );
+	for _, npcEnemy in pairs( tableEnemyHeroes )
+	do
+		if ( npcEnemy:CanBeSeen() and not npcEnemy:IsInvulnerable() )
+		then
+			return BOT_ACTION_DESIRE_MODERATE;
+		end
+	end
+
+	-- Пачка крипов — бафф под фарм
+	local tableEnemyCreeps = npcBot:GetNearbyLaneCreeps( 700, true );
+	if ( #tableEnemyCreeps >= FEAST_CREEP_PACK )
+	then
+		return BOT_ACTION_DESIRE_LOW;
+	end
+
+	return BOT_ACTION_DESIRE_NONE;
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -538,6 +590,15 @@ function DebugPrintModifiers( npcBot )
 	if ( not MIDBOT_DEBUG_MODIFIERS ) then return end;
 	if ( GameTime() < nextDiagTime ) then return end;
 	nextDiagTime = GameTime() + 3.0;
+	-- Имена способностей в слотах (проверка имён текущего патча, напр. feast_of_souls)
+	for nSlot = 0, 8
+	do
+		local ability = npcBot:GetAbilityInSlot( nSlot );
+		if ( ability ~= nil )
+		then
+			print( "[MIDBOT diag] ability[" .. nSlot .. "]=" .. ability:GetName() );
+		end
+	end
 	for i = 0, ModifierCountOf( npcBot ) - 1
 	do
 		print( "[MIDBOT diag] self: " .. npcBot:GetModifierName( i )
