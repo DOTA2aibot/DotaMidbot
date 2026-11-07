@@ -1,6 +1,6 @@
 # T007 draft 3: варианты игровых планов вместо фиксированной очереди правил
 
-**Статус:** код планировщика/протокола для ветки task/T007-laning и code review; offline tests пройдены, Артём одобрил публикацию. Подключение и проверка в Dota ещё впереди. Предыдущий primitive draft superseded как целевое поведение, его тесты оставлены для регрессии.
+**Статус:** планировщик PR22 merged; runtime continuation реализует настоящий collector/executor в laning/runtime. Default observe, приказы -- только после hook Олега (Kimi)/ACK и staged probe. Игрового run пока нет. Порядок: [INTEGRATION_TEST](INTEGRATION_TEST.md). Предыдущий primitive draft superseded, тесты оставлены для регрессии.
 
 ## Что теперь выбирает policy
 
@@ -83,6 +83,6 @@ Schema расширена до `sf-lane-options-0.2-draft3`, это локаль
 
 ## Что ещё не сделано
 
-Реальный T016 backend Snapshot/Validate/Submit/Events/Record; подтверждение shared Lua-state и attack-release/cast-complete callbacks; корректные modifier bindings; профиль установленного build/режима; полный predictor входящего урона/путей; rune/ward/kite execution. Данные знаний о противнике и своего runtime пока тестируются fixtures, не собираются этим файлом автоматически из игры.
+Backend Snapshot/Validate/Submit/Events/Record уже реализован в runtime/backend.lua; collector -- runtime/observe.lua. Ещё требуются hook Олега (Kimi), фактическое подтверждение shared Lua-state и семантики event/profile API, точные modifier bindings/профиль build/режима. Полный predictor входящего урона/путей и rune/ward/kite execution остаются pending. Enemy HP/mana читаются, автоматические enemy cast/threat bindings ещё не подключены.
 
 **Не устанавливать текущую папку как готовый игровой релиз.** Default режима переключён на joint_options, поэтому без зарегистрированного backend он уступает управление; старый primitive-adapter не запускается незаметно. Совместная интеграция и игровой тест v0.2 остаются обязательными.
