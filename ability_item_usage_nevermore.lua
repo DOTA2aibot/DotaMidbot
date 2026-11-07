@@ -30,15 +30,26 @@ local bAbilitiesInit = false;
 -- поэтому ключевые уровни раскладываем сами.
 -- Патч 7.4x: Necromastery — врождённая (качать НЕ нужно), все три рейза делят
 -- ОДИН уровень (качаем shadowraze1), на D — активка Feast of Souls.
--- Мы тратим очки на 1-4 (рейзы максимум) и 6 (реквием). Уровни 5, 7, 8, 9, 10
--- намеренно пропускаем — их потратит стандартный ИИ (feast/аура).
+-- Порядок — приоритетный, не привязан к конкретному уровню: CanAbilityBeUpgraded
+-- сам решит, что доступно. Если способности из списка нет в текущем патче,
+-- GetAbilityByName вернёт nil и она просто пропустится.
 ----------------------------------------------------------------------------------------------------
 local SKILL_ORDER = {
-	"nevermore_shadowraze1",      -- 1
-	"nevermore_shadowraze1",      -- 2
-	"nevermore_shadowraze1",      -- 3
-	"nevermore_shadowraze1",      -- 4 (рейзы максимум)
-	"nevermore_requiem",          -- 6 (уровень 5 пропускаем — потратит дефолтный ИИ)
+	"nevermore_shadowraze1",      -- рейзы максимум в первую очередь
+	"nevermore_shadowraze1",
+	"nevermore_shadowraze1",
+	"nevermore_shadowraze1",
+	"nevermore_requiem",          -- 6
+	"nevermore_feast_of_souls",   -- активка на D (7.4x)
+	"nevermore_feast_of_souls",
+	"nevermore_requiem",          -- 12
+	"nevermore_feast_of_souls",
+	"nevermore_dark_lord",        -- аура
+	"nevermore_feast_of_souls",
+	"nevermore_dark_lord",
+	"nevermore_requiem",          -- 18
+	"nevermore_dark_lord",
+	"nevermore_dark_lord",
 };
 
 function LevelUpThink( npcBot )
@@ -54,6 +65,22 @@ function LevelUpThink( npcBot )
 		then
 			npcBot:ActionImmediate_LevelAbility( sName );
 			print( "[MIDBOT levelup] " .. sName );
+			return;
+		end
+	end
+
+	-- Fallback (фикс аудита GPT): если всё из списка выкачано или недоступно,
+	-- тратим очко на первую доступную способность — включая таланты.
+	-- Раньше очки после 6-го уровня могли копиться непотраченными.
+	for nSlot = 0, 23
+	do
+		local ability = npcBot:GetAbilityInSlot( nSlot );
+		if ( ability ~= nil
+			and ability:CanAbilityBeUpgraded()
+			and ability:GetLevel() < ability:GetMaxLevel() )
+		then
+			npcBot:ActionImmediate_LevelAbility( ability:GetName() );
+			print( "[MIDBOT levelup fallback] " .. ability:GetName() );
 			return;
 		end
 	end
@@ -114,7 +141,7 @@ function AbilityUsageThink()
 	local desireRaze, locRaze, razeAbility = ConsiderRazeOnHero( npcBot );
 	if ( desireRaze > 0 )
 	then
-		npcBot:Action_UseAbilityOnLocation( razeAbility, locRaze );
+		CastRaze( npcBot, razeAbility, locRaze );
 		return;
 	end
 
@@ -122,10 +149,21 @@ function AbilityUsageThink()
 	local desireFarm, locFarm, farmAbility = ConsiderRazeOnCreeps( npcBot );
 	if ( desireFarm > 0 )
 	then
-		npcBot:Action_UseAbilityOnLocation( farmAbility, locFarm );
+		CastRaze( npcBot, farmAbility, locFarm );
 		return;
 	end
 
+end
+
+----------------------------------------------------------------------------------------------------
+-- Каст рейза. Рейзы — NO_TARGET способности: бьют на фикс. дистанции
+-- в направлении, КУДА СМОТРИТ герой. Action_UseAbilityOnLocation тут не работает
+-- (фикс аудита GPT). Делаем как эталонный bot_nevermore от Valve:
+-- сначала AttackMove в сторону цели (разворачивает героя), затем каст.
+----------------------------------------------------------------------------------------------------
+function CastRaze( npcBot, razeAbility, vLoc )
+	npcBot:Action_AttackMove( vLoc );
+	npcBot:Action_UseAbility( razeAbility );
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -173,6 +211,27 @@ function Dist2D( vA, vB )
 	local dx = vA.x - vB.x;
 	local dy = vA.y - vB.y;
 	return math.sqrt( dx * dx + dy * dy );
+end
+
+-- Итоговый урон рейза по конкретной цели (фикс аудита GPT: сырой
+-- GetAbilityDamage — это урон ДО сопротивлений). У героев базовое маг.
+-- сопротивление 25%, у катапульт ~80%, у обычных крипов 0.
+function EffectiveRazeDamage( nDamage, npcTarget )
+	if ( npcTarget:IsHero() )
+	then
+		return nDamage * 0.75;
+	end
+	local sName = npcTarget:GetUnitName();
+	if ( sName ~= nil and string.find( sName, "siege" ) ~= nil )
+	then
+		return nDamage * 0.20;
+	end
+	return nDamage;
+end
+
+function IsSiegeCreep( npcCreep )
+	local sName = npcCreep:GetUnitName();
+	return sName ~= nil and string.find( sName, "siege" ) ~= nil;
 end
 
 -- Центр удара i-го рейза, если кастовать в направлении vTarget
@@ -228,7 +287,7 @@ function ConsiderRazeOnHero( npcBot )
 						do
 							if ( Dist2D( npcCreep:GetLocation(), vImpact ) <= RAZE_RADIUS )
 							then
-								if ( npcCreep:GetHealth() <= nDamage )
+								if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep ) )
 								then
 									score = score + 2; -- крип ещё и умрёт
 								else
@@ -303,8 +362,6 @@ function ConsiderRazeOnCreeps( npcBot )
 		if ( abilityRaze[i] ~= nil and abilityRaze[i]:IsFullyCastable() )
 		then
 			local nDamage = abilityRaze[i]:GetAbilityDamage();
-			local count = 0;
-			local packCenter = nil;
 
 			for _, npcCreep in pairs( tableEnemyCreeps )
 			do
@@ -315,13 +372,11 @@ function ConsiderRazeOnCreeps( npcBot )
 				-- Крип реально попадает в зону удара этого рейза
 				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
 				then
-					count = count + 1;
-					packCenter = vCreepLoc;
-
-					if ( npcCreep:GetHealth() <= nDamage )
+					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep ) )
 					then
-						-- П.3: дальний крип (маг) — приоритет. Дальность атаки > 200 = ranged/сiege
-						if ( npcCreep:GetAttackRange() > 200 and rangedSecure == nil )
+						-- П.3: дальний крип (маг) — приоритет. Катапульты отдельно:
+						-- у них ~80% маг. сопротивления, рейз их почти не добивает
+						if ( npcCreep:GetAttackRange() > 200 and not IsSiegeCreep( npcCreep ) and rangedSecure == nil )
 						then
 							rangedSecure = { loc = vCreepLoc, raze = abilityRaze[i] };
 						end
@@ -346,10 +401,35 @@ function ConsiderRazeOnCreeps( npcBot )
 					end
 				end
 			end
+		end
+	end
 
-			if ( count >= 3 and packBest == nil and manaPct >= RAZE_MANA_PCT_HARASS )
+	-- Пачка (фикс аудита GPT): фиксируем ОДИН центр — целимся в конкретного
+	-- крипа — и считаем, сколько крипов реально попадёт в ЭТУ область.
+	-- Раньше счётчик суммировал крипов из разных направлений.
+	if ( manaPct >= RAZE_MANA_PCT_HARASS )
+	then
+		for i = 1, 3
+		do
+			if ( abilityRaze[i] ~= nil and abilityRaze[i]:IsFullyCastable() )
 			then
-				packBest = { loc = packCenter, raze = abilityRaze[i], count = count };
+				for _, npcAim in pairs( tableEnemyCreeps )
+				do
+					local vAimLoc = npcAim:GetLocation();
+					local vImpact = GetRazeImpactPoint( npcBot, vAimLoc, i );
+					local count = 0;
+					for _, npcCreep in pairs( tableEnemyCreeps )
+					do
+						if ( Dist2D( npcCreep:GetLocation(), vImpact ) <= RAZE_RADIUS )
+						then
+							count = count + 1;
+						end
+					end
+					if ( count >= 3 and ( packBest == nil or count > packBest.count ) )
+					then
+						packBest = { loc = vAimLoc, raze = abilityRaze[i], count = count };
+					end
+				end
 			end
 		end
 	end

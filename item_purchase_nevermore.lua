@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------------------------------------
--- MIDBOT: закупка SF. Очередь продвигается только после подтверждённой покупки.
+-- MIDBOT: закупка SF. Очередь продвигается после подтверждённой покупки;
+-- недоступные предметы скипаются, временные отказы отправляют предмет в конец очереди.
 ----------------------------------------------------------------------------------------------------
 local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, не вызывать магазин каждый кадр
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
@@ -109,7 +110,9 @@ function ItemPurchaseThink()
 	end
 	local component = pendingComponents[1];
 	local cost = GetItemCost( component );
-	if ( type( cost ) ~= "number" or cost <= 0 or cost ~= cost or cost == math.huge ) then
+	-- Цена 0 — ВАЛИДНА: observer ward в текущем патче бесплатный (фикс аудита GPT:
+	-- раньше cost<=0 считался ошибкой и очередь навсегда вставала на варде).
+	if ( type( cost ) ~= "number" or cost < 0 or cost ~= cost or cost == math.huge ) then
 		Report( "blocked: invalid cost item=" .. component );
 		return;
 	end
@@ -139,9 +142,13 @@ function ItemPurchaseThink()
 	-- но с предохранителем: 20 подряд (~10 сек) -> скип, чтобы закупка не вставала насмерть.
 	componentFailures = componentFailures + 1;
 	if ( componentFailures >= MAX_COMPONENT_FAILURES ) then
-		Report( "skip target=" .. target .. " reason=too_many_failures last_result=" .. tostring( result ) );
+		-- Фикс аудита GPT: временные отказы не должны необратимо удалять предмет
+		-- (можно потерять сборку, уже оплатив часть компонентов). Переносим цель
+		-- в КОНЕЦ очереди — попробуем позже, а пока покупаем остальное.
+		Report( "defer target=" .. target .. " reason=too_many_failures last_result=" .. tostring( result ) );
 		pendingComponents = nil;
 		componentFailures = 0;
 		table.remove( tableItemsToBuy, 1 );
+		table.insert( tableItemsToBuy, target );
 	end
 end
