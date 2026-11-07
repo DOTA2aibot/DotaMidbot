@@ -268,9 +268,16 @@ end
 ----------------------------------------------------------------------------------------------------
 function ConsiderRazeOnCreeps( npcBot )
 
-	-- Только когда стоим на линии/фармим — не палим ману в драках и на бегстве
+	-- Не палим ману на крипов только когда убегаем/разъезжаемся.
+	-- Раньше был белый список (LANING/FARM) — из-за него рейзы глушились
+	-- во всех остальных режимах (DEFEND_TOWER_MID под своей вышкой и т.п.),
+	-- репорт Олега: "бот не хочет давать скиллы в крипов".
 	local mode = npcBot:GetActiveMode();
-	if ( mode ~= BOT_MODE_LANING and mode ~= BOT_MODE_FARM )
+	if ( mode == BOT_MODE_RETREAT
+		or mode == BOT_MODE_EVASIVE_MANEUVERS
+		or mode == BOT_MODE_ROAM
+		or mode == BOT_MODE_GANK
+		or mode == BOT_MODE_TEAM_ROAM )
 	then
 		return BOT_ACTION_DESIRE_NONE, nil, nil;
 	end
