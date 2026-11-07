@@ -26,24 +26,28 @@ local abilityRequiem = nil;
 local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
--- Интеграция T007 x T016 (план следующего этапа, п.4).
--- Если общий исполнитель GPT (laning/advanced/bridge) активен — он ЕДИНСТВЕННЫЙ
--- владелец приказов атак/способностей, и этот модуль ему уступает.
--- Прокачка (LevelUpThink) НЕ уступает: ActionImmediate_LevelAbility не является
--- боевым приказом и с планировщиком не конфликтует.
+-- Интеграция T007 x T016 (план следующего этапа, п.4; ревью GPT по PR #23).
+-- Передача управления идёт через AbilityGate из laning/runtime/guard.lua:
+-- handshake по nonce (общий heartbeat lane<->ability callbacks) + lease+ACK
+-- на конкретный план. AbilityGate вызывается КАЖДЫЙ callback (он же наш
+-- heartbeat), ДО раннего return по IsUsingAbility.
+-- Возвращает true только пока план реально владеет приказами — между планами
+-- автономная логика способностей продолжает работать.
+-- Прокачка (LevelUpThink) НЕ уступает: не боевой приказ, конфликта нет.
 -- Интерфейс зафиксирован в docs/T016_BACKEND_API.md.
 ----------------------------------------------------------------------------------------------------
-local JointBridge = nil;
+local LaneGuard = nil;
 do
-	local ok, mod = pcall( require, GetScriptDirectory() .. "/laning/advanced/bridge" );
-	if ( ok ) then JointBridge = mod; end
+	-- pcall: без runtime/guard.lua (старая сборка) модуль работает автономно
+	local ok, mod = pcall( require, GetScriptDirectory() .. "/laning/runtime/guard" );
+	if ( ok ) then LaneGuard = mod; end
 end
 
--- Уступаем ли управление общему исполнителю в этом тике
+-- Уступаем ли управление общему исполнителю в этом тике (heartbeat + gate)
 function JointExecutorOwnsBot( npcBot )
-	if ( JointBridge == nil or npcBot == nil ) then return false; end
-	local ok, ready = pcall( JointBridge.IsReady, npcBot:GetPlayerID() );
-	return ok and ready == true;
+	if ( LaneGuard == nil or npcBot == nil ) then return false; end
+	local ok, owns = pcall( LaneGuard.AbilityGate, npcBot );
+	return ok and owns == true;
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -493,10 +497,20 @@ end
 local MIDBOT_DEBUG_MODIFIERS = false; -- true = печатать все модификаторы раз в 3 сек
 local nextDiagTime = -math.huge;
 
+-- Число модификаторов юнита (ревью GPT: в проверенном Bot API — NumModifiers,
+-- GetModifierCount есть не везде; перебираем оба через pcall)
+function ModifierCountOf( npcUnit )
+	local ok, n = pcall( function() return npcUnit:NumModifiers() end );
+	if ( ok and type( n ) == "number" ) then return n; end
+	ok, n = pcall( function() return npcUnit:GetModifierCount() end );
+	if ( ok and type( n ) == "number" ) then return n; end
+	return 0;
+end
+
 -- Число душ SF: стаки модификатора врождённой Necromastery.
 -- Возвращает nil, если имя модификатора в текущем патче другое (тогда смотрим diag-лог).
 function GetSoulsCount( npcBot )
-	for i = 0, npcBot:GetModifierCount() - 1
+	for i = 0, ModifierCountOf( npcBot ) - 1
 	do
 		if ( npcBot:GetModifierName( i ) == "modifier_nevermore_necromastery" )
 		then
@@ -508,7 +522,7 @@ end
 
 -- Стаки дебаффа рейзов на враге (каждый попавший рейз усиливает следующие)
 function GetRazeDebuffStacks( npcEnemy )
-	for i = 0, npcEnemy:GetModifierCount() - 1
+	for i = 0, ModifierCountOf( npcEnemy ) - 1
 	do
 		local sName = npcEnemy:GetModifierName( i );
 		if ( sName == "modifier_nevermore_shadowraze_debuff"
@@ -524,7 +538,7 @@ function DebugPrintModifiers( npcBot )
 	if ( not MIDBOT_DEBUG_MODIFIERS ) then return end;
 	if ( GameTime() < nextDiagTime ) then return end;
 	nextDiagTime = GameTime() + 3.0;
-	for i = 0, npcBot:GetModifierCount() - 1
+	for i = 0, ModifierCountOf( npcBot ) - 1
 	do
 		print( "[MIDBOT diag] self: " .. npcBot:GetModifierName( i )
 			.. " stacks=" .. tostring( npcBot:GetModifierStackCount( i ) ) );
@@ -534,7 +548,7 @@ function DebugPrintModifiers( npcBot )
 	do
 		if ( npcEnemy:CanBeSeen() )
 		then
-			for i = 0, npcEnemy:GetModifierCount() - 1
+			for i = 0, ModifierCountOf( npcEnemy ) - 1
 			do
 				print( "[MIDBOT diag] enemy: " .. npcEnemy:GetModifierName( i )
 					.. " stacks=" .. tostring( npcEnemy:GetModifierStackCount( i ) ) );

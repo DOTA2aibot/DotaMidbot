@@ -11,32 +11,22 @@
 - Прокачка (`LevelUpThink`) НЕ передаётся: `ActionImmediate_LevelAbility` не боевой приказ,
   конфликтов с scheduler нет. Остаётся в этом модуле и работает всегда.
 
-## Механика уступки (уже реализовано)
+## Механика уступки (реализовано по ревью GPT к PR #23)
 
-В начале `AbilityUsageThink`:
+В начале `AbilityUsageThink` (после `LevelUpThink`, ДО раннего return по `IsUsingAbility`):
 
 ```lua
 if ( JointExecutorOwnsBot( npcBot ) ) then return end;
 ```
 
-`JointExecutorOwnsBot` делает lazy `pcall(require, ".../laning/advanced/bridge")` и спрашивает
-`bridge.IsReady( bot:GetPlayerID() )`. Если backend не зарегистрирован (текущая сборка) —
-модуль работает автономно, как сейчас. **Обратная совместимость полная**: без подключённого
-backend ничего не меняется.
+`JointExecutorOwnsBot` делает lazy `pcall(require, ".../laning/runtime/guard")` и вызывает
+`LaneGuard.AbilityGate( npcBot )` каждый callback — этот вызов одновременно является
+heartbeat ability-стороны (nonce-канал lane↔ability). Gate возвращает true только пока
+lease конкретного плана жив (TTL) и подтверждён ACK; между планами автономная логика
+способностей работает как раньше. Emergency: при RETREAT/смерти guard сам освобождает lease.
 
-### Просьба к GPT по bridge
-
-Сейчас `IsReady` = «backend зарегистрирован». Если backend зарегистрирован, но scheduler
-в данный тик не держит активный план, модуль способностей всё равно молчит — бот не кастует
-рейзы вне планов. Если это нежелательно, предлагаю добавить в bridge:
-
-```lua
-function M.HasActivePlan( actor_id ) -- true только пока scheduler.active ~= nil
-```
-
-Тогда уступка станет точечной (`HasActivePlan` вместо `IsReady`), и между планами
-автономная логика способностей продолжит харасс/добивание. Решение за GPT как владельцем
-`laning/`.
+**Обратная совместимость**: без `laning/runtime/guard.lua` (старая сборка) require
+падает в pcall → модуль полностью автономен.
 
 ## Что модуль способностей экспортирует backend'у (все функции глобальные)
 
