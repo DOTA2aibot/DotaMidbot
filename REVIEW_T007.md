@@ -1,6 +1,6 @@
 # T007 — планировщик лайнинга SF для ревью и интеграции
 
-**Подготовлено для ветки task/T007-laning, 2026-11-07. Артём просмотрел поведение и разрешил публикацию текущей реализации. Игровой backend ещё не подключён; это основа для интеграции, не готовая установка в Dota.**
+**Продолжение T007, 2026-11-07: планировщик PR22 и способности PR21 уже merged. Artem (GPT) добавил реальный runtime adapter в task/T007-runtime. Default observe собирает данные без приказов; hook Олега (Kimi), калибровка и игровой probe ещё требуются. Инструкция: [INTEGRATION_TEST](docs/INTEGRATION_TEST.md).**
 
 Основание: main `ae1166da294e3854a41ecface1d9936ca5030b2c`; новый PR Олега #21, head `5456b9e8959fadc87d94762e524a7dcefcb3534d`, проверен отдельно. Его код способностей и закупка нами не менялись. Предыдущий упрощённый draft оставлен как historical regression fixture, не целевая политика. Рекомендация по PR #21: пока не принимать, есть воспроизводимые проблемы закупки/геометрии/урона; [полный аудит](docs/RELEASE_AUDIT.md).
 
@@ -32,7 +32,7 @@
 
 ## Проверено
 
-Lua 5.1 через Lupa 2.8: **87 PASS** = 14 legacy policy + 12 adapter + 34 advanced + 24 creeps/XP/tower + 3 JSON checks. Дополнительно 17 прежних purchase regressions T017 проходят на принятом исходнике T017. Отдельный PR21 audit воспроизводит шесть спорных поведений на точных source blobs; это подтверждения дефектов/ограничений, не acceptance pass PR. Числа fixture синтетические, не доказательство соответствия установленному патчу.
+Lua 5.1 через Lupa 2.8: **123 PASS** = 14 legacy policy + 12 adapter + 34 advanced + 24 creeps/XP/tower + 36 runtime + 3 JSON checks. Включены collector→planner→guard→scheduler→Action API→evidence на mock handles; два направления combo и совместимость с pinned PR23 проверены. Исторические результаты 17 T017 regressions относятся к прежнему purchase blob; audit PR21 -- к pinned head5456b9e, не к merged исправленной версии. Числа fixture синтетические, игрового прогона нет.
 
 Из корня клонированного репозитория, Python + Lupa 2.8:
 
@@ -43,7 +43,7 @@ python -X utf8 tests/laning/run_tests.py
 
 ## Что ещё не готово
 
-Backend `Snapshot/Validate/Submit/Events/Record` из [контракта T016](docs/T016_COORDINATION.md) пока отсутствует. Не проверены совместное состояние callbacks, реальные события release/cast, установленный build, реальные modifier stacks, поворот/геометрия и взаимодействие lane/ability callbacks. Это существенная работа интеграции, не переключение флага. Текущий draft не ставить целиком вместо рабочего бота: без backend новый lane mode отдаёт нулевой desire, управлять атакой он не будет.
+Backend `Snapshot/Validate/Submit/Events/Record` и optional Acquire/Release/Filter/Prepare реализованы в laning/runtime и подключены из lane callbacks. Для приказов нужны operation probe/execute и подтверждённый двусторонний hook в файле способностей Олега (Kimi). Без него backend не получает владение; observe продолжает читать реальные данные и выдаёт нулевой desire. Не проверены в Dota shared callback state, значения API/профиля и источники release/cast evidence. Сложные tower/XP/rune/aura bindings подключены частично, неизвестные данные маскируются; это не проверенная игровая сборка.
 
 Артём одобрил поведение и публикацию в чате. Следующий шаг: независимое code review, согласованное подключение исполнения T007/T016 и проверки по порядку один удар, один койл, удар→койл по разным целям, два койла со стаками/expiry, отмена при опасности. Затем общий локальный прогон v0.2/T009, где проверяются покупки, прокачка и лайнинг вместе. T007 не закрывать до интеграции, независимого ревью и фактических игровых критериев.
 

@@ -26,6 +26,31 @@ local abilityRequiem = nil;
 local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
+-- Интеграция T007 x T016 (план следующего этапа, п.4; ревью GPT по PR #23).
+-- Передача управления идёт через AbilityGate из laning/runtime/guard.lua:
+-- handshake по nonce (общий heartbeat lane<->ability callbacks) + lease+ACK
+-- на конкретный план. AbilityGate вызывается КАЖДЫЙ callback (он же наш
+-- heartbeat), ДО раннего return по IsUsingAbility.
+-- Возвращает true только пока план реально владеет приказами — между планами
+-- автономная логика способностей продолжает работать.
+-- Прокачка (LevelUpThink) НЕ уступает: не боевой приказ, конфликта нет.
+-- Интерфейс зафиксирован в docs/T016_BACKEND_API.md.
+----------------------------------------------------------------------------------------------------
+local LaneGuard = nil;
+do
+	-- pcall: без runtime/guard.lua (старая сборка) модуль работает автономно
+	local ok, mod = pcall( require, GetScriptDirectory() .. "/laning/runtime/guard" );
+	if ( ok ) then LaneGuard = mod; end
+end
+
+-- Уступаем ли управление общему исполнителю в этом тике (heartbeat + gate)
+function JointExecutorOwnsBot( npcBot )
+	if ( LaneGuard == nil or npcBot == nil ) then return false; end
+	local ok, owns = pcall( LaneGuard.AbilityGate, npcBot );
+	return ok and owns == true;
+end
+
+----------------------------------------------------------------------------------------------------
 -- T018: явная прокачка. Дефолтный ИИ в 1v1 mid очки может не тратить вообще,
 -- поэтому ключевые уровни раскладываем сами.
 -- Патч 7.4x: Necromastery — врождённая (качать НЕ нужно), все три рейза делят
@@ -125,6 +150,13 @@ function AbilityUsageThink()
 
 	-- Прокачка — всегда в первую очередь, даже во время каста
 	LevelUpThink( npcBot );
+
+	-- Диагностика душ/стаков (п.3 плана интеграции); по умолчанию выключена
+	DebugPrintModifiers( npcBot );
+
+	-- П.4 плана интеграции: если общий исполнитель T007 зарегистрирован и ведёт
+	-- план — не выдаём свои приказы, он единственный владелец атак/способностей
+	if ( JointExecutorOwnsBot( npcBot ) ) then return end;
 
 	-- Не мешаем текущему касту/каналу
 	if ( npcBot:IsUsingAbility() or npcBot:IsChanneling() or npcBot:IsSilenced() ) then return end;
@@ -456,3 +488,71 @@ function ConsiderRazeOnCreeps( npcBot )
 end
 
 ----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+-- Диагностика для п.3 плана интеграции: доступность данных о душах (Necromastery)
+-- и стаках дебаффа рейзов на враге. Включить MIDBOT_DEBUG_MODIFIERS = true на время
+-- теста и смотреть консоль — в лог попадут РЕАЛЬНЫЕ имена модификаторов текущего
+-- патча (они меняются между патчами, поэтому угадывать не стали).
+----------------------------------------------------------------------------------------------------
+local MIDBOT_DEBUG_MODIFIERS = false; -- true = печатать все модификаторы раз в 3 сек
+local nextDiagTime = -math.huge;
+
+-- Число модификаторов юнита (ревью GPT: в проверенном Bot API — NumModifiers,
+-- GetModifierCount есть не везде; перебираем оба через pcall)
+function ModifierCountOf( npcUnit )
+	local ok, n = pcall( function() return npcUnit:NumModifiers() end );
+	if ( ok and type( n ) == "number" ) then return n; end
+	ok, n = pcall( function() return npcUnit:GetModifierCount() end );
+	if ( ok and type( n ) == "number" ) then return n; end
+	return 0;
+end
+
+-- Число душ SF: стаки модификатора врождённой Necromastery.
+-- Возвращает nil, если имя модификатора в текущем патче другое (тогда смотрим diag-лог).
+function GetSoulsCount( npcBot )
+	for i = 0, ModifierCountOf( npcBot ) - 1
+	do
+		if ( npcBot:GetModifierName( i ) == "modifier_nevermore_necromastery" )
+		then
+			return npcBot:GetModifierStackCount( i );
+		end
+	end
+	return nil;
+end
+
+-- Стаки дебаффа рейзов на враге (каждый попавший рейз усиливает следующие)
+function GetRazeDebuffStacks( npcEnemy )
+	for i = 0, ModifierCountOf( npcEnemy ) - 1
+	do
+		local sName = npcEnemy:GetModifierName( i );
+		if ( sName == "modifier_nevermore_shadowraze_debuff"
+			or sName == "modifier_nevermore_shadowraze1_debuff" )
+		then
+			return npcEnemy:GetModifierStackCount( i ), sName;
+		end
+	end
+	return nil, nil;
+end
+
+function DebugPrintModifiers( npcBot )
+	if ( not MIDBOT_DEBUG_MODIFIERS ) then return end;
+	if ( GameTime() < nextDiagTime ) then return end;
+	nextDiagTime = GameTime() + 3.0;
+	for i = 0, ModifierCountOf( npcBot ) - 1
+	do
+		print( "[MIDBOT diag] self: " .. npcBot:GetModifierName( i )
+			.. " stacks=" .. tostring( npcBot:GetModifierStackCount( i ) ) );
+	end
+	local tableEnemyHeroes = npcBot:GetNearbyHeroes( 1200, true, BOT_MODE_NONE );
+	for _, npcEnemy in pairs( tableEnemyHeroes )
+	do
+		if ( npcEnemy:CanBeSeen() )
+		then
+			for i = 0, ModifierCountOf( npcEnemy ) - 1
+			do
+				print( "[MIDBOT diag] enemy: " .. npcEnemy:GetModifierName( i )
+					.. " stacks=" .. tostring( npcEnemy:GetModifierStackCount( i ) ) );
+			end
+		end
+	end
+end

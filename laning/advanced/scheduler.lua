@@ -64,9 +64,11 @@ function M.Event( self, event )
     if event.status == "cancelled" or event.status == "rejected" then return M.Abort( self, event.status ) end;
     if a.phase ~= "submitted" then return false, "no_submission" end;
     local step = a.plan.steps[a.step];
-    local expected = step.kind == "attack" and "attack_released" or ( step.kind == "raze" and "cast_completed" or "observed" );
+    local expected = step.kind == "attack" and "attack_released" or ( step.kind == "raze" and "cast_completed"
+        or ( step.kind == "move" and "move_completed" or "observed" ) );
     if event.status ~= expected then return false, "not_a_release_confirmation" end;
-    a.step, a.phase, a.step_ready_at = a.step + 1, "ready", a.last_observation_at;
+    local observedAt = type( event.observed_at ) == "number" and event.observed_at or a.last_observation_at;
+    a.step, a.phase, a.step_ready_at = a.step + 1, "ready", observedAt;
     return true;
 end
 return M;

@@ -1,0 +1,342 @@
+-- End-to-end wiring реальных Lua-модулей с изолированным Bot API.
+-- Не является игровым run или подтверждением API установленного клиента.
+local passed = 0;
+local function eq( a, b ) assert( a == b, tostring( a ) .. " ~= " .. tostring( b ) ) end;
+local function test( name, fn ) fn(); passed = passed + 1; print( "PASS RUNTIME " .. name ) end;
+local function scenario( operation )
+    local s = { time = 120, attacks = {}, casts = {}, moves = {}, logs = {}, cleared = 0, last_attack = 0 };
+    local env = setmetatable( {}, { __index = _G } ); local cache = {};
+    env.DotaTime = function() return s.time end;
+    env.GetScriptDirectory = function() return "bots" end;
+    env.Vector = function( x, y, z ) return { x = x, y = y, z = z or 0 } end;
+    env.IsLocationPassable = function() return not s.impassable end;
+    env.GetLaneFrontLocation = function() return { x = 1000, y = 0 } end;
+    env.DAMAGE_TYPE_PHYSICAL, env.DAMAGE_TYPE_MAGICAL = 1, 2;
+    env.DOTA_ABILITY_BEHAVIOR_NO_TARGET = 4;
+    env.BOT_MODE_RETREAT, env.BOT_MODE_LANING, env.BOT_MODE_NONE = 3, 1, 0;
+    env.BOT_ACTION_TYPE_ATTACK, env.BOT_ACTION_TYPE_ATTACKMOVE, env.BOT_MODE_DESIRE_MODERATE = 7, 8, 0.5; env.LANE_MID = 2;
+    env.print = function( line ) s.logs[#s.logs + 1] = line end;
+    env.require = function( path )
+        local p = path:match( "laning/.*" );
+        if not cache[p] then local chunk = assert( loadfile( p .. ".lua" ) ); setfenv( chunk, env ); cache[p] = chunk() end;
+        return cache[p];
+    end;
+    local function unit( id, kind, x, hp )
+        local u = { id = id, kind = kind, x = x, y = 0, hp = hp, max_hp = hp, projectiles = {}, stacks = 0 };
+        function u:IsNull() return false end;
+        function u:CanBeSeen() return not self.hidden end;
+        function u:IsAlive() return self.hp > 0 end;
+        function u:IsInvulnerable() return false end;
+        function u:IsAttackImmune() return self.attack_immune or false end;
+        function u:IsMagicImmune() return false end;
+        function u:GetLocation() return { x = self.x, y = self.y } end;
+        function u:GetHealth() return self.hp end;
+        function u:GetMaxHealth() return self.max_hp end;
+        function u:GetHealthRegen() return 0 end;
+        function u:GetArmor() return 0 end;
+        function u:GetUnitName() return self.kind == "hero" and "npc_dota_hero_nevermore" or "npc_dota_creep_badguys_ranged" end;
+        function u:GetVelocity() return { x = 0, y = 0 } end;
+        function u:GetActualIncomingDamage( raw, damageType ) return raw * ( damageType == 2 and ( self.magic_factor or 1 ) or 1 ) end;
+        function u:GetBountyGoldMin() return 40 end;
+        function u:GetBountyGoldMax() return 50 end;
+        function u:GetBountyXP() return 60 end;
+        function u:GetMana() return self.mana or 100 end;
+        function u:GetMaxMana() return self.max_mana or 300 end;
+        function u:GetLevel() return 3 end;
+        function u:GetIncomingTrackingProjectiles() return self.projectiles end;
+        function u:NumModifiers() return 1 end;
+        function u:GetModifierName() return self.kind == "hero" and "modifier_nevermore_necromastery" or "modifier_nevermore_shadowraze_debuff" end;
+        function u:GetModifierByName() return self.stacks > 0 and 0 or -1 end;
+        function u:GetModifierStackCount() return self.stacks end;
+        function u:GetModifierRemainingDuration() return 6 end;
+        return u;
+    end
+    local bot = unit( "bot", "hero", 0, 1000 ); bot.mana, bot.stacks = 250, 10;
+    local creep, enemy = unit( "c", "creep", 450, 40 ), unit( "h", "hero", 450, 1000 );
+    s.bot, s.creep, s.enemy, s.unit = bot, creep, enemy, unit;
+    s.enemy_creeps, s.allied_creeps, s.enemies, s.towers = { creep }, {}, {}, {};
+    function bot:GetTeam() return 2 end;
+    function bot:GetPlayerID() return 7 end;
+    function bot:IsStunned() return self.stunned or false end;
+    function bot:IsHexed() return false end;
+    function bot:IsDisarmed() return self.disarmed or false end;
+    function bot:IsSilenced() return self.silenced or false end;
+    function bot:IsUsingAbility() return s.casting or false end;
+    function bot:IsCastingAbility() return s.casting or false end;
+    function bot:IsChanneling() return false end;
+    function bot:GetActiveMode() return s.retreat and 3 or 1 end;
+    function bot:GetManaRegen() return 0 end;
+    function bot:GetXPNeededToLevel() return 100 end;
+    function bot:GetAttackRange() return 550 end;
+    function bot:GetSecondsPerAttack() return 1 end;
+    function bot:GetAttackPoint() return 0.3 end;
+    function bot:GetAttackProjectileSpeed() return 1000 end;
+    function bot:GetSpellAmp() return 0 end;
+    function bot:GetAttackDamage() return 55 end;
+    function bot:GetBaseDamageVariance() return 5 end;
+    function bot:GetAttackCombatProficiency() return 1 end;
+    function bot:GetCurrentActionType() return s.action or 0 end;
+    function bot:GetLastAttackTime() return s.last_attack end;
+    function bot:GetLastHits() return s.last_hits or 0 end;
+    function bot:GetDenies() return 0 end;
+    function bot:GetNearbyLaneCreeps( _, isEnemy ) return isEnemy and s.enemy_creeps or s.allied_creeps end;
+    function bot:GetNearbyHeroes( _, isEnemy ) return isEnemy and s.enemies or {} end;
+    function bot:GetNearbyTowers() return s.towers end;
+    function bot:IsFacingLocation() return not s.not_facing end;
+    function bot:Action_AttackUnit( target, once ) s.attacks[#s.attacks + 1] = { target = target, once = once }; s.action = 7 end;
+    function bot:Action_UseAbility( ability ) s.casts[#s.casts + 1] = ability end;
+    function bot:Action_MoveDirectly( location ) s.moves[#s.moves + 1] = location end;
+    bot.Action_MoveToLocation = bot.Action_MoveDirectly;
+    function bot:Action_ClearActions() s.cleared = s.cleared + 1; s.action = 0 end;
+    local abilities = {};
+    for i, range in ipairs( { 200, 450, 700 } ) do
+        local a = { name = "nevermore_shadowraze" .. i, cd = 0, phase = false,
+            values = { shadowraze_damage = 40, damage_per_soul = 2, stack_bonus_damage = 10,
+                duration = 6, shadowraze_range = range, shadowraze_radius = 250, shadowraze_cooldown = 3 } };
+        function a:GetName() return self.name end;
+        function a:GetLevel() return 1 end;
+        function a:GetBehavior() return 4 end;
+        function a:GetSpecialValueFloat( name ) return self.values[name] or 0 end;
+        function a:GetManaCost() return 30 end;
+        function a:GetCastPoint() return 0.55 end;
+        function a:GetCooldown() return 9 end;
+        function a:GetCooldownTimeRemaining() return self.cd end;
+        function a:IsFullyCastable() return self.cd == 0 and bot.mana >= 30 end;
+        function a:IsInAbilityPhase() return self.phase end;
+        abilities[a.name] = a;
+    end
+    function bot:GetAbilityByName( name ) return abilities[name] end;
+    s.abilities, s.env = abilities, env;
+    s.cfg = env.require( "bots/laning/runtime/config" ); s.cfg.operation, s.cfg.lane_positioning = operation or "observe", false;
+    s.guard = env.require( "bots/laning/runtime/guard" );
+    s.observer = env.require( "bots/laning/runtime/observe" );
+    s.backend = env.require( "bots/laning/runtime/backend" ).New( s.cfg );
+    s.bridge = env.require( "bots/laning/advanced/bridge" );
+    s.entry = env.require( "bots/laning/runtime/entry" );
+    function s:channel() self.guard.LanePulse( self.bot, self.time ); self.guard.AbilityGate( self.bot ) end;
+    function s:own( key )
+        self:channel(); local p = { candidate_key = key or "p" };
+        local ok, reason = self.backend.Acquire( self.bot, p ); eq( ok, false ); eq( reason, "awaiting_ability_plan_ack" );
+        assert( self.guard.AbilityGate( self.bot ) ); assert( self.backend.Acquire( self.bot, p ) );
+    end;
+    function s:submit( kind )
+        self:own();
+        local snapshot = self.backend.Snapshot( self.bot ); local id = snapshot.targets[1].id;
+        local order = { plan_id = "execution-1", step_id = 1, step = { kind = kind, target_id = id, ability_id = "nevermore_shadowraze2" } };
+        assert( self.backend.Submit( self.bot, order ) ); return order;
+    end
+    return s;
+end
+
+test( "real collector emits serializable observations and exact visible bounty", function()
+    local s = scenario(); local snap = s.backend.Snapshot( s.bot );
+    eq( snap.hero.mana, 250 ); eq( snap.targets[1].creep_type, "ranged" ); eq( snap.targets[1].bounty_gold_min, 40 );
+    local trace = s.env.require( "bots/laning/advanced/trace" ); assert( trace.Encode( snap ) );
+    eq( snap.targets[1].attack_damage_effective, nil ); -- unverified estimate не переименован в ready profile
+end );
+test( "invisible enemies never expose resource getters", function()
+    local s = scenario(); s.enemy.hidden = true; s.enemies = { s.enemy };
+    s.enemy.GetMana = function() error( "hidden mana queried" ) end;
+    local snap = s.backend.Snapshot( s.bot ); eq( #snap.enemy_knowledge, 0 );
+end );
+test( "observed enemy resources become last_seen under fog without cooldown reads", function()
+    local s = scenario(); s.enemies = { s.enemy }; s.backend.Snapshot( s.bot ); s.enemy.hidden = true; s.time = s.time + 0.1;
+    local snap = s.backend.Snapshot( s.bot ); eq( snap.enemy_knowledge[1].resource_status, "last_seen" );
+    eq( snap.enemy_knowledge[1].spells.nevermore_shadowraze1, nil );
+end );
+test( "missing own API returns a clear failure and no orders", function()
+    local s = scenario( "probe_attack" ); s.bot.GetMana = nil;
+    eq( s.entry.Desire( s.bot ), 0 ); eq( #s.attacks, 0 ); eq( #s.casts, 0 );
+end );
+test( "observe mode collects through GetDesire but never submits", function()
+    local s = scenario( "observe" ); eq( s.entry.Desire( s.bot ), 0 ); s:channel(); s.entry.Think( s.bot );
+    assert( #s.logs > 0 ); eq( #s.attacks, 0 ); eq( #s.casts, 0 ); eq( #s.moves, 0 );
+end );
+test( "missing ability hook blocks even diagnostic attack", function()
+    local s = scenario( "probe_attack" ); eq( s.entry.Desire( s.bot ), 0 ); s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+end );
+test( "handshake and per-plan ACK are different barriers", function()
+    local s = scenario(); s:channel(); assert( s.guard.ChannelReady( s.bot, s.time ) );
+    local ok, reason = s.backend.Acquire( s.bot, { candidate_key = "p" } ); eq( ok, false ); eq( reason, "awaiting_ability_plan_ack" );
+    eq( s.guard.Owns( s.bot, s.backend.token, s.time ), false );
+end );
+test( "expired heartbeat cannot renew an old plan silently", function()
+    local s = scenario(); s:own(); local token = s.backend.token;
+    s.time = s.time + 1; s.guard.LanePulse( s.bot, s.time ); eq( s.guard.Owns( s.bot, token, s.time ), false );
+    s.guard.AbilityGate( s.bot ); local ok, reason = s.backend.Acquire( s.bot, { candidate_key = "p" } );
+    eq( ok, false ); eq( reason, "awaiting_ability_plan_ack" );
+end );
+test( "single attack probe reaches actual Action_AttackUnit once", function()
+    local s = scenario( "probe_attack" ); s.entry.Desire( s.bot ); s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+    s.guard.AbilityGate( s.bot ); s.time = s.time + 0.16; s:channel(); s.entry.Think( s.bot );
+    eq( #s.attacks, 1 ); eq( s.attacks[1].once, true );
+    s.time = s.time + 0.1; s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 1 );
+end );
+test( "submission and elapsed windup do not confirm attack release", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.time = s.time + 0.31; s:channel();
+    s.last_attack = 1; eq( #s.backend.Events( s.bot ), 0 );
+end );
+test( "new own projectile plus changed attack record confirms release", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.time = s.time + 0.1; s:channel(); s.last_attack = 1;
+    s.creep.projectiles = { { handle = 91, caster = s.bot, is_attack = true, location = { x = 40, y = 0 } } };
+    local events = s.backend.Events( s.bot ); eq( #events, 1 ); eq( events[1].status, "attack_released" );
+    eq( events[1].observed_at, s.time ); eq( #s.backend.Events( s.bot ), 0 );
+end );
+test( "foreign and anonymous projectiles cannot acknowledge our attack", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.last_attack = 1;
+    s.creep.projectiles = { { handle = 91, caster = s.enemy, is_attack = true, location = { x = 40, y = 0 } },
+        { handle = 92, is_attack = true, location = { x = 40, y = 0 } } };
+    eq( #s.backend.Events( s.bot ), 0 );
+end );
+test( "old projectile and unchanged attack record cannot become a new release", function()
+    local s = scenario( "probe_attack" ); s.creep.projectiles = { { handle = 91, caster = s.bot, is_attack = true, location = { x = 40, y = 0 } } };
+    s:submit( "attack" ); s.last_attack = 1; eq( #s.backend.Events( s.bot ), 0 );
+end );
+test( "target disappearance cancels instead of following into fog", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.creep.hidden = true;
+    eq( s.backend.Events( s.bot )[1].status, "cancelled" );
+end );
+test( "unconfirmed command times out and cleans up only owned actions", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" );
+    for i = 1, 21 do s.time = s.time + 0.1; s:channel() end;
+    eq( s.backend.Events( s.bot )[1].status, "rejected" ); s.backend.Release( s.bot, "timeout" ); eq( s.cleared, 1 );
+end );
+test( "lost ownership must not clear another callback action", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.time = s.time + 1;
+    s.backend.Release( s.bot, "stale" ); eq( s.cleared, 0 );
+end );
+test( "raze is submitted as no-target only after fresh facing check", function()
+    local s = scenario( "probe_raze" ); s:own(); local snap = s.backend.Snapshot( s.bot );
+    local step = { kind = "raze", target_id = snap.targets[1].id, ability_id = "nevermore_shadowraze2" };
+    s.not_facing = true;
+    local ok = s.backend.Submit( s.bot, { plan_id = "p", step_id = 1, step = step } ); eq( ok, false ); eq( #s.casts, 0 );
+    assert( s.backend.Prepare( s.bot, step ) ); eq( #s.moves, 1 ); eq( #s.casts, 0 );
+    s.not_facing = false; assert( s.backend.Submit( s.bot, { plan_id = "p", step_id = 1, step = step } ) ); eq( #s.casts, 1 );
+end );
+test( "caster mana and cooldown transition confirm consumption not a hit", function()
+    local s = scenario( "probe_raze" ); s:submit( "raze" ); eq( #s.backend.Events( s.bot ), 0 );
+    s.abilities.nevermore_shadowraze2.cd, s.bot.mana = 9, 220;
+    local event = s.backend.Events( s.bot )[1]; eq( event.status, "cast_completed" ); eq( event.reward, nil );
+end );
+test( "cooldown alone or unfinished cast phase cannot complete cast", function()
+    local s = scenario( "probe_raze" ); s:submit( "raze" ); local a = s.abilities.nevermore_shadowraze2;
+    a.cd = 9; eq( #s.backend.Events( s.bot ), 0 ); s.bot.mana, a.phase = 220, true; eq( #s.backend.Events( s.bot ), 0 );
+end );
+test( "silence and changed mana reject cast at submission", function()
+    local s = scenario( "probe_raze" ); s:own(); local snap = s.backend.Snapshot( s.bot );
+    local order = { plan_id = "p", step_id = 1, step = { kind = "raze", target_id = snap.targets[1].id, ability_id = "nevermore_shadowraze2" } };
+    s.bot.mana = 20; eq( s.backend.Submit( s.bot, order ), false ); s.bot.mana, s.bot.silenced = 250, true;
+    eq( s.backend.Submit( s.bot, order ), false );
+end );
+test( "unverified damage and cast-point readings keep policy attacks masked", function()
+    local s = scenario( "execute" ); s:channel(); local snap = s.backend.Snapshot( s.bot );
+    local planner, cfg = s.env.require( "bots/laning/advanced/planner" ), s.env.require( "bots/laning/advanced/config" );
+    local planning = s.backend.Filter( s.bot, snap, planner.Build( snap, cfg ) ); eq( planning.option_masks[1].available, false );
+end );
+test( "bounded mid positioning is validated and finished by observed position", function()
+    local s = scenario( "execute" ); s.cfg.lane_positioning = true; s:own();
+    local step = { kind = "move", location = { x = 250, y = 0 } };
+    assert( s.backend.Submit( s.bot, { plan_id = "p", step_id = 1, step = step } ) );
+    eq( #s.moves, 1 ); eq( #s.backend.Events( s.bot ), 0 ); s.bot.x = 250;
+    eq( s.backend.Events( s.bot )[1].status, "move_completed" );
+end );
+test( "impassable positioning cannot submit a move", function()
+    local s = scenario( "execute" ); s:own(); s.impassable = true;
+    eq( s.backend.Submit( s.bot, { plan_id = "p", step_id = 1, step = { kind = "move", location = { x = 250, y = 0 } } } ), false ); eq( #s.moves, 0 );
+end );
+test( "end-to-end chosen raze-secure then hero attack waits for real cast evidence", function()
+    local s = scenario( "execute" ); s.cfg.stage = "combos"; s.cfg.option_allowlist = { [6] = true };
+    for key in pairs( s.cfg.probes ) do if type( s.cfg.probes[key] ) == "boolean" then s.cfg.probes[key] = true end end;
+    s.enemies = { s.enemy };
+    s.entry.Desire( s.bot ); s:channel(); s.entry.Think( s.bot ); s.guard.AbilityGate( s.bot );
+    s.time = s.time + 0.16; s:channel(); s.entry.Think( s.bot ); eq( #s.casts, 1 ); eq( #s.attacks, 0 );
+    s.time = s.time + 0.1; s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+    s.casts[1].cd, s.bot.mana, s.creep.hp = 9, 220, 0;
+    s.time = s.time + 0.1; s:channel(); s.entry.Think( s.bot );
+    eq( #s.attacks, 1 ); eq( s.attacks[1].target, s.enemy );
+end );
+test( "isolated Lua module states cannot invent a shared handshake", function()
+    local a, z = scenario(), scenario();
+    a.guard.LanePulse( a.bot, a.time ); eq( z.guard.AbilityGate( a.bot ), false );
+    eq( a.guard.ChannelReady( a.bot, a.time ), false );
+end );
+test( "probe limit remains one after completion and reentry", function()
+    local s = scenario( "probe_attack" ); s.entry.Desire( s.bot ); s:channel(); s.entry.Think( s.bot ); s.guard.AbilityGate( s.bot );
+    s.time = s.time + 0.16; s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 1 );
+    s.last_attack = 1; s.creep.projectiles = { { handle = 31, caster = s.bot, is_attack = true, location = { x = 40, y = 0 } } };
+    for i = 1, 10 do s.time = s.time + 0.1; s:channel(); s.entry.Think( s.bot ) end;
+    s.entry.Leave( s.bot ); s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 1 );
+end );
+test( "attack then raze can cast while its confirmed projectile is still flying", function()
+    local s = scenario( "execute" ); s.cfg.stage = "combos"; s.cfg.option_allowlist = { [7] = true };
+    for k in pairs( s.cfg.probes ) do if type( s.cfg.probes[k] ) == "boolean" then s.cfg.probes[k] = true end end;
+    s.enemies = { s.enemy };
+    s.entry.Desire( s.bot ); s:channel(); s.entry.Think( s.bot ); s.guard.AbilityGate( s.bot );
+    s.time = s.time + 0.16; s:channel(); s.entry.Think( s.bot ); eq( #s.attacks, 1 ); eq( #s.casts, 0 );
+    s.time = s.time + 0.1; s:channel(); s.entry.Think( s.bot ); eq( #s.casts, 0 );
+    s.last_attack = 1; s.enemy.projectiles = { { handle = 41, caster = s.bot, is_attack = true, location = { x = 80, y = 0 } } };
+    s.time = s.time + 0.05; s:channel(); s.entry.Think( s.bot ); eq( #s.casts, 1 ); eq( #s.enemy.projectiles, 1 );
+end );
+test( "missing current action API cannot interrupt an unknown windup", function()
+    local s = scenario( "probe_attack" ); s:own(); local snap = s.backend.Snapshot( s.bot ); s.bot.GetCurrentActionType = nil;
+    eq( s.backend.Submit( s.bot, { plan_id = "p", step_id = 1, step = { kind = "attack", target_id = snap.targets[1].id } } ), false ); eq( #s.attacks, 0 );
+end );
+test( "wait after release starts at observed event time rather than original submit", function()
+    local s = scenario(); local scheduler = s.env.require( "bots/laning/advanced/scheduler" );
+    local state = scheduler.New();
+    local plan = { available = true, candidate_key = "p", steps = { { kind = "attack", target_id = "c" }, { kind = "observe", duration_s = 0.5 } } };
+    local cfg = s.env.require( "bots/laning/advanced/config" );
+    assert( scheduler.Begin( state, 7, "joint", plan, 120, cfg, {} ) );
+    local o = { time = 120, snapshot_time = 120, valid_targets = { c = true } }; local order = scheduler.Next( state, o, cfg );
+    assert( scheduler.Event( state, { actor = 7, plan_id = order.plan_id, step_id = 1, status = "attack_released", observed_at = 120.4 } ) );
+    o.time, o.snapshot_time = 120.6, 120.6; eq( scheduler.Next( state, o, cfg ).status, "waiting_window" );
+    o.time, o.snapshot_time = 120.9, 120.9; eq( scheduler.Next( state, o, cfg ).status, "submit" );
+end );
+test( "own cast waiting keeps mode ownership but retreat immediately yields", function()
+    local s = scenario( "probe_raze" ); s.entry.Desire( s.bot ); s:channel(); s.entry.Think( s.bot ); s.guard.AbilityGate( s.bot );
+    s.time = s.time + 0.16; s:channel(); s.entry.Think( s.bot ); eq( #s.casts, 1 );
+    s.casting = true; s.time = s.time + 0.1; s:channel(); assert( s.entry.Desire( s.bot ) > 0 );
+    s.retreat = true; s.time = s.time + 0.1; eq( s.entry.Desire( s.bot ), 0 ); eq( s.guard.AbilityGate( s.bot ), false );
+end );
+test( "last attack record fallback requires explicit release calibration", function()
+    local s = scenario( "probe_attack" ); s:submit( "attack" ); s.last_attack = 1;
+    eq( #s.backend.Events( s.bot ), 0 ); s.cfg.probes.last_attack_time_release_verified = true;
+    local event = s.backend.Events( s.bot )[1]; eq( event.status, "attack_released" ); eq( event.evidence, "build_calibrated_last_attack_record" );
+end );
+test( "unknown attack timing and active cast never become a new probe order", function()
+    local s = scenario( "probe_attack" ); s.casting = true; s.entry.Desire( s.bot ); s:channel();
+    s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+    s.cfg.probes.attack_point_seconds_verified = true; s.bot.GetAttackProjectileSpeed = function() return 0 end;
+    eq( s.backend.Snapshot( s.bot ).hero.attack_point_s, nil );
+end );
+test( "PR23 IsReady hook alone cannot invent heartbeat or block all fallback casts", function()
+    local s = scenario( "probe_attack" ); local chunk = assert( loadfile( "tests/laning/audit_sources/t016_pr23_b0773c2.lua" ) );
+    setfenv( chunk, s.env ); chunk();
+    s.entry.Desire( s.bot ); eq( s.env.JointExecutorOwnsBot( s.bot ), false );
+    eq( s.guard.ChannelReady( s.bot, s.time ), false ); s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+end );
+test( "PR23 modifier helpers are not silently assumed compatible with NumModifiers SDK", function()
+    local s = scenario(); local chunk = assert( loadfile( "tests/laning/audit_sources/t016_pr23_b0773c2.lua" ) );
+    setfenv( chunk, s.env ); chunk();
+    eq( pcall( s.env.GetSoulsCount, s.bot ), false );
+    local snap = s.backend.Snapshot( s.bot ); eq( snap.probe.own_modifiers[1].stacks, 10 );
+end );
+test( "HasActivePlan is a read-only status alias not permanent registration ownership", function()
+    local s = scenario(); local backend = { schema = s.backend.schema, joint_executor_verified = true,
+        Snapshot = s.backend.Snapshot, Validate = s.backend.Validate, Submit = s.backend.Submit,
+        Events = s.backend.Events, Record = s.backend.Record };
+    assert( s.bridge.Register( 7, backend ) ); eq( s.bridge.IsReady( 7 ), true ); eq( s.bridge.HasActivePlan( 7 ), false );
+end );
+test( "continuous inherited attack is replaced only after its next observed release", function()
+    for _, action in ipairs( { 7, 8 } ) do
+    local s = scenario( "probe_attack" ); s.action, s.last_attack = action, 1;
+    s.bot.GetAttackTarget = function() return s.creep end;
+    s:own(); local snap = s.backend.Snapshot( s.bot );
+    local order = { plan_id = "p", step_id = 1, step = { kind = "attack", target_id = snap.targets[1].id } };
+    eq( s.backend.Submit( s.bot, order ), false ); eq( #s.attacks, 0 );
+    s.last_attack = 2; s.creep.projectiles = { { handle = 71, caster = s.bot, is_attack = true, location = { x = 80, y = 0 } } };
+    assert( s.backend.Submit( s.bot, order ) ); eq( #s.attacks, 1 );
+    eq( #s.backend.Events( s.bot ), 0 ); -- старый native projectile не подтверждает новую атаку
+    end
+end );
+print( "RUNTIME PASSED " .. passed );

@@ -18,11 +18,22 @@ function M.Register( actor_id, backend )
     return true;
 end
 function M.IsReady( actor_id ) return actors[actor_id] ~= nil end;
+function M.IsActive( actor_id ) return actors[actor_id] ~= nil and actors[actor_id].scheduler.active ~= nil end;
+function M.HasActivePlan( actor_id ) return M.IsActive( actor_id ) end; -- статус для T016; не заменяет per-plan ACK
+function M.Unregister( bot, reason ) M.Cancel( bot, reason ); actors[bot:GetPlayerID()] = nil end;
+function M.Cancel( bot, reason )
+    local a = actors[bot:GetPlayerID()]; if not a then return { status = "idle" } end;
+    local result = Scheduler.Abort( a.scheduler, reason );
+    if a.backend.Release then a.backend.Release( bot, reason ) end;
+    return result;
+end
 function M.Desire( bot )
     local a = actors[bot:GetPlayerID()];
     if not a then return 0 end;
     local s = a.backend.Snapshot( bot );
-    if not s or s.danger or s.hero.disabled or s.hero.casting or s.time < 0 or s.time > 600 then return 0 end;
+    if not s or s.danger or s.hero.disabled or s.time < 0 or s.time > 600 then M.Cancel( bot, "yield" ); return 0 end;
+    -- Свой cast внутри плана не должен терять lane ownership на время ожидания completion.
+    if s.hero.casting and not a.scheduler.active then return 0 end;
     return BOT_MODE_DESIRE_MODERATE;
 end
 function M.Think( bot )
@@ -30,20 +41,35 @@ function M.Think( bot )
     if not a then return { status = "awaiting_T016_backend" } end;
     local backend, scheduler = a.backend, a.scheduler;
     local s = backend.Snapshot( bot );
-    if not s then return Scheduler.Abort( scheduler, "snapshot_missing" ) end;
+    if not s then return M.Cancel( bot, "snapshot_missing" ) end;
     s.capabilities = s.capabilities or {};
     s.capabilities.joint_executor = backend.joint_executor_verified;
-    for _, event in ipairs( backend.Events( bot ) ) do Scheduler.Event( scheduler, event ) end;
-    if s.danger then return Scheduler.Abort( scheduler, "emergency" ) end;
+    for _, event in ipairs( backend.Events( bot ) ) do
+        local accepted = Scheduler.Event( scheduler, event );
+        if accepted then record( backend, s, a.planning, event ) end;
+        if type( accepted ) == "table" and accepted.status == "aborted" then
+            if backend.Release then backend.Release( bot, event.status ) end;
+            return accepted;
+        end
+    end
+    if s.danger then return M.Cancel( bot, "emergency" ) end;
     if not scheduler.active then
         if s.time < a.next_plan_at then return { status = "decision_interval" } end;
         a.next_plan_at = s.time + 0.15;
         a.planning = Planner.Build( s, C );
+        if backend.Filter then a.planning = backend.Filter( bot, s, a.planning ) end;
         local selected = a.planning.selected;
         record( backend, s, a.planning, { status = "selected_not_executed" } );
-        if not selected or not selected.available or #selected.steps == 0 then return { status = "no_executable_plan" } end;
+        if not selected or not selected.available or #selected.steps == 0 then
+            if backend.Release then backend.Release( bot, "no_executable_plan" ) end;
+            return { status = "no_executable_plan" };
+        end;
+        if backend.Acquire then
+            local owned, reason = backend.Acquire( bot, selected );
+            if not owned then return { status = "waiting_owner", reason = reason } end;
+        end
         local ok, err = Scheduler.Begin( scheduler, bot:GetPlayerID(), "joint", selected, s.time, C, s.capabilities );
-        if not ok then return { status = "rejected", reason = err } end;
+        if not ok then if backend.Release then backend.Release( bot, err ) end; return { status = "rejected", reason = err } end;
     end
     local active = scheduler.active;
     local step = active and active.plan.steps[active.step] or nil;
@@ -55,9 +81,13 @@ function M.Think( bot )
                 step_id = order.step_id, status = "observed" } );
         else
             local ok, reason = backend.Submit( bot, order );
-            if not ok then order = Scheduler.Abort( scheduler, reason or "backend_rejected" ) end;
+            if not ok then order = M.Cancel( bot, reason or "backend_rejected" ) end;
         end
+    elseif order.status == "need_face_then_reobserve" and backend.Prepare then
+        local ok, reason = backend.Prepare( bot, order.step );
+        if not ok then order = M.Cancel( bot, reason or "face_preparation_rejected" ) end;
     end
+    if ( order.status == "aborted" or order.status == "plan_finished" ) and backend.Release then backend.Release( bot, order.status ) end;
     record( backend, s, a.planning, order );
     return order;
 end

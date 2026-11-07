@@ -2,6 +2,7 @@
 return {
     policy_version = "T007-options-draft-2",
     execution_mode = "joint_options", -- прежние примитивные правила больше не выбираются по умолчанию
+    runtime_adapter = true, -- runtime/config.operation задаёт observe/probe/execute
     lane_end_s = 600,             -- после 10 минут этот lane mode уступает другим режимам
     decision_interval_s = 0.15,
     yield_hp_fraction = 0.35,      -- ниже: отдать управление другим режимам, а не приказать retreat

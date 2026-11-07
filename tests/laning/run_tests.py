@@ -1,18 +1,21 @@
 """Offline tests against the real Lua 5.1 code; no Dota engine simulation claim."""
 from pathlib import Path
-import os, json
+import os, json, hashlib
 from lupa.lua51 import LuaRuntime
 
 root = Path(__file__).resolve().parents[2]
 os.chdir(root)
 lua = LuaRuntime(unpack_returned_tuples=True)
 print('Runtime:', lua.eval('_VERSION'), flush=True)
-for name in ['test_policy.lua', 'test_adapter.lua', 'advanced_test.lua', 'creeps_xp_tower_test.lua']:
+audit_source = root / 'tests/laning/audit_sources/t016_pr23_b0773c2.lua'
+data = audit_source.read_bytes()
+assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == '37a491daa059b083c577b723b704a9c7ed6cbed1'
+for name in ['test_policy.lua', 'test_adapter.lua', 'advanced_test.lua', 'creeps_xp_tower_test.lua', 'runtime_test.lua']:
     p = root / 'tests/laning' / name
-    if p.exists():
-        lua.execute(p.read_text(encoding='utf-8'))
+    lua.execute(p.read_text(encoding='utf-8'))
 # Parse the nested plan/snapshot record, including stable numeric option IDs encoded as object keys.
 sample = lua.globals().ADVANCED_RECORD_SAMPLE
+assert sample, 'Advanced trace fixture was not produced'
 if sample:
     record = json.loads(sample)
     assert record['reward_status'] == 'not_defined'

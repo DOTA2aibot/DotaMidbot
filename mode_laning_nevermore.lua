@@ -1,8 +1,9 @@
--- T007, локальный черновик: только SF и обычные атаки, без способностей/покупок.
+-- T007: игровой адаптер SF; историческая primitive policy оставлена только для fixtures.
 local C = require( GetScriptDirectory() .. "/laning/config" );
 local Policy = require( GetScriptDirectory() .. "/laning/policy" );
 local Trace = require( GetScriptDirectory() .. "/laning/trace" );
 local Options = require( GetScriptDirectory() .. "/laning/advanced/bridge" );
+local Runtime = require( GetScriptDirectory() .. "/laning/runtime/entry" );
 local nextDecision, nextAttack = -math.huge, -math.huge;
 local nextTrace, seq, targetSerial = -math.huge, 0, 0;
 local ids = setmetatable( {}, { __mode = "k" } ); -- идентификаторы только в этой Lua-сессии
@@ -107,7 +108,10 @@ end
 function GetDesire()
     local bot = GetBot();
     if bot == nil or bot:IsNull() or bot:GetUnitName() ~= "npc_dota_hero_nevermore" then return 0 end;
-    if C.execution_mode == "joint_options" then return Options.Desire( bot ) end;
+    if C.execution_mode == "joint_options" then
+        if C.runtime_adapter then return Runtime.Desire( bot ) end;
+        return Options.Desire( bot );
+    end;
     local s = safety( bot ); ensureSelfCount( bot, s );
     local reason = Policy.YieldReason( s, C );
     if reason then emit( bot, s, { kind = "yield", reason = reason }, "yielded", false ); return 0 end;
@@ -120,7 +124,10 @@ end
 function Think()
     local bot = GetBot();
     if bot == nil or bot:IsNull() or bot:GetUnitName() ~= "npc_dota_hero_nevermore" then return end;
-    if C.execution_mode == "joint_options" then return Options.Think( bot ) end;
+    if C.execution_mode == "joint_options" then
+        if C.runtime_adapter then return Runtime.Think( bot ) end;
+        return Options.Think( bot );
+    end;
     local s = safety( bot ); ensureSelfCount( bot, s );
     local reason = Policy.YieldReason( s, C );
     if reason then emit( bot, s, { kind = "yield", reason = reason }, "yielded", false ); return end;
@@ -146,4 +153,9 @@ function Think()
         -- Wait не отменяет ранее выданные приказы. Отдельного stop/clear очереди здесь нет.
         emit( bot, s, a, "no_new_order", false );
     end
+end
+
+function OnEnd()
+    local bot = GetBot();
+    if bot and C.execution_mode == "joint_options" and C.runtime_adapter then Runtime.Leave( bot ) end;
 end
