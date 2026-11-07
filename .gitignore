@@ -1,0 +1,30 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.yaml
+
+# Python / temporary outputs
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Large experiment artifacts; keep small fixtures under tests/fixtures/
+/runs/
+/data/
+/datasets/
+/checkpoints/
+/models/
+/artifacts/
+*.log
+
+# Editors and OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

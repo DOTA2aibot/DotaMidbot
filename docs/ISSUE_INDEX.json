@@ -1,0 +1,110 @@
+[
+  {
+    "task_id": "T001",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/1",
+    "number": 1,
+    "title": "[T001] Аудит и договорённости"
+  },
+  {
+    "task_id": "T002",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/2",
+    "number": 2,
+    "title": "[T002] Доступы и окружение"
+  },
+  {
+    "task_id": "T003",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/3",
+    "number": 3,
+    "title": "[T003] Первый подтверждённый запуск"
+  },
+  {
+    "task_id": "T004",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/4",
+    "number": 4,
+    "title": "[T004] Сценарий и контракт данных"
+  },
+  {
+    "task_id": "T005",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/5",
+    "number": 5,
+    "title": "[T005] Подтвердить существующий игровой цикл"
+  },
+  {
+    "task_id": "T006",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/6",
+    "number": 6,
+    "title": "[T006] Телеметрия"
+  },
+  {
+    "task_id": "T007",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/7",
+    "number": 7,
+    "title": "[T007] Фарм"
+  },
+  {
+    "task_id": "T008",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/8",
+    "number": 8,
+    "title": "[T008] Retreat"
+  },
+  {
+    "task_id": "T009",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/9",
+    "number": 9,
+    "title": "[T009] Smoke baseline"
+  },
+  {
+    "task_id": "T010",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/10",
+    "number": 10,
+    "title": "[T010] Замороженный baseline"
+  },
+  {
+    "task_id": "T011",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/11",
+    "number": 11,
+    "title": "[T011] Go/no-go обучения"
+  },
+  {
+    "task_id": "T012",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/12",
+    "number": 12,
+    "title": "[T012] Offline-эксперимент"
+  },
+  {
+    "task_id": "T013",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/13",
+    "number": 13,
+    "title": "[T013] Online candidate"
+  },
+  {
+    "task_id": "T014",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/14",
+    "number": 14,
+    "title": "[T014] Публикация и Issues"
+  },
+  {
+    "task_id": "T015",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/15",
+    "number": 15,
+    "title": "[T015] Проверки и инструкция"
+  },
+  {
+    "task_id": "T016",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/16",
+    "number": 16,
+    "title": "[T016] Рейзы и API"
+  },
+  {
+    "task_id": "T017",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/17",
+    "number": 17,
+    "title": "[T017] Покупки"
+  },
+  {
+    "task_id": "T018",
+    "url": "https://github.com/DOTA2aibot/DotaMidbot/issues/18",
+    "number": 18,
+    "title": "[T018] Прокачка и mid"
+  }
+]
