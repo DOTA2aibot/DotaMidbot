@@ -1,0 +1,33 @@
+"""Offline tests against the real Lua 5.1 code; no Dota engine simulation claim."""
+from pathlib import Path
+import os, json
+from lupa.lua51 import LuaRuntime
+
+root = Path(__file__).resolve().parents[2]
+os.chdir(root)
+lua = LuaRuntime(unpack_returned_tuples=True)
+print('Runtime:', lua.eval('_VERSION'), flush=True)
+for name in ['test_policy.lua', 'test_adapter.lua', 'advanced_test.lua', 'creeps_xp_tower_test.lua']:
+    p = root / 'tests/laning' / name
+    if p.exists():
+        lua.execute(p.read_text(encoding='utf-8'))
+# Parse the nested plan/snapshot record, including stable numeric option IDs encoded as object keys.
+sample = lua.globals().ADVANCED_RECORD_SAMPLE
+if sample:
+    record = json.loads(sample)
+    assert record['reward_status'] == 'not_defined'
+    assert len(record['action_masks']) == 25
+    assert record['observation']['build'] == 'mock'
+    assert record['candidate_plans'] and record['engine_event']['status'] == 'submitted'
+    print('OPTIONS RECORD JSON PASSED 1 case', flush=True)
+# Parse diagnostic output as actual JSON, not just string comparison.
+captured = []
+lua.globals().print = captured.append
+lua.execute('Trace = dofile("laning/trace.lua")')
+lua.execute('Trace.Emit({kind="attack", reason="last_hit", seq=1, hp_fraction=0.7, outcome_attribution="interval_only"})')
+event = json.loads(captured[-1].split('] ', 1)[1])
+assert event['outcome_attribution'] == 'interval_only' and event['seq'] == 1
+lua.execute('Trace.Emit({text="quote: \\" slash: \\\\ newline: \\n", value=0/0})')
+event = json.loads(captured[-1].split('] ', 1)[1])
+assert event['value'] is None
+print('TRACE JSON PASSED 2 cases')

@@ -1,0 +1,52 @@
+{
+  "purpose": "source-reference-only-not-runtime-defaults",
+  "source_commit": "b671cd08d5da5820ff0ad64fd26fcf32f615d197",
+  "units_blob": "b1a43ff1f381e767960410a1db857bc2a876b193",
+  "units": {
+    "npc_dota_creep_goodguys_melee": {
+      "StatusHealth": 550,
+      "StatusHealthRegen": 0.5,
+      "ArmorPhysical": 2,
+      "MagicalResistance": 0,
+      "BountyGoldMin": 34,
+      "BountyGoldMax": 39,
+      "BountyXP": 57,
+      "AttackRange": 100
+    },
+    "npc_dota_creep_goodguys_ranged": {
+      "StatusHealth": 300,
+      "StatusHealthRegen": 2,
+      "ArmorPhysical": 0,
+      "MagicalResistance": 0,
+      "BountyGoldMin": 43,
+      "BountyGoldMax": 52,
+      "BountyXP": 69,
+      "AttackRange": 500
+    },
+    "npc_dota_creep_goodguys_flagbearer": {
+      "StatusHealth": 550,
+      "StatusHealthRegen": 0.5,
+      "ArmorPhysical": 2,
+      "MagicalResistance": 40,
+      "BountyGoldMin": 34,
+      "BountyGoldMax": 39,
+      "BountyXP": 57,
+      "AttackRange": 100
+    },
+    "npc_dota_goodguys_siege": {
+      "StatusHealth": 935,
+      "StatusHealthRegen": 0,
+      "ArmorPhysical": 0,
+      "MagicalResistance": 80,
+      "BountyGoldMin": 59,
+      "BountyGoldMax": 72,
+      "BountyXP": 88,
+      "AttackRange": 690
+    }
+  },
+  "notes": [
+    "Base unit KV only: upgrades, dynamic aura bonuses, active effects and scenario rules can differ.",
+    "Runtime getters and effective per-source damage queries required. XP radius not verified in this config.",
+    "Observer ItemCost=0 in items.txt; flagbearer aura and siege source-dependent modifiers in npc_abilities.txt."
+  ]
+}

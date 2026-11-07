@@ -1,0 +1,2 @@
+# Offline Lua 5.1 test runner only; not a Dota runtime dependency.
+lupa==2.8
