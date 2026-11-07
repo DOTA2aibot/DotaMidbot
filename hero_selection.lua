@@ -42,3 +42,25 @@ function Think()
 end
 
 ----------------------------------------------------------------------------------------------------
+
+-- Таблица индексируется слотом GetTeamPlayers (1..N), не глобальным PlayerID.
+-- SF назначаем mid явно; остальные боты распределяются по боковым линиям.
+-- Для живых игроков сохраняется базовая раскладка, их героев не переопределяем.
+function UpdateLaneAssignments()
+    local ids = GetTeamPlayers( GetTeam() );
+    local lanes = {};
+    local sideIndex = 0;
+    for slot, id in ipairs( ids ) do
+        lanes[slot] = slot % 2 == 0 and LANE_TOP or LANE_BOT;
+        if IsPlayerBot( id ) then
+            if GetSelectedHeroName( id ) == "npc_dota_hero_nevermore" then
+                lanes[slot] = LANE_MID;
+            else
+                sideIndex = sideIndex + 1;
+                lanes[slot] = sideIndex <= 2 and LANE_TOP or LANE_BOT;
+            end
+        end
+    end
+    return lanes;
+end
+
