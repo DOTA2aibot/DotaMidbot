@@ -26,6 +26,43 @@ local abilityRequiem = nil;
 local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
+-- T018: явная прокачка. Дефолтный ИИ в 1v1 mid очки может не тратить вообще,
+-- поэтому раскладываем первые 10 уровней сами: рейзы равномерно, ульта на 6.
+-- Дальше 10-го уровня список молчит — прокачку подхватывает стандартный ИИ.
+----------------------------------------------------------------------------------------------------
+local SKILL_ORDER = {
+	"nevermore_shadowraze1",  -- 1
+	"nevermore_shadowraze2",  -- 2
+	"nevermore_shadowraze3",  -- 3
+	"nevermore_shadowraze1",  -- 4
+	"nevermore_shadowraze2",  -- 5
+	"nevermore_requiem",      -- 6
+	"nevermore_shadowraze3",  -- 7
+	"nevermore_shadowraze1",  -- 8
+	"nevermore_shadowraze2",  -- 9
+	"nevermore_shadowraze3",  -- 10
+};
+
+function LevelUpThink( npcBot )
+
+	if ( npcBot:GetAbilityPoints() < 1 ) then return end;
+
+	local seen = {};
+	for _, sName in ipairs( SKILL_ORDER )
+	do
+		seen[sName] = ( seen[sName] or 0 ) + 1;
+		local ability = npcBot:GetAbilityByName( sName );
+		if ( ability ~= nil and ability:CanAbilityBeUpgraded() and ability:GetLevel() < seen[sName] )
+		then
+			npcBot:ActionImmediate_LevelAbility( sName );
+			print( "[MIDBOT levelup] " .. sName );
+			return;
+		end
+	end
+
+end
+
+----------------------------------------------------------------------------------------------------
 
 function InitAbilities( npcBot )
 	abilityRaze[1] = npcBot:GetAbilityByName( "nevermore_shadowraze1" );
@@ -60,6 +97,9 @@ function AbilityUsageThink()
 	local npcBot = GetBot();
 
 	if ( not bAbilitiesInit ) then InitAbilities( npcBot ); end
+
+	-- Прокачка — всегда в первую очередь, даже во время каста
+	LevelUpThink( npcBot );
 
 	-- Не мешаем текущему касту/каналу
 	if ( npcBot:IsUsingAbility() or npcBot:IsChanneling() or npcBot:IsSilenced() ) then return end;
