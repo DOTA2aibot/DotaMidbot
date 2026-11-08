@@ -20,19 +20,25 @@ local REQUIEM_SELF_HP_PCT  = 0.30;   -- или если нас почти уби
 local RAZE_MANA_COST = 75;           -- цена одного рейза, патч 7.4x
 local RAZE_MANA_RESERVE = 150;       -- запас на 2 рейза для героя/отпора, не сливать в крипов
 local BOTTLE_MANA_PER_CHARGE = 60;   -- мана с одного глотка ботла (консервативно)
+local WAND_MANA_PER_CHARGE = 15;     -- мана с одного заряда стиков (консервативно)
 
--- Заряды ботла: 0 если ботла нет. Вынесено сюда — используют и рейзы, и ItemUsageThink.
-function GetBottleCharges( npcBot )
-	local nSlot = npcBot:FindItemSlot( "item_bottle" );
+-- Заряды предмета по имени: 0 если предмета нет. Ботл и ванд используют
+-- и рейзы, и ItemUsageThink.
+local function GetItemCharges( npcBot, itemName )
+	local nSlot = npcBot:FindItemSlot( itemName );
 	if ( nSlot < 0 ) then return 0; end
 	local item = npcBot:GetItemInSlot( nSlot );
 	if ( item == nil ) then return 0; end
 	return item:GetCurrentCharges();
 end
+function GetBottleCharges( npcBot ) return GetItemCharges( npcBot, "item_bottle" ); end
+function GetWandCharges( npcBot ) return GetItemCharges( npcBot, "item_magic_wand" ); end
 
--- Эффективная мана = текущая + то, что можно выпить из ботла прямо сейчас.
+-- Эффективная мана = текущая + ботл + стики — то, что можно выпить прямо сейчас.
 function GetEffectiveMana( npcBot )
-	return npcBot:GetMana() + GetBottleCharges( npcBot ) * BOTTLE_MANA_PER_CHARGE;
+	return npcBot:GetMana()
+		+ GetBottleCharges( npcBot ) * BOTTLE_MANA_PER_CHARGE
+		+ GetWandCharges( npcBot ) * WAND_MANA_PER_CHARGE;
 end
 
 -- T024: «шив волны» под силовые руны (гайд Олега 08.11): за ~20 сек до спавна
@@ -749,6 +755,8 @@ function ConsiderRazeOnHero( npcBot )
 	local bestRaze = nil;
 	local bestKill = false;
 	local bestEnemyHpPct = 1.0; -- T021: HP цели лучшего кандидата, для усиленного харасса
+	local bestEnemy = nil;      -- T024: сама цель (доминация)
+	local bestRazeDamage = 0;   -- T024: урон лучшего рейза (доминация)
 
 	for _, npcEnemy in pairs( tableEnemyHeroes )
 	do
@@ -796,6 +804,8 @@ function ConsiderRazeOnHero( npcBot )
 							bestScore = score;
 							bestLoc = vLoc;
 							bestRaze = abilityRaze[i];
+							bestEnemy = npcEnemy;
+							bestRazeDamage = nDamage;
 							bestEnemyHpPct = npcEnemy:GetHealth() / npcEnemy:GetMaxHealth();
 							bestKill = bestEnemyHpPct <= 0.25;
 						end
@@ -810,9 +820,28 @@ function ConsiderRazeOnHero( npcBot )
 	-- Добивание — всегда; харасс — если маны хватает. T021: считаем ману С ботлом
 	-- (полный ботл = ещё ~3 рейза), иначе бот не харасил, имея полный ботл.
 	-- Враг ниже 40% HP = реальный шанс убить за 2-3 рейза: приоритет выше.
-	local effManaPct = GetEffectiveMana( npcBot ) / npcBot:GetMaxMana();
+	local effMana = GetEffectiveMana( npcBot );
+	local effManaPct = effMana / npcBot:GetMaxMana();
 	if ( bestKill and manaPct > 0.15 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
 	if ( bestEnemyHpPct <= 0.40 and effManaPct >= 0.25 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
+
+	-- T024: ДОМИНАЦИЯ (гайд Олега 08.11). Если мы на 2+ уровня выше врага ИЛИ
+	-- два рейза снимут ему половину HP — продолжаем агрессию, не ждём 40% HP.
+	-- Агрессия только при ресурсах: эффективная мана (мана+ботл+стики) на 2 рейза
+	-- и своё HP >= 40% — иначе это самоубийство, а не доминация.
+	if ( bestEnemy ~= nil )
+	then
+		local enemyLvl = SafeUnitCall( bestEnemy, "GetLevel" );
+		local lvlDelta = ( type( enemyLvl ) == "number" ) and ( npcBot:GetLevel() - enemyLvl ) or 0;
+		local burst = EffectiveRazeDamage( bestRazeDamage, bestEnemy ) * 2;
+		local hpPct = npcBot:GetHealth() / npcBot:GetMaxHealth();
+		if ( ( lvlDelta >= 2 or burst >= bestEnemy:GetHealth() * 0.5 )
+			and effMana >= RAZE_MANA_COST * 2 and hpPct >= 0.40 )
+		then
+			return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze;
+		end
+	end
+
 	if ( effManaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
