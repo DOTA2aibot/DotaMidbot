@@ -1,6 +1,7 @@
 # CHANGELOG — MIDBOT
 
 ## v0.3.7-vision — кандидат T026, 2026-11-08
+- Дополнение 2026-11-09: all_test получает простые ward-free сборки союзников вместо Valve shopping (по выбору Artem); пакет выбирать только для команды SF, врагам Valve. Добавлены Tango на дерево и исправление bank/rune-water geometry gate по логу9082456112.
 - Уточнение Artem: один Observer возвращён в стартовую очередь после Tango; последующее пополнение отдельно. Startup gate и передача success/unknown в pending предотвращают гонку/дубли; первая покупка не зависит от mid/геометрии.
 - Radiant mid: один детерминированный bank Observer с геометрическим покрытием руны, без прежнего обязательного cliff3; координаты/фактическая team visibility пишутся после постановки. Фото не выдаётся за точные world coordinates.
 - Убрана закупка sentry; отдельный Observer supply до15:00 на mid, один запас с учётом stash/backpack/own courier, lifetime360с и prefetch30с, unknown pending без дублей. Доставка прежним courier handler.

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
+ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
             'valve_wards': ('valve_native', False),
             'valve_lane_economy': ('valve_native_with_midbot_rune', False),
@@ -32,6 +33,7 @@ def profile_source(profile, revision='uncommitted'):
             f'observer_enabled = {str(not enabled).lower()}, '
             f'wards_enabled = {str(profile in ("valve_wards", "valve_lane_economy", "all_test")).lower()}, '
             f'economy_enabled = {str(profile in ("valve_lane_economy", "all_test")).lower()}, '
+            + ('ally_ward_free_shop = true, ' if profile == 'all_test' else '') +
             f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
@@ -67,6 +69,10 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/lane_economy' / RUNE_ENTRY
         below(source, root)
         files[RUNE_ENTRY] = source.read_bytes()
+    if profile == 'all_test':
+        source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
+        below(source, root)
+        files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
     return files
 
 
@@ -102,6 +108,9 @@ explicit integration name used for the v0.3.6 combined test.
 Tactical modules are attached in the root ability file for non-probe profiles:
 Requiem/BKB/PT/mana/neutral decisions; ward execution still requires wards_enabled.
 Set laning/tactical/config.lua enabled=false to delegate to original callbacks.
+all_test additionally replaces the scripted team's non-SF shopping with simple
+ward-free plans. Select this package only for the controlled SF team; select
+Valve/default scripts for the enemy team. Native shopping fallback is not provided.
 All other rune trips, including bounty, are suppressed for SF.
 This profile is an unverified gameplay experiment.
 lane_probe: existing diagnostic controller, one attack and a 600-second lane window.
@@ -157,6 +166,10 @@ def verify(path):
         expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
+        purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}
+        expected_purchase = {'item_purchase_nevermore.lua'} | ({ALLY_PURCHASE_ENTRY} if profile == 'all_test' else set())
+        if purchase_entries != expected_purchase:
+            raise ValueError('Unexpected purchase entrypoints')
         for name, expected in files.items():
             if sha(archive.read('bots/' + name)) != expected:
                 raise ValueError('File hash mismatch: ' + name)

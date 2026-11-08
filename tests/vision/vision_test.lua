@@ -24,7 +24,7 @@ test("Radiant site is stable across bot movements and covers a rune geometricall
     s.bot.x=-1000;local b=site.Get(s.bot);eq(a.location.x,b.location.x);eq(a.location.y,b.location.y);
 end);
 test("no river fallback when a bank or tree geometry is unknown",function()
-    local s=scenario();s.env.GetHeightLevel=function() return 0 end;local p,why=s:vision("site").Get(s.bot);eq(p,nil);eq(why,"radiant_bank_geometry_unknown");
+    local s=scenario();s.env.GetHeightLevel=function() return 0 end;local p,why=s:vision("site").Get(s.bot);eq(p,nil);eq(why,"no_radiant_bank_rune_view_candidate");
     local t=scenario();t.env.GetAllTrees=nil;local q,reason=t:vision("site").Get(t.bot);eq(q,nil);eq(reason,"tree_geometry_unknown");
 end);
 test("Dire illusion dead off-mid and post15min cannot buy recurring observers",function()
@@ -187,5 +187,21 @@ test("temporary starting ward failures do not defer its ownership behind late it
     s.bot.ActionImmediate_PurchaseItem=function(bot,name) local result=original(bot,name);if name=="item_ward_observer" then return 4 end;return result end;
     purchaseRoot(s);for i=0,29 do s.time=i*.5;s.env.ItemPurchaseThink() end;
     eq(wardPurchases(s),20);assert(s.buys[#s.buys]~="item_ward_observer");
+end);
+test("lane anchor in water or lane midpoint on a bank does not disable ward search",function()
+    for _,kind in ipairs({"anchor_water","midpoint_bank"}) do
+        local s=scenario();local original=s.env.GetHeightLevel;
+        s.env.GetHeightLevel=function(p)
+            if kind=="anchor_water" and math.abs(p.x+500)<1 and math.abs(p.y)<1 then return 0 end;
+            if kind=="midpoint_bank" and math.abs(p.x)<1 and math.abs(p.y)<1 then return 2 end;
+            return original(p);
+        end;
+        local spot=assert(s:vision("site").Get(s.bot));assert(spot.height>0);
+    end;
+end);
+test("tree catalog accepts explicit locations without sending them to tree-ID API",function()
+    local s=scenario();s.env.GetAllTrees=function() return {{x=4000,y=4000}} end;
+    s.env.GetTreeLocation=function() error("a point is not a tree ID") end;
+    assert(s:vision("site").Get(s.bot));
 end);
 print("VISION PASSED "..count.." cases (mock API; real rune vision unverified)");

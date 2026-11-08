@@ -39,17 +39,23 @@ function M.Get(bot)
     nextSearch=ctx.now+C.geometry_retry_s;
     local bank=U.Point(U.Global("GetLocationAlongLane",LANE_MID,C.bank_fraction));
     local mid=U.Point(U.Global("GetLocationAlongLane",LANE_MID,C.mid_fraction));
-    local river=height(ctx.center);local bankHeight=height(bank);
-    if not bank or not mid or river==nil or bankHeight==nil or bankHeight<=river then
+    local bankHeight=height(bank);
+    if not bank or not mid then
         lastReason="radiant_bank_geometry_unknown";return nil,lastReason;
     end;
     if RUNE_POWERUP_1==nil or RUNE_POWERUP_2==nil then lastReason="rune_landmark_unknown";return nil,lastReason end;
     local runes={U.Point(U.Global("GetRuneSpawnLocation",RUNE_POWERUP_1)),U.Point(U.Global("GetRuneSpawnLocation",RUNE_POWERUP_2))};
     if not runes[1] or not runes[2] then lastReason="rune_landmark_unknown";return nil,lastReason end;
+    -- Lane fractions are anchors, not terrain classes: .45 may still be water
+    -- and .50 can already be a bank. River spawn terrain is the actual reference.
+    local r1,r2=height(runes[1]),height(runes[2]);
+    if r1==nil or r2==nil then lastReason="rune_water_geometry_unknown";return nil,lastReason end;
+    local river=math.min(r1,r2);
     local ids=U.Global("GetAllTrees");local trees={};
     if type(ids)~="table" or #ids>C.max_tree_ids then lastReason="tree_geometry_unknown";return nil,lastReason end;
     for _,id in ipairs(ids) do
-        local p=U.Point(U.Global("GetTreeLocation",id));
+        local p=U.Point(id); -- API bindings may expose points or numeric tree IDs.
+        if not p and U.Number(id) then p=U.Point(U.Global("GetTreeLocation",id)) end;
         if not p then lastReason="tree_geometry_unknown";return nil,lastReason end;
         if U.Distance(p,bank)<=C.vision_radius+C.search_radius then trees[#trees+1]=p end;
     end;
@@ -57,7 +63,7 @@ function M.Get(bot)
     for dx=-C.search_radius,C.search_radius,C.search_step do
         for dy=-C.search_radius,C.search_radius,C.search_step do
             local q={x=bank.x+dx,y=bank.y+dy};local h=height(q);
-            if h and h>river and h>=bankHeight and U.Distance(q,bank)<=C.search_radius
+            if h and h>river and (not bankHeight or h>=bankHeight) and U.Distance(q,bank)<=C.search_radius
                 and U.Distance(q,mid)<=C.vision_radius-C.vision_margin and clear(q,mid,h,trees) then
                 for i,rune in ipairs(runes) do
                     if U.Distance(q,rune)<=C.vision_radius-C.vision_margin and clear(q,rune,h,trees) then

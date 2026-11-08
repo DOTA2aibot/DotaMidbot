@@ -3,6 +3,7 @@
 local U=require(GetScriptDirectory().."/laning/tactical/util");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Mana=require(GetScriptDirectory().."/laning/tactical/mana");
+local Tango=require(GetScriptDirectory().."/laning/tactical/tango");
 local M={};
 function M.Tick(bot,s)
     if not U.CanUse(bot) or s.ward_pending or not B.Free(s) then return false end;
@@ -28,6 +29,6 @@ function M.Tick(bot,s)
         and U.Call(bot,"HasModifier","modifier_flask_healing")==false and Mana.Safe(bot) then
         return B.Self(bot,s,salve,"basic_safe_salve",true);
     end;
-    return false;
+    return Tango.Tick(bot,s);
 end;
 return M;
