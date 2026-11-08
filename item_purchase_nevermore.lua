@@ -18,6 +18,50 @@ local nextAttemptTime = -math.huge;
 local lastMessage = nil;
 local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
 
+----------------------------------------------------------------------------------------------------
+-- T021: доставка курьером. Матч 9081721395: после wraith band (~6:30) закупка
+-- молчала 13 минут — предметы покупались в стэш (инвентарь полон), а команду
+-- курьеру никто не отдавал. Паттерн взят из RMMAI util/ItemPurchaseSystem.lua:
+-- стэш непустой + курьер свободен -> COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS.
+----------------------------------------------------------------------------------------------------
+local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
+local nextCourierCheck = -math.huge;
+
+-- Слоты 9-14 у бота — стэш (0-5 инвентарь, 6-8 рюкзак). GetItemInSlot
+-- есть и в тестовой фикстуре, поэтому скан слотов безопаснее GetStashValue.
+local function HasStashItems( bot )
+	for slot = 9, 14 do
+		if ( bot:GetItemInSlot( slot ) ~= nil ) then return true end;
+	end
+	return false;
+end
+
+local function ConsiderCourierDelivery( bot )
+	if ( COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS == nil ) then return end;
+	if ( type( GetNumCouriers ) ~= "function" or type( GetCourier ) ~= "function" ) then return end;
+	local now = GameTime();
+	if ( now < nextCourierCheck ) then return end;
+	nextCourierCheck = now + COURIER_CHECK_INTERVAL;
+	if ( not HasStashItems( bot ) ) then return end;
+	for index = 0, GetNumCouriers() - 1 do
+		local courier = GetCourier( index );
+		if ( courier ~= nil and courier:GetPlayerID() == bot:GetPlayerID() ) then
+			-- Курьер может быть занят другим героем: шлём только из состояния
+			-- покоя/базы. Метод может отсутствовать в моке тестов — тогда
+			-- осторожно не шлём вовсе (fail-closed).
+			if ( type( courier.GetCourierState ) ~= "function" ) then return end;
+			local state = courier:GetCourierState();
+			if ( state == COURIER_STATE_IDLE or state == COURIER_STATE_AT_BASE ) then
+				local ok = pcall( function()
+					bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
+				end );
+				if ( ok ) then Report( "courier: take_and_transfer (stash not empty)" ); end
+			end
+			return; -- свой курьер один, дальше чужие
+		end
+	end
+end
+
 local function Report( message )
 	if ( message ~= lastMessage ) then
 		print( "[MIDBOT purchase] " .. message );
@@ -79,6 +123,9 @@ end
 function ItemPurchaseThink()
 	local bot = GetBot();
 	if ( bot == nil ) then return end;
+	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
+	-- сначала забираем их курьером, потом продолжаем покупки.
+	ConsiderCourierDelivery( bot );
 	if ( #tableItemsToBuy == 0 ) then
 		bot:SetNextItemPurchaseValue( 0 );
 		return;

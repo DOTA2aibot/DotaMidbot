@@ -12,9 +12,28 @@
 ----------------------------------------------------------------------------------------------------
 
 -- Пороги, которые потом будем крутить (а ещё позже — обучать)
-local RAZE_MANA_PCT_HARASS = 0.45;   -- не харассить рейзами, если маны меньше 45%
+local RAZE_MANA_PCT_HARASS = 0.30;   -- T021: харасс-порог снижен 0.45 -> 0.30 (матч 9081721395: бот почти не харасил при возможности)
 local REQUIEM_ENEMY_HP_PCT = 0.40;   -- добивать ультой, если у врага меньше 40% HP
 local REQUIEM_SELF_HP_PCT  = 0.30;   -- или если нас почти убили
+
+-- T021: мана-дисциплина (репорт Олега: "100 маны = 1 койл, а ботл полный").
+local RAZE_MANA_COST = 75;           -- цена одного рейза, патч 7.4x
+local RAZE_MANA_RESERVE = 150;       -- запас на 2 рейза для героя/отпора, не сливать в крипов
+local BOTTLE_MANA_PER_CHARGE = 60;   -- мана с одного глотка ботла (консервативно)
+
+-- Заряды ботла: 0 если ботла нет. Вынесено сюда — используют и рейзы, и ItemUsageThink.
+function GetBottleCharges( npcBot )
+	local nSlot = npcBot:FindItemSlot( "item_bottle" );
+	if ( nSlot < 0 ) then return 0; end
+	local item = npcBot:GetItemInSlot( nSlot );
+	if ( item == nil ) then return 0; end
+	return item:GetCurrentCharges();
+end
+
+-- Эффективная мана = текущая + то, что можно выпить из ботла прямо сейчас.
+function GetEffectiveMana( npcBot )
+	return npcBot:GetMana() + GetBottleCharges( npcBot ) * BOTTLE_MANA_PER_CHARGE;
+end
 
 -- Дистанции рейзов от точки каста (центр области)
 local RAZE_DIST = { 200, 450, 700 };
@@ -255,6 +274,101 @@ function AbilityUsageThinkInner( npcBot )
 end
 
 ----------------------------------------------------------------------------------------------------
+-- T021: использование предметов. До этого ItemUsageThink в файле ОТСУТСТВОВАЛ —
+-- движок вызывал пустое место, и бот никогда не пил ботл и не жал ванд
+-- (матч 9081721395: 100 маны при полном ботле). Реализуем минимум мидера:
+-- ботл для маны/хп и ванд в трудную минуту.
+-- Ботл: реген слетается от урона героев, поэтому рядом с врагом пьём только
+-- по нужде (маны нет даже на один рейз) или под добивание.
+----------------------------------------------------------------------------------------------------
+function ItemUsageThink()
+
+	local npcBot = GetBot();
+	if ( npcBot == nil or not npcBot:IsAlive() ) then return end;
+
+	local ok, err = pcall( ItemUsageThinkInner, npcBot );
+	if ( not ok ) then print( "[MIDBOT item ERROR] " .. tostring( err ) ); end
+
+end
+
+function ItemUsageThinkInner( npcBot )
+
+	if ( npcBot:IsUsingAbility() or npcBot:IsChanneling() or npcBot:IsSilenced()
+		or npcBot:IsMuted() or npcBot:IsStunned() )
+	then
+		return;
+	end
+
+	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
+	local hpPct = npcBot:GetHealth() / npcBot:GetMaxHealth();
+	local tableEnemyHeroes = npcBot:GetNearbyHeroes( 700, true, BOT_MODE_NONE );
+	local bEnemyClose = ( tableEnemyHeroes ~= nil and #tableEnemyHeroes > 0 );
+
+	-- Ботл
+	local nBottleSlot = npcBot:FindItemSlot( "item_bottle" );
+	if ( nBottleSlot >= 0 )
+	then
+		local itemBottle = npcBot:GetItemInSlot( nBottleSlot );
+		if ( itemBottle ~= nil
+			and itemBottle:IsFullyCastable()
+			and itemBottle:GetCurrentCharges() > 0
+			and not npcBot:HasModifier( "modifier_bottle_regeneration" ) )
+		then
+			local bDrink = false;
+			if ( not bEnemyClose )
+			then
+				-- Спокойная обстановка: поддерживаем ресурс
+				if ( manaPct < 0.45 or hpPct < 0.50 ) then bDrink = true; end
+			else
+				-- Враг рядом: пьём, только если маны нет даже на один рейз
+				-- (случай Олега) или врага добиваем и нужен ресурс на комбо
+				if ( npcBot:GetMana() < RAZE_MANA_COST ) then bDrink = true; end
+				if ( not bDrink and manaPct < 0.45 )
+				then
+					for _, npcEnemy in pairs( tableEnemyHeroes )
+					do
+						if ( npcEnemy:CanBeSeen()
+							and npcEnemy:GetHealth() / npcEnemy:GetMaxHealth() <= 0.40 )
+						then
+							bDrink = true;
+							break;
+						end
+					end
+				end
+			end
+			if ( bDrink )
+			then
+				Observe( "BeforeAction", npcBot, itemBottle );
+				npcBot:Action_UseAbilityOnEntity( itemBottle, npcBot );
+				Observe( "Action", npcBot, "item_use", itemBottle, nil, "t021_bottle_mana_or_hp" );
+				print( "[MIDBOT item] bottle sip mana=" .. npcBot:GetMana() .. " hp%=" .. hpPct );
+				return;
+			end
+		end
+	end
+
+	-- Ванд/стик: отхил в трудную минуту
+	local sWandName = ( npcBot:FindItemSlot( "item_magic_wand" ) >= 0 ) and "item_magic_wand" or "item_magic_stick";
+	local nWandSlot = npcBot:FindItemSlot( sWandName );
+	if ( nWandSlot >= 0 )
+	then
+		local itemWand = npcBot:GetItemInSlot( nWandSlot );
+		if ( itemWand ~= nil
+			and itemWand:IsFullyCastable()
+			and itemWand:GetCurrentCharges() >= 8
+			and ( hpPct < 0.40 or ( hpPct < 0.60 and manaPct < 0.25 ) ) )
+		then
+			Observe( "BeforeAction", npcBot, itemWand );
+			npcBot:Action_UseAbilityOnEntity( itemWand, npcBot );
+			Observe( "Action", npcBot, "item_use", itemWand, nil, "t021_wand_emergency" );
+			print( "[MIDBOT item] wand hp%=" .. hpPct .. " mana%=" .. manaPct );
+			return;
+		end
+	end
+
+end
+
+----------------------------------------------------------------------------------------------------
 -- Каст рейза. Рейзы — NO_TARGET способности: бьют на фикс. дистанции
 -- в направлении, КУДА СМОТРИТ герой. Action_UseAbilityOnLocation тут не работает
 -- (фикс аудита GPT).
@@ -483,6 +597,7 @@ function ConsiderRazeOnHero( npcBot )
 	local bestLoc = nil;
 	local bestRaze = nil;
 	local bestKill = false;
+	local bestEnemyHpPct = 1.0; -- T021: HP цели лучшего кандидата, для усиленного харасса
 
 	for _, npcEnemy in pairs( tableEnemyHeroes )
 	do
@@ -530,7 +645,8 @@ function ConsiderRazeOnHero( npcBot )
 							bestScore = score;
 							bestLoc = vLoc;
 							bestRaze = abilityRaze[i];
-							bestKill = ( npcEnemy:GetHealth() / npcEnemy:GetMaxHealth() ) <= 0.25;
+							bestEnemyHpPct = npcEnemy:GetHealth() / npcEnemy:GetMaxHealth();
+							bestKill = bestEnemyHpPct <= 0.25;
 						end
 					end
 				end
@@ -540,9 +656,13 @@ function ConsiderRazeOnHero( npcBot )
 
 	if ( bestRaze == nil ) then return BOT_ACTION_DESIRE_NONE, nil, nil end;
 
-	-- Добивание — всегда; харасс — только если маны хватает
+	-- Добивание — всегда; харасс — если маны хватает. T021: считаем ману С ботлом
+	-- (полный ботл = ещё ~3 рейза), иначе бот не харасил, имея полный ботл.
+	-- Враг ниже 40% HP = реальный шанс убить за 2-3 рейза: приоритет выше.
+	local effManaPct = GetEffectiveMana( npcBot ) / npcBot:GetMaxMana();
 	if ( bestKill and manaPct > 0.15 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
-	if ( manaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
+	if ( bestEnemyHpPct <= 0.40 and effManaPct >= 0.25 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
+	if ( effManaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
 end
@@ -571,9 +691,21 @@ function ConsiderRazeOnCreeps( npcBot )
 	end
 
 	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
-	if ( manaPct < 0.25 ) -- жёсткий минимум: под вышкой добиваем и на малой мане
+	-- T021: мана-дисциплина. Раньше: плоский порог 25% маны — бот спокойно
+	-- сливал последние 75 маны в крипов и оставался пустым для героя/руны
+	-- (репорт Олега: "100 маны = 1 койл, а ботл полный"). Теперь держим резерв
+	-- RAZE_MANA_RESERVE, КРОМЕ случаев: (а) есть заряды ботла — выпьем и
+	-- докастуем; (б) добивание под своей вышкой — там тратимся до дна.
+	local nMana = npcBot:GetMana();
+	if ( nMana < RAZE_MANA_COST + RAZE_MANA_RESERVE and GetBottleCharges( npcBot ) == 0 )
 	then
-		return BOT_ACTION_DESIRE_NONE, nil, nil;
+		-- tableAlliedTowers ниже ещё не собран — спрашиваем вышки напрямую
+		local tableOwn = npcBot:GetNearbyTowers( 900, false );
+		local bUnderOwnTower = ( tableOwn ~= nil and #tableOwn > 0 );
+		if ( not bUnderOwnTower or nMana < RAZE_MANA_COST )
+		then
+			return BOT_ACTION_DESIRE_NONE, nil, nil;
+		end
 	end
 
 	local nSearchRadius = RAZE_DIST[3] + RAZE_RADIUS;
