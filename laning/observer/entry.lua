@@ -1,3 +1,4 @@
+local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local O = require( GetScriptDirectory() .. "/laning/observer/core" );
 local C = require( GetScriptDirectory() .. "/laning/observer/config" );
@@ -11,6 +12,7 @@ do
 end;
 local M = {};
 function M.Tick( bot )
+    if not Actor.Real( bot ) then return end;
     -- Отдельный cosmetic dispatch; core Capture/Shadow остаются read-only.
     if KillChat and Profile.runtime_enabled ~= true then pcall( KillChat.Tick, bot ) end;
     if Profile.observer_enabled ~= true then return end;
@@ -53,7 +55,13 @@ function M.BeforeAction( ... )
     if Profile.observer_enabled == true then return O.BeforeAction( ... ) end;
 end
 function M.AfterAbilities( bot )
+    if not Actor.Real( bot ) then return end;
     if Profile.wards_enabled ~= true or Profile.observer_enabled ~= true then return end;
+    if Actor.Blocked( bot ) then return end;
     local s = O.State( bot ); if s then Wards.Tick( bot, s ) end;
 end
+function M.ItemsBusy( bot )
+    local s = O.State( bot );
+    return Actor.Blocked( bot ) or ( s and s.ward_pending ~= nil ) or false;
+end;
 return M;

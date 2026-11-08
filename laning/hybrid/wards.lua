@@ -1,3 +1,4 @@
+local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 -- Opt-in mid ward test. Не ходит, не переключает режимы, не отменяет команды.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local O = require( GetScriptDirectory() .. "/laning/observer/core" );
@@ -137,6 +138,7 @@ function M.Poll( bot, s )
     end;
 end
 function M.Tick( bot, s )
+    if not Actor.Real(bot) or Actor.Blocked(bot) then return end;
     local now = A.Time(); if not now then return end;
     if M.Poll( bot, s ) then return end;
     if now < ( s.next_ward or -math.huge ) then return end;

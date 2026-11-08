@@ -15,6 +15,8 @@ local function scenario( opt )
 	if ( opt.noConstant ) then env.PURCHASE_ITEM_SUCCESS = nil end;
 	local function item( name ) return { GetName = function() return name end } end;
 	local bot = {
+        IsHero=function() return true end,IsIllusion=function() return false end,
+        GetUnitName=function() return "npc_dota_hero_nevermore" end,
 		GetPlayerID = function() return 7 end,
 		GetItemInSlot = function( _, n ) local name = ( opt.slots or {} )[n]; return name and item( name ) or nil end,
 		GetGold = function() return s.gold end,
@@ -29,6 +31,9 @@ local function scenario( opt )
 	bot.Action_PurchaseItem = bot.ActionImmediate_PurchaseItem;
 	env.GetBot = function() if ( opt.noBot ) then return nil end; return bot end;
 	env.GameTime = function() return s.now end;
+    env.GetScriptDirectory=function() return "bots" end;local cache={};
+    env.require=function(path) local p=assert(path:match("laning/.*"));if p=="laning/profile" then return {economy_enabled=false} end;
+        if not cache[p] then local f=assert(loadfile(p..".lua"));setfenv(f,env);cache[p]=f() end;return cache[p];end;
 	env.GetItemCost = opt.cost or function() return 100 end;
 	env.GetItemComponents = opt.recipe or function() return {} end;
 	env.GetNumCouriers = function() return #( opt.couriers or {} ) end;

@@ -1,3 +1,4 @@
+local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 ----------------------------------------------------------------------------------------------------
 -- MIDBOT: закупка SF. Очередь продвигается после подтверждённой покупки;
 -- недоступные предметы скипаются, временные отказы отправляют предмет в конец очереди.
@@ -83,16 +84,17 @@ local function ConsiderCourierDelivery( bot )
 			-- Курьер может быть занят другим героем: шлём только из состояния
 			-- покоя/базы. T023: GetCourierState может быть ГЛОБАЛЬНОЙ функцией
 			-- (интеграция GPT, матч 9082079610), а не методом — пробуем оба.
-			local state;
-			if ( type( courier.GetCourierState ) == "function" ) then state = courier:GetCourierState();
-			elseif ( type( GetCourierState ) == "function" ) then state = GetCourierState( courier );
-			else CourierDiag( bot, "no_state_method" ); return end;
-			if ( state == COURIER_STATE_IDLE or state == COURIER_STATE_AT_BASE ) then
-				local ok = pcall( function()
-					bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
+            local stateOK,state;
+            if type(GetCourierState)=="function" then stateOK,state=pcall(GetCourierState,courier)
+            elseif type(courier.GetCourierState)=="function" then stateOK,state=pcall(courier.GetCourierState,courier) end;
+            if not stateOK or state==nil then CourierDiag(bot,"state_unavailable");return end;
+            if (COURIER_STATE_IDLE~=nil and state==COURIER_STATE_IDLE)
+                or (COURIER_STATE_AT_BASE~=nil and state==COURIER_STATE_AT_BASE) then
+				local ok, accepted = pcall( function()
+					return bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
 				end );
-				if ( ok ) then Report( "courier: take_and_transfer (stash not empty)" ); end
-				if ( not ok ) then CourierDiag( bot, "send_failed" ); end
+				if ok and accepted~=false then Report("courier: take_and_transfer submitted delivery_unverified");end
+				if not ok or accepted==false then CourierDiag(bot,"send_failed");end
 			else
 				CourierDiag( bot, "courier_busy state=" .. tostring( state ) );
 			end
@@ -159,7 +161,7 @@ end
 -- Теперь любая ошибка закупки печатается с текстом.
 function ItemPurchaseThink()
 	local bot = GetBot();
-	if ( bot == nil ) then return end;
+	if not Actor.Real(bot) then return end;
 	local ok, err = xpcall( function() ItemPurchaseThinkInner( bot ) end,
 		function( e ) return tostring( e ) end );
 	if ( not ok ) then Report( "ERROR " .. err ); end

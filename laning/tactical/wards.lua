@@ -45,9 +45,15 @@ local function lineClear(a,b,level,trees)
 end;
 function M.Plan(bot)
     if not U.CanUse(bot) or not (U.HP(bot) and U.HP(bot)>=C.ward_min_hp) then return nil,"ward_busy_or_health" end;
+    local mode=U.Call(bot,"GetActiveMode");
+    if mode==nil or (BOT_MODE_RETREAT~=nil and mode==BOT_MODE_RETREAT)
+        or (BOT_MODE_RUNE~=nil and mode==BOT_MODE_RUNE)
+        or (BOT_MODE_ATTACK~=nil and mode==BOT_MODE_ATTACK)
+        or (BOT_MODE_EVASIVE_MANEUVERS~=nil and mode==BOT_MODE_EVASIVE_MANEUVERS) then return nil,"ward_preserve_priority_mode" end;
     local action=U.Call(bot,"GetCurrentActionType");
     if action==nil or not ((BOT_ACTION_TYPE_IDLE~=nil and action==BOT_ACTION_TYPE_IDLE)
-        or (BOT_ACTION_TYPE_NONE~=nil and action==BOT_ACTION_TYPE_NONE)) then return nil,"preserve_native_action" end;
+        or (BOT_ACTION_TYPE_NONE~=nil and action==BOT_ACTION_TYPE_NONE)
+        or (BOT_ACTION_TYPE_MOVE_TO~=nil and action==BOT_ACTION_TYPE_MOVE_TO)) then return nil,"preserve_native_action" end;
     local enemies=U.Call(bot,"GetNearbyHeroes",C.ward_enemy_radius,true,BOT_MODE_NONE);
     local towers=U.Call(bot,"GetNearbyTowers",1599,true);
     if type(enemies)~="table" or type(towers)~="table" then return nil,"ward_safety_unknown" end;

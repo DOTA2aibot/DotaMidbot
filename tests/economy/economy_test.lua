@@ -28,6 +28,8 @@ local function scenario( disabled )
         return cache[p];
     end;
     local bot = {}; s.bot = bot; s.env = env;
+    function bot:IsHero() return true end;function bot:IsIllusion() return false end;
+    function bot:GetUnitName() return "npc_dota_hero_nevermore" end;
     function bot:GetPlayerID() return 7 end;
     function bot:GetItemInSlot( slot ) return s.items[slot] end;
     function bot:GetMana() return s.mana end; function bot:GetMaxMana() return 300 end;
@@ -144,7 +146,8 @@ test( "actual purchase callback issues at most one buy and baseline queue contin
     eq( #s.calls, 1 ); eq( s.calls[1], "item_clarity" ); s.time = 101; s.env.ItemPurchaseThink(); eq( s.calls[2], "item_tango" );
 end );
 test( "actual purchase callback preserves baseline when module fails", function()
-    local s = scenario(); s.env.require = function() error( "helper missing" ) end;
+    local s = scenario();local original=s.env.require;
+    s.env.require=function(path) if path:find("/laning/economy/mana",1,true) then error("helper missing") end;return original(path) end;
     s:load( "item_purchase_nevermore.lua" ); s.env.ItemPurchaseThink(); eq( s.calls[1], "item_tango" );
 end );
 test( "idle own courier fetches stash items before further purchases", function()
@@ -161,7 +164,7 @@ test( "courier without state API is reported, not silently skipped", function()
     s.items[9] = s:item( "item_wraith_band", 0 );
     s.couriers = { { GetPlayerID = function() return 7 end, GetItemInSlot = function() return nil end } };
     s:load( "item_purchase_nevermore.lua" ); s.env.ItemPurchaseThink();
-    local log = table.concat( s.logs, "\n" ); assert( log:find( "courier_skip reason=no_state_method", 1, true ) );
+    local log = table.concat( s.logs, "\n" ); assert( log:find( "courier_skip reason=state_unavailable", 1, true ) );
 end );
 test( "safe rune window outranks laning and never moves directly", function()
     local s = scenario(); local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );

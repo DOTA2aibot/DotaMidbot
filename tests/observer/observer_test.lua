@@ -40,6 +40,12 @@ local function scenario()
     end;
     s.unit = unit;
     local bot = unit( "npc_dota_hero_nevermore", 0, 1000 ); s.bot = bot;
+    function bot:IsHero() return true end; function bot:IsIllusion() return false end;
+    function bot:IsMuted() return false end;function bot:NumQueuedActions() return 0 end;
+    function bot:TimeSinceDamagedByAnyHero() return 100 end;
+    function bot:GetIncomingTrackingProjectiles() return {} end;
+    function bot:GetCurrentActiveAbility() return nil end;
+    function bot:FindItemSlot(name) for i=0,14 do if s.items[i] and s.items[i]:GetName()==name then return i end end;return -1 end;
     function bot:GetHealth() return s.hp end; function bot:GetMaxHealth() return 1000 end;
     function bot:GetMana() return s.mana end; function bot:GetMaxMana() return 300 end;
     function bot:GetTeam() return 2 end; function bot:GetLevel() return 4 end;
@@ -268,3 +274,5 @@ test( "dispenser current-mode result is observed without assuming its toggle map
 end );
 OBSERVER_TEST_COUNT = count;
 print( "OBSERVER PASSED " .. count );
+
+return scenario;

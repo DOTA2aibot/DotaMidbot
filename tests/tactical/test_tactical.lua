@@ -226,8 +226,8 @@ end);
 test("existing observer blocks a duplicate placement",function()
     local s=SCENARIO();s:item("item_ward_observer",0);local w=s.unit("npc_dota_observer_wards",2,0,350);s.wards={w};eq(s:mod("wards").Plan(s.bot),nil);
 end);
-test("ward planner preserves native movement and attack",function()
-    for _,action in ipairs({1,3}) do local s=SCENARIO();s:item("item_ward_observer",0);s.action=action;eq(s:mod("wards").Plan(s.bot),nil);eq(#s.orders,0) end;
+test("ward planner preserves native attacks and unknown actions",function()
+    for _,action in ipairs({3,99}) do local s=SCENARIO();s:item("item_ward_observer",0);s.action=action;eq(s:mod("wards").Plan(s.bot),nil);eq(#s.orders,0) end;
 end);
 test("basic bottle and wand support is retained in active tactical controller",function()
     local s=SCENARIO();s.mana=40;s:item("item_bottle",0,{behavior=8,charges=3});eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_bottle");

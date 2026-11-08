@@ -1,5 +1,11 @@
 # STATUS
 
+## Кандидат общей сборки — 2026-11-08
+
+T025 / [Issue50](https://github.com/DOTA2aibot/DotaMidbot/issues/50), owner **Artem (GPT)**, reviewer **Олег (Kimi)**. Подготовлен кандидат v0.3.6-github поверх main0c3bf83 (после PR51): явное tactical-подключение, локальные integration guards и воспроизводимый all_test. [Инструкция и проверки](docs/INTEGRATION_T025.md). Воспроизводятся51 Lua установленной тестовой сборки4850e41a29. Это не подтверждение merge, независимого review, игрового качества или принятия ADR. Задачи и дальнейшие handoff — в канонической Issue50; установка и новый матч здесь не выполнялись.
+
+## Исторический начальный аудит
+
 Дата аудита: **2026-11-07**, Europe/Vienna. Исходный репозиторий: [DOTA2aibot/DotaMidbot](https://github.com/DOTA2aibot/DotaMidbot), commit `dad9cb1c301251f5f8abf1a63e827e9317330bda`.
 
 | Поле | Состояние |
