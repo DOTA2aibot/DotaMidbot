@@ -70,6 +70,48 @@ class Packages(unittest.TestCase):
         info = package.verify(self.bundle())
         self.assertTrue(info['observer_enabled']); self.assertFalse(info['wards_enabled'])
 
+    def test_economy_has_only_rune_override_and_keeps_native_lane(self):
+        path = self.bundle('valve_lane_economy')
+        info = package.verify(path)
+        self.assertTrue(info['economy_enabled'])
+        self.assertFalse(info['wards_enabled'])
+        self.assertFalse(info['runtime_enabled'])
+        self.assertEqual(info['controller'], 'valve_native_with_midbot_rune')
+        roots = {n for n in info['files_sha256'] if '/' not in n}
+        self.assertEqual(roots, set(package.ROOT_LUA) | {package.RUNE_ENTRY})
+        with zipfile.ZipFile(path) as z:
+            self.assertEqual(z.read('bots/' + package.RUNE_ENTRY),
+                             (ROOT / 'profiles/lane_economy' / package.RUNE_ENTRY).read_bytes())
+
+    def test_ordinary_play_and_wards_do_not_enable_economy(self):
+        for profile in ('valve_play', 'valve_wards', 'lane_probe'):
+            info = package.verify(self.bundle(profile))
+            self.assertFalse(info['economy_enabled'])
+            self.assertNotIn(package.RUNE_ENTRY, info['files_sha256'])
+
+    def test_forged_economy_flag_is_rejected(self):
+        path = self.bundle()
+        def change(content):
+            info = json.loads(content['MANIFEST.json'])
+            info['economy_enabled'] = True
+            content['MANIFEST.json'] = json.dumps(info).encode()
+        self.rewrite(path, change)
+        with self.assertRaisesRegex(ValueError, 'Economy profile mismatch'):
+            package.verify(path)
+
+    def test_previous_observer_bundle_format_remains_usable_for_rollback(self):
+        path = self.bundle()
+        def legacy(content):
+            info = json.loads(content['MANIFEST.json'])
+            info['version'] = 'v0.3.3'
+            del info['economy_enabled']
+            key = 'bots/laning/profile.lua'
+            content[key] = content[key].replace(b'economy_enabled = false, ', b'')
+            info['files_sha256']['laning/profile.lua'] = package.sha(content[key])
+            content['MANIFEST.json'] = json.dumps(info).encode()
+        self.rewrite(path, legacy)
+        self.assertEqual(package.verify(path)['version'], 'v0.3.3')
+
     def test_install_replaces_stale_probe_and_preserves_backup(self):
         game = self.fake_game()
         old = game / 'scripts/vscripts/bots'

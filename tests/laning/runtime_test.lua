@@ -645,7 +645,7 @@ end );
 profiletest( "actual merged PR32 ability callback stays autonomous in play", function()
     local s = scenario( "lane_probe" ); loadCandidate( s, false, false, true );
     s.profile.runtime_enabled = false; s.env.AbilityUsageThink();
-    eq( s.autonomous, 1 ); eq( s.level_reads, 1 );
+    eq( s.autonomous, 1 ); eq( s.level_reads, 2 ); -- observer diagnostics + прежняя LevelUpThink
     local log = table.concat( s.logs, "\n" ); assert( not log:find( "[MIDBOT ability ERROR]", 1, true ) );
 end );
 profiletest( "truthy nonboolean config cannot enable the controller", function()
