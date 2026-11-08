@@ -1,0 +1,2 @@
+# Keep Lua source and pinned audit fixtures canonical in Windows checkouts.
+*.lua text eol=lf

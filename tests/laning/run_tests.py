@@ -7,12 +7,17 @@ root = Path(__file__).resolve().parents[2]
 os.chdir(root)
 lua = LuaRuntime(unpack_returned_tuples=True)
 print('Runtime:', lua.eval('_VERSION'), flush=True)
-audit_source = root / 'tests/laning/audit_sources/t016_pr23_b0773c2.lua'
-data = audit_source.read_bytes()
-assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == '37a491daa059b083c577b723b704a9c7ed6cbed1'
-data = (root / 'tests/laning/audit_sources/t016_merged_f4bf3aa.lua').read_bytes()
-assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == 'e1f605d27676528f25da72353d2d1f57babeec01'
-for name in ['test_policy.lua', 'test_adapter.lua', 'advanced_test.lua', 'creeps_xp_tower_test.lua', 'runtime_test.lua']:
+def verify_pinned_lua(relative_path, expected):
+    # Git's canonical text uses LF; an existing Windows checkout may use CRLF.
+    # Normalize only that pair. BOMs, whitespace and real source edits still fail.
+    data = (root / relative_path).read_bytes().replace(b'\r\n', b'\n')
+    actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+    assert actual == expected, f'Pinned Lua fixture changed: {relative_path}: {actual} != {expected}'
+
+
+verify_pinned_lua('tests/laning/audit_sources/t016_pr23_b0773c2.lua', '37a491daa059b083c577b723b704a9c7ed6cbed1')
+verify_pinned_lua('tests/laning/audit_sources/t016_merged_f4bf3aa.lua', 'e1f605d27676528f25da72353d2d1f57babeec01')
+for name in ['test_policy.lua', 'test_adapter.lua', 'test_selection.lua', 'advanced_test.lua', 'creeps_xp_tower_test.lua', 'runtime_test.lua']:
     p = root / 'tests/laning' / name
     lua.execute(p.read_text(encoding='utf-8'))
 # Parse the nested plan/snapshot record, including stable numeric option IDs encoded as object keys.
