@@ -35,8 +35,10 @@ lease конкретного плана жив (TTL) и подтверждён A
 | `ConsiderRazeOnHero( bot )` → desire, loc, ability | скоринг каста по герою (+крипы в зоне) |
 | `ConsiderRazeOnCreeps( bot )` → desire, loc, ability | дальний крип / вышка / добивание / пачка |
 | `ConsiderRequiem( bot )` → desire, target | добивание / отпорка ультой |
-| `CastRaze( bot, ability, loc )` | no-target каст с подтверждением разворота: если не `IsFacingLocation(loc, 20°)` — только `Action_MoveToLocation(loc)` (доворот), каст следующим тиком; иначе `Action_UseAbility` |
-| `GetRazeImpactPoint( bot, target, i )` → vector | геометрия: центр удара i-го рейза (200/450/700, радиус 250) |
+| `CastRaze( bot, ability, loc )` | no-target каст с проверкой ФАКТИЧЕСКОГО центра удара: каст только если `Dist2D(loc, центр по текущему GetFacing()) <= 250-40`; иначе доворот коротким шагом 48 ед. через `Action_MoveDirectly` (throttle 0.15с, guards: RETREAT / вышка 750 / IsLocationPassable). Допуск 20° и движение до цели УБРАНЫ по ревью GPT |
+| `GetRazeIndexOf( ability )` → 1..3\|nil | индекс рейза по хендлу способности (для геометрии) |
+| `GetCurrentRazeImpact( bot, i )` → vector | фактический центр удара i-го рейза при текущем направлении взгляда |
+| `GetRazeImpactPoint( bot, target, i )` → vector | геометрия: центр удара i-го рейза (200/450/700, радиус 250) при взгляде на target |
 | `EffectiveRazeDamage( rawDamage, unit )` → number | урон с магрезистами (герои ×0.75, siege ×0.20) |
 | `GetSoulsCount( bot )` → number\|nil | души Necromastery (стаки модификатора) |
 | `GetRazeDebuffStacks( enemy )` → stacks\|nil, name | стаки дебаффа рейзов на враге (амплифай) |
@@ -44,6 +46,11 @@ lease конкретного плана жив (TTL) и подтверждён A
 
 Backend НЕ должен вызывать `Action_UseAbilityOnLocation` для рейзов напрямую — только
 через `CastRaze` (рейзы no-target, кастуются по направлению взгляда).
+
+Диагностика ошибок: `AbilityUsageThink` обёрнут в `xpcall`; traceback получается через
+защищённый вызов (`pcall` + проверка `debug.traceback`), поэтому исходный текст ошибки
+сохраняется всегда — падение самого обработчика («error in error handling») исключено.
+Ошибки печатаются как `[MIDBOT ability ERROR] <текст> | <traceback>`.
 
 ## Открытые вопросы к игровой проверке (п.3 плана)
 

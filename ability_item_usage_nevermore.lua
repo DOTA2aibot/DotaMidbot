@@ -161,7 +161,21 @@ function AbilityUsageThink()
 	-- error handling» без указания источника. Теперь наши ошибки печатаются
 	-- с текстом и traceback — источник будет виден сразу.
 	local ok, err = xpcall( function() AbilityUsageThinkInner( npcBot ) end,
-		function( e ) return tostring( e ) .. " | " .. tostring( debug.traceback() ) end );
+		function( e )
+			-- Защита обработчика (ревью GPT): прямой debug.traceback() может
+			-- быть недоступен в VM — тогда диагностика сама падает с «error in
+			-- error handling» и стирает первоначальную ошибку. Исходный текст
+			-- сохраняем всегда, traceback получаем через защищённый вызов.
+			local msg = tostring( e );
+			local okTb, tb = pcall( function()
+				if ( debug ~= nil and type( debug.traceback ) == "function" )
+				then
+					return debug.traceback();
+				end
+				return "traceback unavailable";
+			end );
+			return msg .. " | " .. ( okTb and tostring( tb ) or "traceback call failed" );
+		end );
 	if ( not ok ) then print( "[MIDBOT ability ERROR] " .. tostring( err ) ); end
 
 end
