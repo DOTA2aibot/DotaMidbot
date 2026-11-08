@@ -826,16 +826,18 @@ function ConsiderRazeOnHero( npcBot )
 	if ( bestEnemyHpPct <= 0.40 and effManaPct >= 0.25 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
 
 	-- T024: ДОМИНАЦИЯ (гайд Олега 08.11). Если мы на 2+ уровня выше врага ИЛИ
-	-- два рейза снимут ему половину HP — продолжаем агрессию, не ждём 40% HP.
-	-- Агрессия только при ресурсах: эффективная мана (мана+ботл+стики) на 2 рейза
-	-- и своё HP >= 40% — иначе это самоубийство, а не доминация.
+	-- два рейза ОСТАВЯТ ему меньше половины HP (добивать ударами) — продолжаем
+	-- агрессию, не ждём 40% HP. Не обязательно снимать 50% урона: достаточно
+	-- довести до «меньше половины». Агрессия только при ресурсах: эффективная
+	-- мана (мана+ботл+стики) на 2 рейза и своё HP >= 40%.
 	if ( bestEnemy ~= nil )
 	then
 		local enemyLvl = SafeUnitCall( bestEnemy, "GetLevel" );
 		local lvlDelta = ( type( enemyLvl ) == "number" ) and ( npcBot:GetLevel() - enemyLvl ) or 0;
 		local burst = EffectiveRazeDamage( bestRazeDamage, bestEnemy ) * 2;
+		local leftAfter = bestEnemy:GetHealth() - burst;
 		local hpPct = npcBot:GetHealth() / npcBot:GetMaxHealth();
-		if ( ( lvlDelta >= 2 or burst >= bestEnemy:GetHealth() * 0.5 )
+		if ( ( lvlDelta >= 2 or leftAfter <= bestEnemy:GetMaxHealth() * 0.5 )
 			and effMana >= RAZE_MANA_COST * 2 and hpPct >= 0.40 )
 		then
 			return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze;
