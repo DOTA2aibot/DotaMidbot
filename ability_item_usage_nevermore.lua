@@ -360,6 +360,17 @@ function Dist2D( vA, vB )
 	return math.sqrt( dx * dx + dy * dy );
 end
 
+-- Безопасный вызов метода юнита. Лог матча 9080972160 (08.11): IsMoving
+-- отсутствует в этом Bot API для чужих героев (nil) — прямой вызов роняет
+-- весь Think. Метод проверяем перед вызовом, ошибку глушим в nil.
+function SafeUnitCall( npcUnit, sMethod )
+	local fn = npcUnit[sMethod];
+	if ( type( fn ) ~= "function" ) then return nil end;
+	local ok, res = pcall( fn, npcUnit );
+	if ( not ok ) then return nil end;
+	return res;
+end
+
 -- Итоговый урон рейза по конкретной цели (фикс аудита GPT: сырой
 -- GetAbilityDamage — это урон ДО сопротивлений). У героев базовое маг.
 -- сопротивление 25%, у катапульт ~80%, у обычных крипов 0.
@@ -454,11 +465,15 @@ function ConsiderRazeOnHero( npcBot )
 	do
 		if ( npcEnemy:CanBeSeen() and not npcEnemy:IsMagicImmune() and not npcEnemy:IsInvulnerable() )
 		then
-			-- Упреждение: куда цель доедет за время каста
+			-- Упреждение: куда цель доедет за время каста. Методы движения
+			-- могут отсутствовать в Bot API (IsMoving — точно, см. SafeUnitCall),
+			-- поэтому просто пробуем взять скорость: стоячая цель даст ~0,
+			-- отсутствие метода — статичное прицеливание без падения.
 			local vLoc = npcEnemy:GetLocation();
-			if ( npcEnemy:IsMoving() )
+			local vVel = SafeUnitCall( npcEnemy, "GetVelocity" );
+			if ( vVel ~= nil )
 			then
-				vLoc = vLoc + npcEnemy:GetVelocity() * RAZE_CAST_POINT;
+				vLoc = vLoc + vVel * RAZE_CAST_POINT;
 			end
 
 			for i = 1, 3
@@ -716,6 +731,10 @@ function DebugPrintModifiers( npcBot )
 	do
 		if ( npcEnemy:CanBeSeen() )
 		then
+			-- Доступность методов движения в этом окружении (матч 9080972160:
+			-- IsMoving был nil у чужого героя) — печатаем факт, а не гадаем
+			print( "[MIDBOT diag] enemy API: IsMoving=" .. type( npcEnemy.IsMoving )
+				.. " GetVelocity=" .. type( npcEnemy.GetVelocity ) );
 			for i = 0, ModifierCountOf( npcEnemy ) - 1
 			do
 				print( "[MIDBOT diag] enemy: " .. npcEnemy:GetModifierName( i )
