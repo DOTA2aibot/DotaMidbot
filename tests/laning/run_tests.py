@@ -43,3 +43,5 @@ assert event['value'] is None
 print('TRACE JSON PASSED 2 cases')
 subprocess.run([sys.executable, '-X', 'utf8', str(root / 'tests/laning/test_packages.py')],
                cwd=root, check=True)
+subprocess.run([sys.executable, '-X', 'utf8', str(root / 'tests/observer/run_tests.py')],
+               cwd=root, check=True)
