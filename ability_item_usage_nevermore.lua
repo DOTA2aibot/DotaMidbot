@@ -121,6 +121,14 @@ function InitAbilities( npcBot )
 	abilityRaze[3] = npcBot:GetAbilityByName( "nevermore_shadowraze3" );
 	abilityRequiem = npcBot:GetAbilityByName( "nevermore_requiem" );
 	abilityFeast = npcBot:GetAbilityByName( "nevermore_feast_of_souls" ); -- 7.4x, активка на D
+	if ( abilityFeast == nil )
+	then
+		-- Явная диагностика (ревью GPT): раньше nil глушился молча и фича
+		-- выглядела рабочей. Имя не подтверждено игрой: в дампе SteamTracking
+		-- активка значится как nevermore_frenzy — подтвердить по [MIDBOT diag]
+		-- печати имён способностей в слотах, потом поправить имя здесь.
+		print( "[MIDBOT diag] nevermore_feast_of_souls НЕ НАЙДЕНА в этом патче — активка на D отключена, проверить имя" );
+	end
 	bAbilitiesInit = true;
 end
 
@@ -217,15 +225,78 @@ end
 -- Поэтому: если ещё не смотрим на цель — только доворачиваемся этим тиком;
 -- каст уходит следующим тиком, когда IsFacingLocation подтвердит разворот.
 ----------------------------------------------------------------------------------------------------
-local RAZE_FACING_TOLERANCE_DEG = 20; -- допуск разворота перед кастом
+-- Ревью GPT (PR #27): допуск по углу НЕ гарантирует попадание — при ошибке 19°
+-- центр рейза уходит на ~360 ед. мимо (радиус 250). Поэтому перед кастом
+-- проверяем ФАКТИЧЕСКИЙ центр удара по текущему направлению взгляда героя,
+-- а не только угол. Доворот — коротким шагом (как Prepare в runtime GPT:
+-- face_distance=48), а не движением до самой цели.
+local RAZE_HIT_MARGIN = 40;     -- факт. центр должен быть внутри радиуса с запасом
+local RAZE_FACE_STEP = 48;      -- длина шага доворота (паттерн GPT face_distance)
+local RAZE_FACE_THROTTLE = 0.15;-- пауза между шагами доворота, сек
+local TOWER_DANGER_RANGE = 750; -- дальность вышки 700 + запас
+local nNextFaceTime = 0;
+
+function GetRazeIndexOf( razeAbility )
+	for i = 1, 3
+	do
+		if ( abilityRaze[i] == razeAbility ) then return i end;
+	end
+	return nil;
+end
+
+-- Фактический центр удара i-го рейза при ТЕКУЩЕМ направлении взгляда героя
+function GetCurrentRazeImpact( npcBot, i )
+	local vBot = npcBot:GetLocation();
+	local rad = math.rad( npcBot:GetFacing() );
+	return vBot + Vector( math.cos( rad ) * RAZE_DIST[i], math.sin( rad ) * RAZE_DIST[i], 0 );
+end
 
 function CastRaze( npcBot, razeAbility, vLoc )
-	if ( not npcBot:IsFacingLocation( vLoc, RAZE_FACING_TOLERANCE_DEG ) )
+	-- Прерывание подготовки: в отступлении не ходим к цели и не кастуем.
+	-- (Остальные прерывания — устаревшая цель/мана/доступность — ловятся сами:
+	-- Consider-функции пересчитываются каждый тик и просто перестанут звать CastRaze.)
+	if ( npcBot:GetActiveMode() == BOT_MODE_RETREAT ) then return end;
+
+	local i = GetRazeIndexOf( razeAbility );
+	if ( i ~= nil )
 	then
-		npcBot:Action_MoveToLocation( vLoc ); -- доворот; каст НЕ отправляем
+		local vImpact = GetCurrentRazeImpact( npcBot, i );
+		if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
+		then
+			npcBot:Action_UseAbility( razeAbility );
+			return;
+		end
+	elseif ( npcBot:IsFacingLocation( vLoc, 5 ) )
+	then
+		-- Запасной вариант (способность не из abilityRaze): жёсткий допуск 5°
+		npcBot:Action_UseAbility( razeAbility );
 		return;
 	end
-	npcBot:Action_UseAbility( razeAbility );
+
+	-- Доворот: КОРОТКИЙ шаг в сторону цели, а не движение до неё
+	local now = GameTime();
+	if ( now < nNextFaceTime ) then return end;
+
+	local vBot = npcBot:GetLocation();
+	local dx = vLoc.x - vBot.x;
+	local dy = vLoc.y - vBot.y;
+	local len = math.sqrt( dx * dx + dy * dy );
+	if ( len < 1 ) then return end;
+
+	local vStep = vBot + Vector( dx / len * RAZE_FACE_STEP, dy / len * RAZE_FACE_STEP, 0 );
+
+	-- Шаг не должен заводить нас под вражескую вышку
+	local tableTowers = npcBot:GetNearbyTowers( 900, true );
+	for _, npcTower in pairs( tableTowers )
+	do
+		if ( GetUnitToLocationDistance( npcTower, vStep ) <= TOWER_DANGER_RANGE ) then return end;
+	end
+
+	if ( IsLocationPassable( vStep ) )
+	then
+		npcBot:Action_MoveDirectly( vStep ); -- прямой микрошаг, без построения пути
+		nNextFaceTime = now + RAZE_FACE_THROTTLE;
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -311,7 +382,8 @@ end
 -- Прожимаем перед боем (враг рядом) или под жирную пачку крипов.
 -- Ману на рейзы бережём: ниже 50% маны не баффаемся.
 -- Имя способности в патче не подтверждено игрой: если GetAbilityByName вернул
--- nil — функция молча выключена (nil-safe), проверка через игровой probe.
+-- nil — функция выключена (nil-safe), но InitAbilities печатает явную
+-- диагностику; имя текущего патча подтверждается по печати слотов в diag.
 ----------------------------------------------------------------------------------------------------
 local FEAST_MANA_PCT = 0.50;      -- минимум маны для баффа
 local FEAST_ENEMY_RADIUS = 900;   -- враг в этом радиусе = скоро драка
