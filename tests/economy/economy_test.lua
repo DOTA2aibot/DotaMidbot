@@ -147,8 +147,8 @@ test( "actual purchase callback preserves baseline when module fails", function(
     local s = scenario(); s.env.require = function() error( "helper missing" ) end;
     s:load( "item_purchase_nevermore.lua" ); s.env.ItemPurchaseThink(); eq( s.calls[1], "item_tango" );
 end );
-test( "rune desire remains below normal lane desire and never moves directly", function()
-    local s = scenario(); local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .15 );
+test( "safe rune window outranks laning and never moves directly", function()
+    local s = scenario(); local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );
     s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( s.runes[1], 0 );
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
 end );
@@ -163,6 +163,21 @@ test( "distant, unseen, missing and impassable rune are never pursued", function
     local t = scenario(); t.visible = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.visible = true; t.status = 2; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.status = 1; t.passable = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
+end );
+test( "blind power rune window pursues unseen rune after six minutes", function()
+    local s = scenario(); s.time = 370; s.visible = false; s.status = 3; -- окно 6:05-6:45, руна не видна
+    local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );
+    s.time = 420; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- 7:00: окно уже закрыто (420 % 120 = 60)
+    s.time = 485; s.visible = false; assert( s.rune_policy.Decide( s.bot ) ); -- 8:05: следующий спавн
+end );
+test( "ongoing attack action does not block the rune plan", function()
+    local s = scenario(); s.action = 4; assert( s.rune_policy.Decide( s.bot ) );
+    s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+end );
+test( "only creeps close to the bot block the rune plan", function()
+    local s = scenario(); local far = s:unit(); far.GetLocation = function() return { x = 800, y = 0 } end;
+    s.creeps = { far }; assert( s.rune_policy.Decide( s.bot ) ); -- 800 > 450: дальняя пачка не мешает
+    s.creeps = { s:unit() }; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- 100 <= 450: вплотную блокирует
 end );
 test( "rune missing API and unhealthy or busy bot fail closed", function()
     local s = scenario(); s.env.GetRuneStatus = nil; eq( s.rune_policy.GetDesire( s.bot ), 0 );
@@ -181,7 +196,7 @@ test( "enemy or tower risk blocks rune order", function()
 end );
 test( "actual rune entry exports complete callbacks without C++ fallback", function()
     local s = scenario(); s:load( "profiles/lane_economy/mode_rune_nevermore.lua" );
-    eq( s.env.GetDesire(), .15 ); s.mode = 7; s.env.Think(); eq( #s.runes, 1 );
+    eq( s.env.GetDesire(), .85 ); s.mode = 7; s.env.Think(); eq( #s.runes, 1 );
 end );
 test( "rune entry helper failure disables rune instead of hanging a winning mode", function()
     local s = scenario(); s.env.require = function() error( "missing" ) end;

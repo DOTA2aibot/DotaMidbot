@@ -28,7 +28,7 @@ end );
 test( "far stale hero target does not permanently suppress a safe nearby rune", function()
     local s = scenario(); pickup( s ); s.target = s:unit();
     s.target.GetLocation = function() return { x = 3000, y = 0 } end;
-    eq( s.rune_policy.GetDesire( s.bot ), .15 );
+    eq( s.rune_policy.GetDesire( s.bot ), .85 );
 end );
 test( "salve skipping obeys the mana experiment time window", function()
     local s = scenario(); s.time = 601; eq( s.mana_policy.SkipFlask( s.bot ), false );
@@ -79,7 +79,7 @@ end );
 test( "unseen stale target is not read for hidden location", function()
     local s = scenario(); pickup( s ); s.target = s:unit(); s.target.CanBeSeen = function() return false end;
     s.target.GetLocation = function() error( "hidden location access" ) end;
-    eq( s.rune_policy.GetDesire( s.bot ), .15 );
+    eq( s.rune_policy.GetDesire( s.bot ), .85 );
 end );
 test( "unobserved nonnumeric purchase result remains unknown", function()
     for _, value in ipairs( { false, "unknown", {} } ) do
