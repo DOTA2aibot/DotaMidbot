@@ -23,6 +23,20 @@ do
 	if ok then ManaEconomy = mod end;
 end;
 
+----------------------------------------------------------------------------------------------------
+-- T021: доставка курьером. Матч 9081721395: после wraith band (~6:30) закупка
+-- молчала 13 минут — предметы покупались в стэш (инвентарь полон), а команду
+-- курьеру никто не отдавал. Паттерн из RMMAI util/ItemPurchaseSystem.lua:
+-- стэш непустой + курьер свободен -> COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS.
+-- T023: порядок local-объявлений критичен (Report -> CourierDiag ->
+-- ConsiderCourierDelivery) — в T022 CourierDiag стоял выше Report и звал
+-- глобальный (несуществующий) Report: матч 9082042282, 10× «error in error
+-- handling» и ноль строк диагностики.
+----------------------------------------------------------------------------------------------------
+local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
+local nextCourierCheck = -math.huge;
+local nextCourierDiag = -math.huge; -- раз в 15 сек печатаем, ПОЧЕМУ не отправили
+
 local function Report( message )
 	if ( message ~= lastMessage ) then
 		print( "[MIDBOT purchase] " .. message );
@@ -30,25 +44,18 @@ local function Report( message )
 	end
 end
 
-----------------------------------------------------------------------------------------------------
--- T021/T023: доставка курьером. Матч 9081721395: после wraith band (~6:30)
--- закупка молчала 13 минут — предметы покупались в стэш (инвентарь полон),
--- а команду курьеру никто не отдавал. Паттерн из RMMAI util/ItemPurchaseSystem.lua:
--- стэш непустой + курьер свободен -> COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS.
--- T023: CourierDiag определён ПОСЛЕ Report — в T022 он стоял выше и звал
--- глобальный (несуществующий) Report: матч 9082042282, 10× «error in error
--- handling» и ноль строк диагностики. Плюс диагностика молчаливых выходов.
-----------------------------------------------------------------------------------------------------
-local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
-local nextCourierCheck = -math.huge;
-local nextCourierDiag = -math.huge; -- раз в 15 сек печатаем, ПОЧЕМУ не отправили
-
+-- T022/T023: диагностика молчания доставки (матч 9081927137: манго лежал в
+-- стэше, слот 9, а строк "courier:" в логе ноль). Объявлен ПОСЛЕ Report и
+-- ДО ConsiderCourierDelivery — порядок local-объявлений критичен: в T022
+-- CourierDiag стоял выше Report и звал глобальный (несуществующий) Report,
+-- матч 9082042282: 10× «error in error handling» и ноль строк диагностики.
 local function CourierDiag( bot, reason )
 	local now = GameTime();
 	if ( now < nextCourierDiag ) then return end;
 	nextCourierDiag = now + 15.0;
 	Report( "courier_skip reason=" .. reason );
 end
+
 
 -- Слоты 9-14 у бота — стэш (0-5 инвентарь, 6-8 рюкзак). GetItemInSlot
 -- есть и в тестовой фикстуре, поэтому скан слотов безопаснее GetStashValue.
@@ -60,6 +67,8 @@ local function HasStashItems( bot )
 end
 
 local function ConsiderCourierDelivery( bot )
+	-- T023: CourierDiag определён ПОСЛЕ Report (внизу) — в T022 он стоял выше
+	-- и звал глобальный Report: матч 9082042282, 10× «error in error handling».
 	if ( COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS == nil ) then CourierDiag( bot, "no_action_constant" ); return end;
 	if ( type( GetNumCouriers ) ~= "function" or type( GetCourier ) ~= "function" ) then CourierDiag( bot, "no_courier_api" ); return end;
 	local now = GameTime();
@@ -92,6 +101,7 @@ local function ConsiderCourierDelivery( bot )
 	end
 	CourierDiag( bot, "no_own_courier total=" .. nCouriers );
 end
+
 
 local function CountSlots( unit, lastSlot, owned )
 	for slot = 0, lastSlot do

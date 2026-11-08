@@ -12,9 +12,49 @@
 ----------------------------------------------------------------------------------------------------
 
 -- Пороги, которые потом будем крутить (а ещё позже — обучать)
-local RAZE_MANA_PCT_HARASS = 0.45;   -- не харассить рейзами, если маны меньше 45%
+local RAZE_MANA_PCT_HARASS = 0.30;   -- T021: харасс-порог снижен 0.45 -> 0.30 (матч 9081721395: бот почти не харасил при возможности)
 local REQUIEM_ENEMY_HP_PCT = 0.40;   -- добивать ультой, если у врага меньше 40% HP
 local REQUIEM_SELF_HP_PCT  = 0.30;   -- или если нас почти убили
+
+-- T021: мана-дисциплина (репорт Олега: "100 маны = 1 койл, а ботл полный").
+local RAZE_MANA_COST = 75;           -- цена одного рейза, патч 7.4x
+local RAZE_MANA_RESERVE = 150;       -- запас на 2 рейза для героя/отпора, не сливать в крипов
+local BOTTLE_MANA_PER_CHARGE = 60;   -- мана с одного глотка ботла (консервативно)
+local WAND_MANA_PER_CHARGE = 15;     -- мана с одного заряда стиков (консервативно)
+
+-- Заряды предмета по имени: 0 если предмета нет. Ботл и ванд используют
+-- и рейзы, и ItemUsageThink.
+local function GetItemCharges( npcBot, itemName )
+	local nSlot = npcBot:FindItemSlot( itemName );
+	if ( nSlot < 0 ) then return 0; end
+	local item = npcBot:GetItemInSlot( nSlot );
+	if ( item == nil ) then return 0; end
+	return item:GetCurrentCharges();
+end
+function GetBottleCharges( npcBot ) return GetItemCharges( npcBot, "item_bottle" ); end
+function GetWandCharges( npcBot ) return GetItemCharges( npcBot, "item_magic_wand" ); end
+
+-- Эффективная мана = текущая + ботл + стики — то, что можно выпить прямо сейчас.
+function GetEffectiveMana( npcBot )
+	return npcBot:GetMana()
+		+ GetBottleCharges( npcBot ) * BOTTLE_MANA_PER_CHARGE
+		+ GetWandCharges( npcBot ) * WAND_MANA_PER_CHARGE;
+end
+
+-- T024: «шив волны» под силовые руны (гайд Олега 08.11): за ~20 сек до спавна
+-- (2:00/4:00/6:00/... — DotaTime % 120 >= 100) выбиваем вражескую пачку
+-- максимально быстро, чтобы враг отступил под вышку и руна досталась свободно.
+function IsRuneShoveWindow()
+	local now = nil;
+	if ( type( DotaTime ) == "function" ) then
+		local ok, t = pcall( DotaTime ); if ( ok ) then now = t end;
+	end
+	if ( type( now ) ~= "number" and type( GameTime ) == "function" ) then
+		local ok, t = pcall( GameTime ); if ( ok ) then now = t end;
+	end
+	if ( type( now ) ~= "number" or now < 100 ) then return false end;
+	return ( now % 120 ) >= 100;
+end
 
 -- Дистанции рейзов от точки каста (центр области)
 local RAZE_DIST = { 200, 450, 700 };
@@ -83,37 +123,96 @@ end
 -- сам решит, что доступно. Если способности из списка нет в текущем патче,
 -- GetAbilityByName вернёт nil и она просто пропустится.
 ----------------------------------------------------------------------------------------------------
+-- Порядок утверждён Олегом 08.11: сначала рейзы 4 и аура 4, Feast of Souls
+-- ПЕРВЫЙ раз на 10-м уровне (после 4+4+ульт). Список приоритетный:
+-- CanAbilityBeUpgraded сам отложит реквием до 6/12/18.
 local SKILL_ORDER = {
-	"nevermore_shadowraze1",      -- рейзы максимум в первую очередь
+	"nevermore_shadowraze1",      -- 1-4: рейзы максимум в первую очередь
 	"nevermore_shadowraze1",
 	"nevermore_shadowraze1",
 	"nevermore_shadowraze1",
+	"nevermore_dark_lord",        -- 5: аура
 	"nevermore_requiem",          -- 6
-	"nevermore_frenzy",   -- активка на D (7.4x)
-	"nevermore_frenzy",
+	"nevermore_dark_lord",        -- 7-9: аура до 4
+	"nevermore_dark_lord",
+	"nevermore_dark_lord",
+	"nevermore_frenzy",           -- 10: Feast of Souls, ПЕРВЫЙ поинт
 	"nevermore_requiem",          -- 12
+	"nevermore_frenzy",           -- 11,13,14
 	"nevermore_frenzy",
-	"nevermore_dark_lord",        -- аура
 	"nevermore_frenzy",
-	"nevermore_dark_lord",
 	"nevermore_requiem",          -- 18
-	"nevermore_dark_lord",
-	"nevermore_dark_lord",
 };
+
+-- T023: анти-спам прокачки. Матч 9082042282: учёт очков решил, что очко есть
+-- (недосчитал dark_lord — by-name вернул nil), движок же всё потратил сам,
+-- и попытка качнуть frenzy не удавалась — 15828 строк [MIDBOT levelup] за матч,
+-- ActionImmediate_LevelAbility каждый фрейм. Запоминаем попытку: если за 5 сек
+-- уровень способности НЕ изменился — очков реально нет, молчим.
+local lastLvName, lastLvLevel, lastLvTime = nil, -1, -math.huge;
+local function TryLevelAbility( npcBot, ability, sName )
+	local lvl = ability:GetLevel();
+	local now = GameTime();
+	if ( sName == lastLvName and lvl == lastLvLevel and now - lastLvTime < 5.0 )
+	then
+		return; -- прошлая попытка не сработала — не спамим
+	end
+	lastLvName, lastLvLevel, lastLvTime = sName, lvl, now;
+	npcBot:ActionImmediate_LevelAbility( sName );
+	print( "[MIDBOT levelup] try " .. sName .. " from_lvl=" .. lvl );
+end
 
 function LevelUpThink( npcBot )
 
-	if ( npcBot:GetAbilityPoints() < 1 ) then return end;
+	-- T022: свой учёт очков. Матч 9081927137 (патч с бесплатными талантами
+	-- 10/15/20/25): в логе НОЛЬ строк [MIDBOT levelup], при этом способности
+	-- прокачивались — это движок автокачает по СТАРОМУ дефолтному билду
+	-- (без frenzy), потому что GetAbilityPoints() у бота в этом окружении
+	-- всегда 0 (все observer-снапшоты: ability_points=0). Считаем сами:
+	-- очко за каждый уровень героя, таланты бесплатные (Олег, 08.11).
+	-- T023: считаем по СЛОТАМ, а не по именам — матч 9082042282 показал, что
+	-- GetAbilityByName("nevermore_dark_lord") возвращает nil, хотя в слоте 4
+	-- аура есть, и by-name учёт недосчитывал потраченные движком очки.
+	-- Исключения: рейзы 2/3 зеркалят первый (очков не тратят), Necromastery —
+	-- врождённая (качается сама), таланты special_bonus_unique_* бесплатные.
+	local nPoints = npcBot:GetAbilityPoints();
+	if ( nPoints < 1 )
+	then
+		-- fail-closed для моков/старого окружения: без GetLevel не считаем
+		if ( type( npcBot.GetLevel ) ~= "function" ) then return end;
+		if ( type( npcBot.GetAbilityInSlot ) ~= "function" ) then return end;
+		local nSpent = 0;
+		for nSlot = 0, 23
+		do
+			local ab = npcBot:GetAbilityInSlot( nSlot );
+			if ( ab ~= nil and type( ab.GetLevel ) == "function" and type( ab.GetName ) == "function" )
+			then
+				local name = ab:GetName();
+				if ( name ~= "nevermore_shadowraze2" and name ~= "nevermore_shadowraze3"
+					and name ~= "nevermore_necromastery"
+					and not name:find( "special_bonus_unique", 1, true ) )
+				then
+					nSpent = nSpent + ab:GetLevel();
+				end
+			end
+		end
+		if ( npcBot:GetLevel() <= nSpent ) then return end; -- очков нет
+		-- Движок мог уже автокачать что-то своё — nSpent это учитывает.
+	end
 
 	local seen = {};
 	for _, sName in ipairs( SKILL_ORDER )
 	do
 		seen[sName] = ( seen[sName] or 0 ) + 1;
 		local ability = npcBot:GetAbilityByName( sName );
-		if ( ability ~= nil and ability:CanAbilityBeUpgraded() and ability:GetLevel() < seen[sName] )
+		-- T022: fail-closed, если у объекта нет CanAbilityBeUpgraded (моки/старое
+		-- окружение) — иначе падение здесь абортирует весь AbilityUsageThink.
+		if ( ability ~= nil
+			and type( ability.CanAbilityBeUpgraded ) == "function"
+			and ability:CanAbilityBeUpgraded()
+			and ability:GetLevel() < seen[sName] )
 		then
-			npcBot:ActionImmediate_LevelAbility( sName );
-			print( "[MIDBOT levelup] " .. sName );
+			TryLevelAbility( npcBot, ability, sName );
 			return;
 		end
 	end
@@ -121,19 +220,36 @@ function LevelUpThink( npcBot )
 	-- Fallback (фикс аудита GPT): если всё из списка выкачано или недоступно,
 	-- тратим очко на первую доступную способность — включая таланты.
 	-- Раньше очки после 6-го уровня могли копиться непотраченными.
+	-- T022: fail-closed для моков/старого окружения без GetAbilityInSlot —
+	-- иначе падение здесь абортирует весь Think до ConsiderRequiem.
+	if ( type( npcBot.GetAbilityInSlot ) ~= "function" ) then return end;
 	for nSlot = 0, 23
 	do
 		local ability = npcBot:GetAbilityInSlot( nSlot );
 		if ( ability ~= nil
+			and type( ability.CanAbilityBeUpgraded ) == "function"
 			and ability:CanAbilityBeUpgraded()
 			and ability:GetLevel() < ability:GetMaxLevel() )
 		then
-			npcBot:ActionImmediate_LevelAbility( ability:GetName() );
-			print( "[MIDBOT levelup fallback] " .. ability:GetName() );
+			TryLevelAbility( npcBot, ability, ability:GetName() );
 			return;
 		end
 	end
 
+end
+
+----------------------------------------------------------------------------------------------------
+-- T023: AbilityLevelUpThink — ОТДЕЛЬНЫЙ колбэк движка для прокачки. Интеграционная
+-- сборка GPT (матч 9082079610, v0.3.5-all-test) показала: с этим колбэком движок
+-- отдаёт очки НАМ, а не автокачает по старому билду — frenzy/dark_lord прокачаны
+-- полностью по нашему SKILL_ORDER. Держим и вызов из AbilityUsageThink: если
+-- колбэк в каком-то окружении не вызывается, сработает наш учёт по слотам;
+-- backoff 5с в TryLevelAbility защищает от спама при гонке.
+----------------------------------------------------------------------------------------------------
+function AbilityLevelUpThink()
+	local npcBot = GetBot();
+	if ( npcBot == nil ) then return end;
+	LevelUpThink( npcBot );
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -251,6 +367,161 @@ function AbilityUsageThinkInner( npcBot )
 		return;
 	end
 	Observe( "AfterAbilities", npcBot ); -- отдельный opt-in ward profile; без перемещений
+
+end
+
+----------------------------------------------------------------------------------------------------
+-- T021: использование предметов. До этого ItemUsageThink в файле ОТСУТСТВОВАЛ —
+-- движок вызывал пустое место, и бот никогда не пил ботл и не жал ванд
+-- (матч 9081721395: 100 маны при полном ботле). Реализуем минимум мидера:
+-- ботл для маны/хп и ванд в трудную минуту.
+-- Ботл: реген слетается от урона героев, поэтому рядом с врагом пьём только
+-- по нужде (маны нет даже на один рейз) или под добивание.
+----------------------------------------------------------------------------------------------------
+function ItemUsageThink()
+
+	local npcBot = GetBot();
+	if ( npcBot == nil or not npcBot:IsAlive() ) then return end;
+
+	local ok, err = pcall( ItemUsageThinkInner, npcBot );
+	if ( not ok ) then print( "[MIDBOT item ERROR] " .. tostring( err ) ); end
+
+end
+
+function ItemUsageThinkInner( npcBot )
+
+	if ( npcBot:IsUsingAbility() or npcBot:IsChanneling() or npcBot:IsSilenced()
+		or npcBot:IsMuted() or npcBot:IsStunned() )
+	then
+		return;
+	end
+
+	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
+	local hpPct = npcBot:GetHealth() / npcBot:GetMaxHealth();
+	local tableEnemyHeroes = npcBot:GetNearbyHeroes( 700, true, BOT_MODE_NONE );
+	local bEnemyClose = ( tableEnemyHeroes ~= nil and #tableEnemyHeroes > 0 );
+
+	-- Ботл
+	local nBottleSlot = npcBot:FindItemSlot( "item_bottle" );
+	if ( nBottleSlot >= 0 )
+	then
+		local itemBottle = npcBot:GetItemInSlot( nBottleSlot );
+		if ( itemBottle ~= nil
+			and itemBottle:IsFullyCastable()
+			and itemBottle:GetCurrentCharges() > 0
+			and not npcBot:HasModifier( "modifier_bottle_regeneration" ) )
+		then
+			local bDrink = false;
+			if ( not bEnemyClose )
+			then
+				-- Спокойная обстановка: поддерживаем ресурс
+				if ( manaPct < 0.45 or hpPct < 0.50 ) then bDrink = true; end
+			else
+				-- Враг рядом: пьём, только если маны нет даже на один рейз
+				-- (случай Олега) или врага добиваем и нужен ресурс на комбо
+				if ( npcBot:GetMana() < RAZE_MANA_COST ) then bDrink = true; end
+				if ( not bDrink and manaPct < 0.45 )
+				then
+					for _, npcEnemy in pairs( tableEnemyHeroes )
+					do
+						if ( npcEnemy:CanBeSeen()
+							and npcEnemy:GetHealth() / npcEnemy:GetMaxHealth() <= 0.40 )
+						then
+							bDrink = true;
+							break;
+						end
+					end
+				end
+			end
+			if ( bDrink )
+			then
+				Observe( "BeforeAction", npcBot, itemBottle );
+				npcBot:Action_UseAbilityOnEntity( itemBottle, npcBot );
+				Observe( "Action", npcBot, "item_use", itemBottle, nil, "t021_bottle_mana_or_hp" );
+				print( "[MIDBOT item] bottle sip mana=" .. npcBot:GetMana() .. " hp%=" .. hpPct );
+				return;
+			end
+		end
+	end
+
+	-- Манго (T022): экономика GPT его покупает, но использовать некому.
+	-- Экстренная мана перед кастом: враг рядом, маны нет на рейз, ботл пуст/занят.
+	-- Манго — consumable без цели, работает только из инвентаря (слоты 0-5,
+	-- из стэша не съесть — поэтому доставка курьером критична).
+	local nMangoSlot = npcBot:FindItemSlot( "item_enchanted_mango" );
+	if ( nMangoSlot >= 0 and nMangoSlot <= 5 )
+	then
+		local itemMango = npcBot:GetItemInSlot( nMangoSlot );
+		if ( itemMango ~= nil
+			and itemMango:IsFullyCastable()
+			and npcBot:GetMana() < RAZE_MANA_COST
+			and GetBottleCharges( npcBot ) == 0
+			and bEnemyClose )
+		then
+			Observe( "BeforeAction", npcBot, itemMango );
+			npcBot:Action_UseAbility( itemMango );
+			Observe( "Action", npcBot, "item_use", itemMango, nil, "t022_mango_emergency_mana" );
+			print( "[MIDBOT item] mango mana=" .. npcBot:GetMana() );
+			return;
+		end
+	end
+
+	-- Кларити (T023): матч 9082042282 — куплена и лежала мёртвым грузом.
+	-- Реген слетается от урона героев: только когда врагов нет в 900,
+	-- мана ниже половины и мы не под её эффектом. Только слоты 0-5.
+	local nClaritySlot = npcBot:FindItemSlot( "item_clarity" );
+	if ( nClaritySlot >= 0 and nClaritySlot <= 5 and manaPct < 0.50
+		and not npcBot:HasModifier( "modifier_clarity_potion" ) )
+	then
+		local itemClarity = npcBot:GetItemInSlot( nClaritySlot );
+		local tableEnemyWide = npcBot:GetNearbyHeroes( 900, true, BOT_MODE_NONE );
+		if ( itemClarity ~= nil and itemClarity:IsFullyCastable()
+			and ( tableEnemyWide == nil or #tableEnemyWide == 0 ) )
+		then
+			Observe( "BeforeAction", npcBot, itemClarity );
+			npcBot:Action_UseAbilityOnEntity( itemClarity, npcBot );
+			Observe( "Action", npcBot, "item_use", itemClarity, nil, "t023_clarity_calm_mana" );
+			print( "[MIDBOT item] clarity mana%=" .. manaPct );
+			return;
+		end
+	end
+
+	-- Фласка (T023): та же логика по здоровью — в спокойствии и не под её эффектом.
+	local nFlaskSlot = npcBot:FindItemSlot( "item_flask" );
+	if ( nFlaskSlot >= 0 and nFlaskSlot <= 5 and hpPct < 0.50
+		and not npcBot:HasModifier( "modifier_flask_healing" ) )
+	then
+		local itemFlask = npcBot:GetItemInSlot( nFlaskSlot );
+		local tableEnemyWide = npcBot:GetNearbyHeroes( 900, true, BOT_MODE_NONE );
+		if ( itemFlask ~= nil and itemFlask:IsFullyCastable()
+			and ( tableEnemyWide == nil or #tableEnemyWide == 0 ) )
+		then
+			Observe( "BeforeAction", npcBot, itemFlask );
+			npcBot:Action_UseAbilityOnEntity( itemFlask, npcBot );
+			Observe( "Action", npcBot, "item_use", itemFlask, nil, "t023_flask_calm_hp" );
+			print( "[MIDBOT item] flask hp%=" .. hpPct );
+			return;
+		end
+	end
+
+	-- Ванд/стик: отхил в трудную минуту
+	local sWandName = ( npcBot:FindItemSlot( "item_magic_wand" ) >= 0 ) and "item_magic_wand" or "item_magic_stick";
+	local nWandSlot = npcBot:FindItemSlot( sWandName );
+	if ( nWandSlot >= 0 )
+	then
+		local itemWand = npcBot:GetItemInSlot( nWandSlot );
+		if ( itemWand ~= nil
+			and itemWand:IsFullyCastable()
+			and itemWand:GetCurrentCharges() >= 8
+			and ( hpPct < 0.40 or ( hpPct < 0.60 and manaPct < 0.25 ) ) )
+		then
+			Observe( "BeforeAction", npcBot, itemWand );
+			npcBot:Action_UseAbilityOnEntity( itemWand, npcBot );
+			Observe( "Action", npcBot, "item_use", itemWand, nil, "t021_wand_emergency" );
+			print( "[MIDBOT item] wand hp%=" .. hpPct .. " mana%=" .. manaPct );
+			return;
+		end
+	end
 
 end
 
@@ -483,6 +754,9 @@ function ConsiderRazeOnHero( npcBot )
 	local bestLoc = nil;
 	local bestRaze = nil;
 	local bestKill = false;
+	local bestEnemyHpPct = 1.0; -- T021: HP цели лучшего кандидата, для усиленного харасса
+	local bestEnemy = nil;      -- T024: сама цель (доминация)
+	local bestRazeDamage = 0;   -- T024: урон лучшего рейза (доминация)
 
 	for _, npcEnemy in pairs( tableEnemyHeroes )
 	do
@@ -530,7 +804,10 @@ function ConsiderRazeOnHero( npcBot )
 							bestScore = score;
 							bestLoc = vLoc;
 							bestRaze = abilityRaze[i];
-							bestKill = ( npcEnemy:GetHealth() / npcEnemy:GetMaxHealth() ) <= 0.25;
+							bestEnemy = npcEnemy;
+							bestRazeDamage = nDamage;
+							bestEnemyHpPct = npcEnemy:GetHealth() / npcEnemy:GetMaxHealth();
+							bestKill = bestEnemyHpPct <= 0.25;
 						end
 					end
 				end
@@ -540,11 +817,95 @@ function ConsiderRazeOnHero( npcBot )
 
 	if ( bestRaze == nil ) then return BOT_ACTION_DESIRE_NONE, nil, nil end;
 
-	-- Добивание — всегда; харасс — только если маны хватает
+	-- Добивание — всегда; харасс — если маны хватает. T021: считаем ману С ботлом
+	-- (полный ботл = ещё ~3 рейза), иначе бот не харасил, имея полный ботл.
+	-- Враг ниже 40% HP = реальный шанс убить за 2-3 рейза: приоритет выше.
+	local effMana = GetEffectiveMana( npcBot );
+	local effManaPct = effMana / npcBot:GetMaxMana();
 	if ( bestKill and manaPct > 0.15 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
-	if ( manaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
+	if ( bestEnemyHpPct <= 0.40 and effManaPct >= 0.25 ) then return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze end;
+
+	-- T024: ДОМИНАЦИЯ (гайд Олега 08.11). Если мы на 2+ уровня выше врага ИЛИ
+	-- два рейза ОСТАВЯТ ему меньше половины HP (добивать ударами) — продолжаем
+	-- агрессию, не ждём 40% HP. Не обязательно снимать 50% урона: достаточно
+	-- довести до «меньше половины». Агрессия только при ресурсах: эффективная
+	-- мана (мана+ботл+стики) на 2 рейза и своё HP >= 40%.
+	if ( bestEnemy ~= nil )
+	then
+		local enemyLvl = SafeUnitCall( bestEnemy, "GetLevel" );
+		local lvlDelta = ( type( enemyLvl ) == "number" ) and ( npcBot:GetLevel() - enemyLvl ) or 0;
+		local burst = EffectiveRazeDamage( bestRazeDamage, bestEnemy ) * 2;
+		local leftAfter = bestEnemy:GetHealth() - burst;
+		local hpPct = npcBot:GetHealth() / npcBot:GetMaxHealth();
+		if ( ( lvlDelta >= 2 or leftAfter <= bestEnemy:GetMaxHealth() * 0.5 )
+			and effMana >= RAZE_MANA_COST * 2 and hpPct >= 0.40 )
+		then
+			return BOT_ACTION_DESIRE_HIGH, bestLoc, bestRaze;
+		end
+	end
+
+	if ( effManaPct >= RAZE_MANA_PCT_HARASS ) then return BOT_ACTION_DESIRE_MODERATE, bestLoc, bestRaze end;
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
+end
+
+----------------------------------------------------------------------------------------------------
+-- T023: не тратим рейз на крипа, которого ДОБЬЮТ свои до удара (каст 0.55с).
+-- Репорт Олега 08.11: «крип уже мёртв, а он спустя 0.5 сек жмёт койл в труп».
+-- Усиление 08.11 (вечер): считаем не только снаряды в полёте, но и союзных
+-- крипов/вышки, которые УЖЕ бьют цель — за каст-поинт долетит минимум по удару.
+-- Нет API/ошибка — не пропускаем (fail-open, как раньше).
+----------------------------------------------------------------------------------------------------
+local CREEP_PROJECTILE_DAMAGE = 22;
+local TOWER_HIT_DAMAGE = 110;
+local function SafeAttackTarget( unit )
+	local ok, target = pcall( function() return unit:GetAttackTarget() end );
+	if ( ok ) then return target end;
+	return nil;
+end
+local function WillDieBeforeRaze( npcBot, npcCreep )
+	-- Труп/умирающий — не кастуем вообще
+	if ( npcCreep:GetHealth() <= 0
+		or ( type( npcCreep.IsAlive ) == "function" and not npcCreep:IsAlive() ) )
+	then
+		return true;
+	end
+	local nHp = npcCreep:GetHealth();
+	local incoming = 0;
+	-- 1) летящие снаряды союзников
+	local ok, projectiles = pcall( function() return npcCreep:GetIncomingTrackingProjectiles() end );
+	if ( ok and type( projectiles ) == "table" )
+	then
+		for _, proj in pairs( projectiles ) do
+			if ( proj.is_attack ) then incoming = incoming + CREEP_PROJECTILE_DAMAGE end;
+		end
+	end
+	if ( incoming >= nHp ) then return true end;
+	-- 2) союзные крипы, которые уже атакуют эту цель
+	local okA, allies = pcall( function() return npcBot:GetNearbyLaneCreeps( 1200, false ) end );
+	if ( okA and type( allies ) == "table" )
+	then
+		for _, ally in pairs( allies ) do
+			if ( SafeAttackTarget( ally ) == npcCreep )
+			then
+				incoming = incoming + CREEP_PROJECTILE_DAMAGE;
+				if ( incoming >= nHp ) then return true end;
+			end
+		end
+	end
+	-- 3) союзная вышка, которая бьёт цель
+	local okT, towers = pcall( function() return npcBot:GetNearbyTowers( 1200, false ) end );
+	if ( okT and type( towers ) == "table" )
+	then
+		for _, npcTower in pairs( towers ) do
+			if ( SafeAttackTarget( npcTower ) == npcCreep )
+			then
+				incoming = incoming + TOWER_HIT_DAMAGE;
+				if ( incoming >= nHp ) then return true end;
+			end
+		end
+	end
+	return false;
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -571,9 +932,25 @@ function ConsiderRazeOnCreeps( npcBot )
 	end
 
 	local manaPct = npcBot:GetMana() / npcBot:GetMaxMana();
-	if ( manaPct < 0.25 ) -- жёсткий минимум: под вышкой добиваем и на малой мане
+	-- T021: мана-дисциплина. Раньше: плоский порог 25% маны — бот спокойно
+	-- сливал последние 75 маны в крипов и оставался пустым для героя/руны
+	-- (репорт Олега: "100 маны = 1 койл, а ботл полный"). Теперь держим резерв
+	-- RAZE_MANA_RESERVE, КРОМЕ случаев: (а) есть заряды ботла — выпьем и
+	-- докастуем; (б) добивание под своей вышкой — там тратимся до дна;
+	-- (в) T024 шив-окно под руну — волну выбиваем даже в минус по резерву,
+	-- чтобы освободить дорогу на руну (гайд Олега 08.11).
+	local bShove = IsRuneShoveWindow();
+	local nMana = npcBot:GetMana();
+	if ( nMana < RAZE_MANA_COST + RAZE_MANA_RESERVE and GetBottleCharges( npcBot ) == 0
+		and not bShove )
 	then
-		return BOT_ACTION_DESIRE_NONE, nil, nil;
+		-- tableAlliedTowers ниже ещё не собран — спрашиваем вышки напрямую
+		local tableOwn = npcBot:GetNearbyTowers( 900, false );
+		local bUnderOwnTower = ( tableOwn ~= nil and #tableOwn > 0 );
+		if ( not bUnderOwnTower or nMana < RAZE_MANA_COST )
+		then
+			return BOT_ACTION_DESIRE_NONE, nil, nil;
+		end
 	end
 
 	local nSearchRadius = RAZE_DIST[3] + RAZE_RADIUS;
@@ -601,7 +978,8 @@ function ConsiderRazeOnCreeps( npcBot )
 				-- Крип реально попадает в зону удара этого рейза
 				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
 				then
-					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep ) )
+					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep )
+						and not WillDieBeforeRaze( npcBot, npcCreep ) ) -- T023: свои уже добивают
 					then
 						-- П.3: дальний крип (маг) — приоритет. Катапульты отдельно:
 						-- у них ~80% маг. сопротивления, рейз их почти не добивает
@@ -636,7 +1014,7 @@ function ConsiderRazeOnCreeps( npcBot )
 	-- Пачка (фикс аудита GPT): фиксируем ОДИН центр — целимся в конкретного
 	-- крипа — и считаем, сколько крипов реально попадёт в ЭТУ область.
 	-- Раньше счётчик суммировал крипов из разных направлений.
-	if ( manaPct >= RAZE_MANA_PCT_HARASS )
+	if ( manaPct >= RAZE_MANA_PCT_HARASS or bShove )
 	then
 		for i = 1, 3
 		do
@@ -663,7 +1041,9 @@ function ConsiderRazeOnCreeps( npcBot )
 		end
 	end
 
-	-- Выдаём по приоритету
+	-- Выдаём по приоритету. T024: в шив-окне добивание и пачка поднимаются
+	-- до MODERATE — задача выбить волну максимально быстро под руну.
+	local desireShove = bShove and BOT_ACTION_DESIRE_MODERATE or BOT_ACTION_DESIRE_LOW;
 	if ( rangedSecure ~= nil )
 	then
 		return BOT_ACTION_DESIRE_MODERATE, rangedSecure.loc, rangedSecure.raze;
@@ -672,13 +1052,13 @@ function ConsiderRazeOnCreeps( npcBot )
 	then
 		return BOT_ACTION_DESIRE_MODERATE, towerSecure.loc, towerSecure.raze;
 	end
-	if ( killSecure ~= nil and manaPct >= RAZE_MANA_PCT_HARASS )
+	if ( killSecure ~= nil and ( manaPct >= RAZE_MANA_PCT_HARASS or bShove ) )
 	then
-		return BOT_ACTION_DESIRE_LOW, killSecure.loc, killSecure.raze;
+		return desireShove, killSecure.loc, killSecure.raze;
 	end
 	if ( packBest ~= nil )
 	then
-		return BOT_ACTION_DESIRE_LOW, packBest.loc, packBest.raze;
+		return desireShove, packBest.loc, packBest.raze;
 	end
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;

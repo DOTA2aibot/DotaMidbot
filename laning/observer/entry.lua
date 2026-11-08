@@ -4,8 +4,15 @@ local C = require( GetScriptDirectory() .. "/laning/observer/config" );
 local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local Shadow = require( GetScriptDirectory() .. "/laning/hybrid/shadow" );
 local Wards = require( GetScriptDirectory() .. "/laning/hybrid/wards" );
+local KillChat;
+do
+    local ok, helper = pcall( require, GetScriptDirectory() .. "/laning/social/kill_chat" );
+    if ok then KillChat = helper end;
+end;
 local M = {};
 function M.Tick( bot )
+    -- Отдельный cosmetic dispatch; core Capture/Shadow остаются read-only.
+    if KillChat and Profile.runtime_enabled ~= true then pcall( KillChat.Tick, bot ) end;
     if Profile.observer_enabled ~= true then return end;
     local s = O.State( bot ); local now = A.Time();
     if not s then return end;
