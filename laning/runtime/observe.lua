@@ -120,6 +120,7 @@ function M.Collect( ctx, bot )
         last_hits = A.Call( bot, "GetLastHits" ), denies = A.Call( bot, "GetDenies" ),
         outcome_attribution = "not_attributed" };
     local mode = A.Call( bot, "GetActiveMode" );
+    h.active_mode = mode;
     s.danger = not h.alive or h.disabled or hp / maxHP < ctx.cfg.yield_hp_fraction or #missing > 0
         or ( BOT_MODE_RETREAT ~= nil and mode == BOT_MODE_RETREAT );
     for i = 1, 3 do

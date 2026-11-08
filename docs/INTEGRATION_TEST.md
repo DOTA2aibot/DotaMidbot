@@ -1,5 +1,7 @@
 # T007 runtime: что подключено и как провести первые игровые пробы
 
+> Обновление 2026-11-08: текущий кандидат использует `lane_probe`. Основной пошаговый протокол — [T007_STABILITY.md](T007_STABILITY.md). Hook уже принят через PR25/24; заново добавлять его по историческим примерам ниже не нужно. Старый observe-прогон подтвердил сбор наблюдений, но не исполнение. Ниже сохранена справка по исходным этапам и остальным режимам.
+
 Owner: **Artem (GPT)**. Reviewer / игровые пробы и файл способностей: **Олег (Kimi)**.
 Base: `65a7a20112b66d6f512c1092e45d39543ff7c5b8`, где PR21 и PR22 уже merged.
 
@@ -7,7 +9,7 @@ Base: `65a7a20112b66d6f512c1092e45d39543ff7c5b8`, где PR21 и PR22 уже mer
 
 Добавлен настоящий Bot API адаптер `laning/runtime/`: collector → planner → scheduler → Action API → наблюдаемое подтверждение/timeout. Это исполнение на игровых handles, не второй симулятор. Новое поведение подключено из GetDesire/Think/OnEnd в mode_laning_nevermore.lua. GetDesire собирает наблюдения и пишет лог даже при нулевом desire.
 
-**В Dota этот код ещё не запускался.** Default -- operation=observe: он читает данные/планирует/логирует, но не отдаёт приказов. Подключение ability hook в текущую main ещё не выполнено; файл Олега (Kimi) Artem (GPT) не изменяет. Нельзя объявлять интеграцию проверенной по наличию флага в config.
+**Новый исполняющий кандидат в Dota ещё не проверен.** Старый observe-прогон на c581976 подтвердил сбор наблюдений и периодическую связь. Hook уже принят; файл Олега (Kimi) Artem (GPT) не изменяет. Новый default `lane_probe` описан в T007_STABILITY; `observe` остаётся режимом без приказов. Нельзя объявлять исполнение проверенным по наличию флага в config.
 
 123 offline PASS = прежние 87 + 36 runtime scenarios. В том числе проверены оба пути через entry/bridge/backend: койл по крипу→тычка героя и тычка героя→койл до приземления снаряда. Включены совместимость с pinned PR23, read-only HasActivePlan и безопасная передача непрерывной AA/AttackMove после наблюдаемого release. Использовались mock handles/синтетические числа; эти PASS не подтверждают реальные API/события установленного клиента.
 
@@ -24,7 +26,7 @@ Base: `65a7a20112b66d6f512c1092e45d39543ff7c5b8`, где PR21 и PR22 уже mer
 | advanced/bridge.lua, scheduler.lua | Acquire/release, подготовка поворота, сохранение управления во время собственного cast, ожидание настоящего evidence и cleanup | Artem (GPT) |
 | ability_item_usage_nevermore.lua | Существующие способности/прокачка, integration hook | Олег (Kimi), отдельная правка |
 
-## Обязательный hook в файле Олега (Kimi)
+## История интеграции hook (уже установлен через PR25)
 
 Проверен новый PR23 head `b0773c2e58d53ff515c4f5a8579d202324f353cb`: он уже добавляет JointExecutorOwnsBot через Bridge.IsReady. Это **ещё не нужный handshake**: IsReady означает регистрацию backend, не ACK и не владение конкретным планом. Оставить только эту проверку -- значит не запустить новый runtime; при насильственной регистрации она может постоянно отключить автономные способности. Artem (GPT) добавил запрошенный HasActivePlan как read-only status, но он тоже не заменяет AbilityGate.
 
@@ -127,3 +129,4 @@ python -X utf8 tests/laning/run_tests.py
 Олег (Kimi) фиксирует build, общий SHA с hook, run_id/режим, точный сценарий, последовательность runtime statuses и фактический результат. Artem (GPT) разбирает wiring/planner, Олег (Kimi) -- ability API/профили. Только после коротких probes -- общая серия T009.
 
 API-поверхность сверена с [декларациями Bot API](https://docs.moddota.com/lua_bots/); наличие метода не доказывает семантику событий в конкретном клиенте. Проверка данных профиля опирается также на [клиентский конфиг Valve](https://github.com/SteamTracking/GameTracking-Dota2/blob/b671cd08d5da5820ff0ad64fd26fcf32f615d197/game/dota/pak01_dir/scripts/npc/heroes/npc_dota_hero_nevermore.txt). Чужие реализации ботов в patch не переносились.
+

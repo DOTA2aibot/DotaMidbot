@@ -340,3 +340,207 @@ test( "continuous inherited attack is replaced only after its next observed rele
     end
 end );
 print( "RUNTIME PASSED " .. passed );
+
+-- Append to runtime_test.lua to reuse its isolated API fixture and real modules.
+local audited = 0;
+local function audit( name, fn ) fn(); audited = audited + 1; print( "PASS COMBINED_PR25 " .. name ) end;
+local function loadCandidate( s, missingGuard, debugEnabled )
+    local f = assert( io.open( "tests/laning/audit_sources/t016_merged_f4bf3aa.lua", "r" ) ); local text = f:read( "*a" ); f:close();
+    if debugEnabled then text = text:gsub( "local MIDBOT_DEBUG_MODIFIERS = false;", "local MIDBOT_DEBUG_MODIFIERS = true;" ) end;
+    local previous = s.env.require;
+    if missingGuard then s.env.require = function( path )
+        if path:match( "runtime/guard$" ) then error( "not installed in old build" ) end;
+        return previous( path );
+    end end;
+    local chunk = assert( loadstring( text, "PR25-exact-ability" ) ); setfenv( chunk, s.env ); chunk(); s.env.require = previous;
+    s.env.GetBot = function() return s.bot end; s.env.GameTime = function() return s.time end;
+    s.level_reads, s.autonomous = 0, 0;
+    s.bot.GetAbilityPoints = function() s.level_reads = s.level_reads + 1; return 0 end;
+    s.env.ConsiderRequiem = function() s.autonomous = s.autonomous + 1; return 0 end;
+    s.env.ConsiderRazeOnHero = function() return 0 end;
+    s.env.ConsiderRazeOnCreeps = function() return 0 end;
+end
+audit( "actual PR25 callback supplies heartbeat while observe keeps autonomy", function()
+    local s = scenario( "observe" ); loadCandidate( s ); s.entry.Desire( s.bot ); s.env.AbilityUsageThink();
+    eq( s.guard.ChannelReady( s.bot, s.time ), true ); eq( s.autonomous, 1 ); eq( s.level_reads, 1 );
+    s.entry.Think( s.bot ); eq( #s.attacks, 0 ); eq( #s.casts, 0 );
+end );
+audit( "actual callback ACKs only the requested plan and still executes leveling", function()
+    local s = scenario( "probe_attack" ); loadCandidate( s ); s.guard.LanePulse( s.bot, s.time ); s.env.AbilityUsageThink();
+    local ok, reason = s.backend.Acquire( s.bot, { candidate_key = "p" } ); eq( ok, false ); eq( reason, "awaiting_ability_plan_ack" );
+    s.autonomous = 0; s.env.AbilityUsageThink(); assert( s.backend.Acquire( s.bot, { candidate_key = "p" } ) );
+    eq( s.autonomous, 0 ); eq( s.level_reads, 2 );
+    s.backend.Release( s.bot, "plan_finished" ); s.env.AbilityUsageThink(); eq( s.autonomous, 1 );
+end );
+audit( "casting early return does not starve heartbeat", function()
+    local s = scenario( "observe" ); loadCandidate( s ); s.casting = true;
+    s.guard.LanePulse( s.bot, s.time ); s.env.AbilityUsageThink();
+    eq( s.guard.ChannelReady( s.bot, s.time ), true ); eq( s.autonomous, 0 );
+end );
+audit( "NumModifiers-only and GetModifierCount-only helpers both work", function()
+    local s = scenario(); loadCandidate( s ); eq( s.env.GetSoulsCount( s.bot ), 10 );
+    s.creep.stacks = 2; eq( s.env.GetRazeDebuffStacks( s.creep ), 2 );
+    s.bot.NumModifiers = nil; s.bot.GetModifierCount = function() return 1 end;
+    eq( s.env.GetSoulsCount( s.bot ), 10 );
+    s.bot.GetModifierCount = nil; eq( s.env.GetSoulsCount( s.bot ), nil );
+end );
+audit( "old build without guard retains autonomous abilities", function()
+    local s = scenario(); loadCandidate( s, true ); s.env.AbilityUsageThink(); eq( s.autonomous, 1 );
+    eq( s.env.JointExecutorOwnsBot( s.bot ), false );
+end );
+audit( "actual PR25 hook completes the full one-attack runtime path", function()
+    local s = scenario( "probe_attack" ); loadCandidate( s );
+    s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+    s.time = s.time + 0.16; s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot ); eq( #s.attacks, 1 );
+    s.creep.projectiles = { { handle = 901, caster = s.bot, is_attack = true, location = { x = 50, y = 0 } } }; s.last_attack = 1;
+    s.time = s.time + 0.1; s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot );
+    s.autonomous = 0; s.env.AbilityUsageThink(); eq( s.autonomous, 1 ); eq( s.bridge.HasActivePlan( 7 ), false );
+end );
+audit( "actual PR25 hook supports chosen raze-secure then hero attack", function()
+    local s = scenario( "execute" ); loadCandidate( s ); s.cfg.stage = "combos"; s.cfg.option_allowlist = { [6] = true };
+    for key in pairs( s.cfg.probes ) do if type( s.cfg.probes[key] ) == "boolean" then s.cfg.probes[key] = true end end;
+    s.enemies = { s.enemy };
+    s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot );
+    s.time = s.time + 0.16; s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot ); eq( #s.casts, 1 ); eq( #s.attacks, 0 );
+    s.casts[1].cd, s.bot.mana, s.creep.hp = 9, 220, 0;
+    s.time = s.time + 0.1; s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.entry.Think( s.bot ); eq( #s.attacks, 1 ); eq( s.attacks[1].target, s.enemy );
+end );
+audit( "debug diagnostics with NumModifiers do not read hidden enemies", function()
+    local s = scenario(); loadCandidate( s, false, true ); s.enemies = { s.enemy }; s.enemy.hidden = true;
+    s.enemy.NumModifiers = function() error( "hidden modifiers read" ) end;
+    assert( pcall( s.env.DebugPrintModifiers, s.bot ) ); assert( #s.logs > 0 );
+end );
+print( "COMBINED_PR25 PASSED " .. audited );
+
+local stability = 0;
+local function stabletest( name, fn ) fn(); stability = stability + 1; print( "PASS STABILITY " .. name ) end;
+local function frame( s )
+    s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); local result = s.entry.Think( s.bot );
+    s.time = s.time + 0.1; return result;
+end
+stabletest( "lane probe travels from base toward mid and submits exactly one attack via actual callback", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true;
+    s.bot.x, s.creep.x = -2000, 1000;
+    local applied = 0;
+    for i = 1, 70 do
+        frame( s );
+        if #s.moves > applied then
+            for j = applied + 1, #s.moves do
+                assert( s.moves[j].x > s.bot.x ); assert( s.moves[j].x - s.bot.x <= s.cfg.move_step + 1 );
+                s.bot.x, s.bot.y = s.moves[j].x, s.moves[j].y;
+            end;
+            applied = #s.moves;
+        end;
+        if #s.attacks > 0 then
+            s.last_attack = 1;
+            s.creep.projectiles = { { caster = s.bot, is_attack = true, location = { x = s.bot.x + 30, y = 0 } } };
+        end;
+    end;
+    assert( #s.moves > 0 ); eq( #s.attacks, 1 ); eq( #s.casts, 0 );
+    eq( s.cfg.probes.attack_damage_verified, false ); eq( s.cfg.probes.attack_point_seconds_verified, false );
+    eq( s.cfg.probes.last_attack_time_release_verified, false );
+    local found = false; for _, line in ipairs( s.logs ) do if line:find( '"status":"attack_released"', 1, true ) then found = true end end;
+    assert( found, "handleless projectile plus changed record must confirm observed release" );
+end );
+stabletest( "one-hit probe cannot farm repeatedly or cast even through direct submission", function()
+    local s = scenario( "lane_probe" ); s.bot.x = 600; s:submit( "attack" );
+    local snap = s.backend.Snapshot( s.bot );
+    local ok, reason = s.backend.Submit( s.bot, { step = { kind = "attack", target_id = snap.targets[1].id } } );
+    eq( ok, false ); eq( reason, "probe_limit_reached" );
+    eq( s.backend.Submit( s.bot, { step = { kind = "raze" } } ), false ); eq( #s.attacks, 1 ); eq( #s.casts, 0 );
+end );
+stabletest( "observe remains strictly without orders despite enabled lane positioning", function()
+    local s = scenario( "observe" ); loadCandidate( s ); s.cfg.lane_positioning = true; s.bot.x = -2000;
+    for i = 1, 30 do frame( s ) end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 ); eq( #s.casts, 0 );
+end );
+stabletest( "missing hook never permits lane-probe movement", function()
+    local s = scenario( "lane_probe" ); s.cfg.lane_positioning = true; s.bot.x = -2000;
+    for i = 1, 20 do s.entry.Think( s.bot ); s.time = s.time + 0.1 end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+    local d = s.guard.Diagnostics( s.bot, s.time ); eq( d.ability_calls, 0 ); eq( d.channel_ready, false );
+end );
+stabletest( "nearby enemy hero disables controlled lane probe without adding harassment", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true; s.enemies = { s.enemy };
+    for i = 1, 20 do frame( s ) end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 ); eq( #s.casts, 0 ); eq( s.entry.Desire( s.bot ), 0 );
+end );
+stabletest( "freshly entered tower threat rejects an already acknowledged diagnostic attack", function()
+    local s = scenario( "lane_probe" ); s.bot.x = 600; s:own();
+    local snap = s.backend.Snapshot( s.bot ); local tower = s.unit( "tower", "tower", 800, 2000 );
+    tower.GetAttackRange = function() return 700 end; tower.GetSecondsPerAttack = function() return 1 end;
+    s.towers = { tower };
+    eq( s.backend.Submit( s.bot, { step = { kind = "attack", target_id = snap.targets[1].id } } ), false );
+    eq( #s.attacks, 0 );
+end );
+stabletest( "probe never attacks a hero or a creep outside the mid neighborhood", function()
+    local s = scenario( "lane_probe" ); s.bot.x, s.creep.x = -2000, -1800; s:own();
+    local snap = s.backend.Snapshot( s.bot );
+    eq( s.backend.Submit( s.bot, { step = { kind = "attack", target_id = snap.targets[1].id } } ), false );
+    s.bot.x, s.enemy.x, s.enemies = 600, 700, { s.enemy }; snap = s.backend.Snapshot( s.bot );
+    eq( s.backend.Submit( s.bot, { step = { kind = "attack", target_id = snap.targets[#snap.targets].id } } ), false );
+    eq( #s.attacks, 0 );
+end );
+stabletest( "lane probe holds mode at mid after its one order while other modes can still retreat", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.bot.x = 1000; s.enemy_creeps = {};
+    frame( s ); assert( s.entry.Desire( s.bot ) > 0 ); eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+    s.retreat = true; eq( s.entry.Desire( s.bot ), 0 );
+end );
+stabletest( "sparse heartbeat is measured and expired ownership stays blocked", function()
+    local s = scenario( "lane_probe" ); s:own(); local first = s.guard.Diagnostics( s.bot, s.time );
+    eq( first.lease_state, "acked" ); eq( first.ability_seen_age_s, 0 );
+    s.time = s.time + 0.5; s.guard.LanePulse( s.bot, s.time );
+    local d = s.guard.Diagnostics( s.bot, s.time ); eq( d.channel_ready, false ); eq( d.ability_seen_age_s, 0.5 );
+    eq( d.owner_ttl_s, 0.35 ); eq( s.guard.Owns( s.bot, s.backend.token, s.time ), false );
+end );
+stabletest( "ability callback before lane callback is recorded without inventing accepted heartbeat", function()
+    local s = scenario( "observe" ); eq( s.guard.AbilityGate( s.bot ), false );
+    local d = s.guard.Diagnostics( s.bot, s.time ); eq( d.ability_calls, 1 ); eq( d.channel_ready, false );
+    eq( d.ability_accepted_age_s, nil ); s.guard.LanePulse( s.bot, s.time );
+    s.guard.AbilityGate( s.bot ); eq( s.guard.ChannelReady( s.bot, s.time ), true );
+end );
+stabletest( "lane probe has a bounded local approach when creep is just beyond attack range", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true;
+    s.bot.x, s.creep.x = 1000, 1600;
+    for i = 1, 4 do frame( s ) end;
+    assert( #s.moves > 0 ); assert( s.moves[1].x > 1000 and s.moves[1].x <= 1250 ); eq( #s.attacks, 0 );
+end );
+stabletest( "absence of a mid anchor never creates a lane-probe order", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true; s.env.GetLaneFrontLocation = nil;
+    for i = 1, 10 do frame( s ) end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+end );
+stabletest( "pregame and expired lane window cannot run controlled lane probe", function()
+    for _, time in ipairs( { -1, 601 } ) do
+        local s = scenario( "lane_probe" ); loadCandidate( s ); s.time = time;
+        frame( s ); eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+    end;
+end );
+stabletest( "missing current-action API cannot become movement from base", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true; s.bot.x = -2000;
+    s.bot.GetCurrentActionType = nil;
+    for i = 1, 20 do frame( s ) end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+end );
+stabletest( "lane mode selection survives heartbeat pause without granting command ownership", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true; s.bot.x = -2000;
+    s.entry.Desire( s.bot ); s.env.AbilityUsageThink(); s.time = s.time + 0.5;
+    assert( s.entry.Desire( s.bot ) > 0 );
+    local result = s.entry.Think( s.bot ); eq( result.status, "waiting_owner" );
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 ); eq( s.guard.ChannelReady( s.bot, s.time ), false );
+end );
+stabletest( "fresh enemy threat wins over holding lane during a heartbeat pause", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.entry.Desire( s.bot ); s.env.AbilityUsageThink();
+    s.time = s.time + 0.5; s.enemies = { s.enemy };
+    eq( s.entry.Desire( s.bot ), 0 ); eq( #s.moves, 0 );
+end );
+stabletest( "probe log identifies driver, actual mode, heartbeat ages and diagnostic status", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); frame( s ); frame( s );
+    local joined = table.concat( s.logs, "\n" );
+    assert( joined:find( '"diagnostic_probe":true', 1, true ) );
+    assert( joined:find( '"ability_seen_age_s":', 1, true ) );
+    assert( joined:find( '"active_mode":1', 1, true ) );
+    assert( joined:find( '"think_calls":', 1, true ) );
+    assert( joined:find( '"reason":"awaiting_ability_plan_ack"', 1, true ) );
+end );
+print( "STABILITY PASSED " .. stability );
