@@ -66,7 +66,7 @@ local function scenario( options )
         if localPath == "laning/config" then result.execution_mode = options.joint_options and "joint_options" or "legacy_fixture" end;
         return result;
     end;
-    local chunk = assert( loadfile( "mode_laning_nevermore.lua" ) ); setfenv( chunk, env ); chunk();
+    local chunk = assert( loadfile( "profiles/lane_probe/mode_laning_nevermore.lua" ) ); setfenv( chunk, env ); chunk();
     s.env = env;
     function s:tick( dt ) self.time = self.time + ( dt or 0 ); self.env.Think() end;
     return s;
@@ -124,7 +124,7 @@ test( "lane assignment uses team slots for non-contiguous player IDs", function(
     }, { __index = _G } );
     local chunk = assert( loadfile( "hero_selection.lua" ) ); setfenv( chunk, env ); chunk();
     local lanes = env.UpdateLaneAssignments(); eq( lanes[2], 2 ); eq( lanes[8], nil ); eq( #lanes, 3 );
-    eq( env.GetBotNames()[1], "MIDBOT v0.3.1" );
+    eq( env.GetBotNames()[1], "MIDBOT v0.3.2" );
 end );
 test( "new default issues no orders before joint backend registration", function()
     local s = scenario( { joint_options = true } ); s.enemy_creeps = { s.unit() };
