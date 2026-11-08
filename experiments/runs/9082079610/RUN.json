@@ -1,0 +1,129 @@
+{
+  "run_id": "9082079610",
+  "original_basename": "midbot-v035-all-fbb385e10f-test.9082079610.log",
+  "original_bytes": 25820136,
+  "original_sha256": "26947745151fbaebc1a176a3a308322cebb51d8ccab735ea6439091f5dbd73ce",
+  "published_sanitized_bytes": 25820267,
+  "published_sanitized_sha256": "581903b8b7def3c2e2757bfdb6dc8c4aa4c573da2097230b7d53eed40d281806",
+  "gzip_bytes": 853233,
+  "gzip_sha256": "99a496ea864de6cef8283fde5c45b636e5a7a8e0e0149d9d70516c048e6642b1",
+  "redactions": {
+    "steam64": 7,
+    "steam3": 147,
+    "ip": 13,
+    "lobby_server_ids": 2
+  },
+  "line_count": 15563,
+  "no_gameplay_lines_filtered": true,
+  "build": {
+    "version": "v0.3.5-all-test",
+    "local_build": "all41-863c407-43-0561448-45-f46f449-46-dfc0684-i1",
+    "fingerprint": "fbb385e10f",
+    "assembled_at_utc": "2026-11-08T17:16:57.041797+00:00",
+    "main": "713f648fd2a335824104f9f331c6c2088251e3a8",
+    "pull_requests": [
+      {
+        "number": 46,
+        "head": "dfc06840854e6976cd21055565c80e3874ca99a0",
+        "base": "863c407c3fb2e68521e07e9ae63a91df341c63f5",
+        "title": "[kimi] T022: разблокировка рун — desire 0.85, близкие крипы, слепое окно силовых рун"
+      },
+      {
+        "number": 45,
+        "head": "f46f449937f7bce50811dc63a9d0406d7ea2a5ec",
+        "base": "713f648fd2a335824104f9f331c6c2088251e3a8",
+        "title": "[T022] SF: «??» в all-чат после убийства, без паузы"
+      },
+      {
+        "number": 43,
+        "head": "05614480e1d53723ff686bd8f8dc3f67889204d6",
+        "base": "713f648fd2a335824104f9f331c6c2088251e3a8",
+        "title": "[kimi] T021: мидовая дисциплина SF — ботл/ванд, резерв маны, харасс, доставка курьером"
+      },
+      {
+        "number": 41,
+        "head": "863c407c3fb2e68521e07e9ae63a91df341c63f5",
+        "base": "713f648fd2a335824104f9f331c6c2088251e3a8",
+        "title": "[T020] v0.3.4: приоритет линии, близкие руны и ограниченная докупка маны"
+      }
+    ],
+    "github_merged_by_this_task": false,
+    "local_integration_only": true,
+    "profile": "all_test",
+    "observer_enabled": true,
+    "economy_enabled": true,
+    "wards_enabled": true,
+    "kill_chat_enabled": true,
+    "runtime_enabled": false,
+    "runes_precedence": "PR46 over PR41: desire .85, close-creep radius450, blind window at6:05-6:45 and every2min through15min; other safety checks preserved",
+    "integration_fixes": [
+      "Merge PR41 mana-purchase and conditional-flask hooks with current PR43 courier/purchase code; preserve nil-enum guards.",
+      "Forward-declare courier Report, support global GetCourierState(courier) with method fallback, distinguish rejected order from submitted/unverified delivery.",
+      "Reject illusion/unknown/non-SF actors in root callbacks and new active economy/ward paths; observer snapshots refer to real SF.",
+      "Active item slots0..5 only; choose self-item target API from runtime behavior flags, skip unknown behavior.",
+      "One custom spell/item/ward order per GameTime frame; pending ward blocks item callback until poll resolves or times out.",
+      "Expose AbilityLevelUpThink engine callback for latest PR43 skill build; deduplicate level submissions within frame.",
+      "Enable existing ward executor together with PR41/43/45/46 in a distinct local profile; Valve lane movement/AA retained."
+    ],
+    "offline_validation": [
+      "306 baseline/economy/purchase/package checks passed after fixture API/version updates",
+      "15 dedicated integration cases passed",
+      "23 kill-chat cases passed in both LF and CRLF checkouts",
+      "59 Lua files compiled with Lua5.1"
+    ],
+    "fixture_changes": "Only local version label, explicit real-SF/FindItemSlot mock API, selective optional-mana failure, observer scenario export, one actual all_test package case. Historical SHA-pinned Lua fixtures unchanged.",
+    "limitations": [
+      "Not yet run in Dota. Passing synthetic API tests does not establish win rate, API availability, ward placement, skill upgrade or item consumption in current client.",
+      "All features enabled together, so this run is a smoke/integration test; causal improvements require later separate profiles/runs.",
+      "PR46 intentionally raises rune priority compared with PR41; watch for farming interruption, failed blind trips and cancellation/retry logs.",
+      "Ward policy acts only in a safe idle in-range highground window; no ward-specific travel. A missing suitable window is not proof of an API failure.",
+      "PR43 custom ItemUsageThink covers bottle/mango/wand/stick only. It adds no handlers for clarity/salve/tango/BKB/other active items; no claim of native item fallback.",
+      "Kill chat makes at most one send attempt per observed fresh own-kill credit; engine acceptance/delivery remains unknown. No pause.",
+      "Existing extra ally-bot slots are not removed by this build."
+    ],
+    "runtime_files_sha256": {
+      "ability_item_usage_nevermore.lua": "787fbb339fac53553034a063bac4a2fb3fb1a97ef009af099b6ee2a4e0fa4c0b",
+      "hero_selection.lua": "b29e432ab3ccbd84271f590a0709e97464c9347c4f984403063546b023c1ecf5",
+      "item_purchase_nevermore.lua": "4a8461d778121ed49b5a889b56d6502ff1911daf14033a425436ec845ab45052",
+      "laning/advanced/bridge.lua": "b900c11e1283f519bd40824afb1a69c899b8dee6c1c97f610d1dae859244bcbf",
+      "laning/advanced/catalog.lua": "5afa9002ada26e505cf46f6e6188660670abc07a51fe4a8bfb7ccb2233874d23",
+      "laning/advanced/config.lua": "a3636d98763bb294352e0b3f770fa5dcf788b081e6b3fdbbb877ffcf8a9bc6c4",
+      "laning/advanced/creeps.lua": "f90973b7ce1cd9e58a833dccd87c15dbfaaf41720db3dc57ae1a37ea46835b1e",
+      "laning/advanced/experience.lua": "b2138eab2274bb32ea53ee6d1d268babe5714978bbb463bf2ed9745bc358b8e3",
+      "laning/advanced/knowledge.lua": "92b4e758ab41ec12db15eef1a509ea98ba7dc1bb92b01d0ca47fa9910bcd6c0e",
+      "laning/advanced/mechanics.lua": "5c8b3eda81cca55c97b69c64a7d6eab11a9dd36fb99e10d058e7621f077681c9",
+      "laning/advanced/planner.lua": "8848bbd301ac19681089f94be35dd3cbe5d99850c96e790e55caf8856272f7d7",
+      "laning/advanced/runtime_profile.lua": "7631f9f55cd988428e8399c1d06aa26415dc264a657b82f7564fe3e67c22305e",
+      "laning/advanced/scheduler.lua": "8d0520bc4525dc7d6f2b200e49a4dc17dc5a7446a6745c790923f542d9c82095",
+      "laning/advanced/threat.lua": "4a2a626fcdcad74ef376371ee4260c2f236580226df0800d1db744578f36f581",
+      "laning/advanced/tower.lua": "bafdf85a1ce87941b779ffc6e697879a722e4d5b1cae20f79b9949813b6ab393",
+      "laning/advanced/trace.lua": "d8ec6c9c1da9a38c7fb62b5e974f8ea73c75d9decb3213f908ba5984cfe562ee",
+      "laning/advanced/wave.lua": "6205b04b81d89df952fa7c090bcf08d25d274e90eefaea7ccbb20a7b7cf7e7e7",
+      "laning/config.lua": "6256476e5a999b92d408f3e1bf2fd77d1d55426f075f0201621e522de3232ecb",
+      "laning/economy/config.lua": "4f8c1a166e35e80203e0cf9ca8ac84aa52b0a6aa4b3e2a1701e7e698bb66ec78",
+      "laning/economy/mana.lua": "18d10ebe92b1f05a7acaa0342bdbd6b6cbf87ada9faf8006ff9e0ca0683d8d95",
+      "laning/economy/runes.lua": "91b61d0fed0767b0b08fb7de7c5fbf815e64c32691634b1aec81d7434d81287b",
+      "laning/hybrid/shadow.lua": "c1d755bf37641837c933d610acf2841cba0b94e8b7a82b8fd27b5318961ddeee",
+      "laning/hybrid/wards.lua": "ac3636e86ef13d36f0dcf5df2e9e93ed23f6f25e27d69c5902fc6ee5bce902a9",
+      "laning/integration/actor.lua": "25ec56abe809831eb5d42cac7be35c5372831cb56daaf75bdca1419bda0db6d6",
+      "laning/observer/config.lua": "a9be07ea1314e220d5a1465f8ca1b46d3e781888fc318c56051272a8bcc3f1ac",
+      "laning/observer/core.lua": "4356ddc80b7116d405ecee485f902ce0fbb52e1249c3f372c4fb5dae629b82fa",
+      "laning/observer/entry.lua": "13f4aceea3c9afac4da86030991613a30cf89011f2267cb38b7cd31feeefbf7e",
+      "laning/policy.lua": "b81cb1e1105d6edc3e8f5c0154623293c864db9b77c114cce4b9962369548c40",
+      "laning/profile.lua": "086c060777f06a4dac75d458dd587e755d40ea49d1ee3429cdd5d72c6ee8971c",
+      "laning/runtime/api.lua": "3e22129a1ea88a5806bec2a7e2a2daebb25a40e1c657a82d15f6ae0b02679857",
+      "laning/runtime/backend.lua": "8a37decce01f903756ae657144f1a3ed8a71b68b9b541f73d55b62b19ced1b91",
+      "laning/runtime/config.lua": "09eb714197efdf004cdb87bbda88df9926776bb4960c4aaf4300e1f8381caedd",
+      "laning/runtime/entry.lua": "f352343ec54324c5f0231c8e5d3ed6eb862f5dd1c2eb3bb62805995ac9cf011a",
+      "laning/runtime/guard.lua": "16c5eab1df35aa9ad1dc88b0664bdc18733fabb6fdc5ad620c27d5ea6f2983c6",
+      "laning/runtime/movement.lua": "5333a0d50962617bce9cc226face894bc76e5679765b5e59a41ec3f523436d50",
+      "laning/runtime/observe.lua": "90d00d759a48c87437bda8f83ea03f89128db8ffee725f930ea20885670544fe",
+      "laning/social/kill_chat.lua": "76e272d875082e82fe8f67c698c92a1d7c82c5bc4b955ced6a22ba725156c55b",
+      "laning/social/kill_chat_config.lua": "80bc283c29881eb8fbb004660aa8a8fdde78ad9fd3ba2f069b411be4eefd5d73",
+      "laning/trace.lua": "2c8fc8170acff59a531b7d4e1f8371e5f97e8792f41f4bb4193d56963cf5fd90",
+      "mode_rune_nevermore.lua": "7a1dfe2983e632699ae9be1b355ec9b5ffb24a7351b8a4c6fbf69bb0c5a8e8df"
+    }
+  },
+  "not_current_pr_heads": true,
+  "code_modified_by_this_review": false
+}
