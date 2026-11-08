@@ -19,9 +19,13 @@ test( "enemy near one rune redirects pickup to the other", function()
     eq( s.rune_policy.GetDesire( s.bot ), .85 ); s.mode = 7; s.rune_policy.Think( s.bot );
     eq( #s.runes, 1 ); eq( s.runes[1], 1 ); -- заказана RUNE_POWERUP_2, не первая
 end );
-test( "wave arriving during pickup cancels the owned rune order", function()
+test( "wave arriving during pickup does not cancel the committed rune order", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
-    s.creeps = { s:unit() }; s.time = 101; s.rune_policy.Think( s.bot ); eq( s.cancelled, 1 ); eq( #s.runes, 1 );
+    -- T026 (матч 9082418779): транзиентные гейты (крип рядом на 0.2с) роняли
+    -- desire и сносили приказ — так умерли все 8 походов за рунами. Пока
+    -- попытка наша и не истёк timeout, волна крипов её НЕ отменяет.
+    s.creeps = { s:unit() }; s.time = 101; eq( s.rune_policy.GetDesire( s.bot ), .85 );
+    s.rune_policy.Think( s.bot ); eq( s.cancelled, nil ); eq( #s.runes, 1 );
 end );
 test( "completed purchase missed between polls does not block all future supply", function()
     local s = scenario(); s.enemies = { s:unit() }; s.mana_policy.TryPurchase( s.bot );
@@ -106,15 +110,24 @@ test( "failed attempts release budget reservation rather than exhausting supplie
     for i = 0, 4 do s.time = 100 + i * 5; s.mana_policy.TryPurchase( s.bot ) end;
     s.result = 0; s.time = 125; eq( s.mana_policy.TryPurchase( s.bot ), true ); eq( #s.calls, 6 );
 end );
-test( "unexpected action type retires pickup without restarting or clearing movement", function()
+test( "engine not starting the pickup re-issues the order instead of cancelling", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot );
-    -- T024b: первые rune_order_grace_s секунд MOVE_TO — НОРМА, движок ещё
-    -- начинает наш приказ: desire держится (матч 9082231706: старое поведение
-    -- схлопывало режим через 0.13с после rune_order). После grace чужое
-    -- действие по-прежнему снимает desire без очистки движения.
+    -- T026 (матч 9082418779): движок терял приказ при мгновенном схлопывании
+    -- режима — бот стоял IDLE до конца grace, затем попытка отменялась. Теперь
+    -- desire держится весь timeout, неначавшийся приказ перевыдаётся раз в
+    -- секунду, чужое движение не очищается.
     s.action = 2; s.time = 101; eq( s.rune_policy.GetDesire( s.bot ), .85 );
-    s.time = 104; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
-    eq( s.cancelled, nil ); eq( s.action, 2 ); eq( #s.runes, 1 );
-    s.time = 105; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 104; eq( s.rune_policy.GetDesire( s.bot ), .85 ); s.rune_policy.Think( s.bot );
+    eq( s.cancelled, nil ); eq( #s.runes, 2 ); eq( s.action, 8 );
+    s.time = 108; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- timeout 8с: попытка снята
+end );
+test( "finished pickup releases the bot without clearing and blocks instant reorder", function()
+    local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+    s.rune_policy.Think( s.bot ); -- action==8: движок в пути на руну
+    s.action = 2; s.time = 102; -- pickup завершён: действие сменилось
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune_attempt_finished
+    s.rune_policy.Think( s.bot ); eq( s.cancelled, nil ); eq( #s.runes, 1 ); -- очистка без ClearActions
+    s.time = 111; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- retry 10с с момента завершения
+    s.time = 113; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
 end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

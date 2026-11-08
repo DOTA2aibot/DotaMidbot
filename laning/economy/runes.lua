@@ -17,6 +17,31 @@ function M.Decide( bot )
         return nil, "rune_pickup_timeout";
     end;
     if A.Call( bot, "IsAlive" ) ~= true then return nil, "not_alive" end;
+    -- T026 (матч 9082418779): заказанный pickup ДОВОДИМ до конца. В матче
+    -- 8 приказов → 8 отмен: транзиентные гейты ниже (крип в 250, ATTACK-режим
+    -- на долю секунды, враг в scan) роняли desire мгновенно, режим схлопывался
+    -- и наш же OnEnd/Think отменял приказ; один pickup был убит уже в пути
+    -- (current_action=PICK_UP_RUNE + ClearActions). Пока попытка наша, цель
+    -- та же и не истёк timeout — держим desire, даже через каст рейза в пути
+    -- (IsUsingAbility) и короткий стан: движок продолжит движение сам.
+    -- Снимаем попытку только смертью (выше), таймаутом (выше), низким hp
+    -- или после факта подбора.
+    local committed = prior ~= nil and prior.owned_order == true and prior.started_at ~= nil
+        and prior.rune ~= nil and now - prior.started_at < C.rune_order_timeout_s;
+    if committed then
+        if prior.pickup_seen then
+            local act = A.Call( bot, "GetCurrentActionType" );
+            if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and act ~= BOT_ACTION_TYPE_PICK_UP_RUNE
+                and A.Call( bot, "NumQueuedActions" ) == 0 then
+                return nil, "rune_attempt_finished"; -- подобрал (или точка пуста) — назад на линию
+            end;
+        end;
+        local chp, cmaxhp = A.Call( bot, "GetHealth" ), A.Call( bot, "GetMaxHealth" );
+        if A.Number( chp ) and A.Number( cmaxhp ) and cmaxhp > 0 and chp / cmaxhp < C.rune_min_hp then
+            return nil, "commit_aborted_low_hp"; -- реальная опасность: отмена даже в пути
+        end;
+        return { rune = prior.rune, distance = nil, desire = C.rune_desire }, "rune_order_committed";
+    end;
     for _, method in ipairs( { "IsUsingAbility", "IsChanneling", "IsStunned", "IsHexed", "IsRooted" } ) do
         if A.Call( bot, method ) ~= false then return nil, "busy_or_unknown" end;
     end;
@@ -145,7 +170,14 @@ function M.Decide( bot )
         elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
         elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
         end;
-        if fail and A.Number( d ) and d < dmin then dmin, dwhy = d, fail end;
+        -- T026 (review GPT PR53): причина без числовой дистанции
+        -- (spawn_location_unknown) раньше терялась — dmin оставался math.huge
+        -- и в лог уходило немое none_checked:d=?. Держим её как fallback.
+        if fail then
+            if A.Number( d ) then
+                if d < dmin then dmin, dwhy = d, fail end;
+            elseif dwhy == "none_checked" then dwhy = fail end;
+        end;
         if not fail and ( not distance or d < distance ) then best, distance = rune, d end;
     end;
     if not best
@@ -172,7 +204,7 @@ function M.GetDesire( bot )
 end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
-    s.owned_order = false;
+    s.owned_order = false; s.pickup_seen = nil;
     local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
@@ -185,26 +217,46 @@ function M.Leave( bot, reason )
         guard = can_cancel and "owned_pickup_empty_queue_no_cast" or "preserve_other_or_unknown_action" } ) end );
 end;
 function M.Think( bot )
+    local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
+    -- T026 (матч 9082418779): пока попытка наша — НЕ отменяем её из-за
+    -- транзиентных гейтов Decide: именно они сносили все 8 приказов матча
+    -- (кластеры 0.2с — мгновенное схлопывание desire, 3с — конец grace без
+    -- старта движка; один живой pickup убит ClearActions в пути).
+    if s.owned_order then
+        if not now or now - ( s.started_at or now ) >= C.rune_order_timeout_s then
+            M.Leave( bot, "rune_pickup_timeout" ); return;
+        end;
+        local action = A.Call( bot, "GetCurrentActionType" );
+        if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE then
+            s.pickup_seen = true; return; -- движок в пути на руну — не трогаем
+        end;
+        if s.pickup_seen then
+            -- pickup был и закончился (руна взята или исчезла) — отпускаем бота
+            -- на линию без ClearActions: чужое/завершённое действие не трогаем.
+            s.owned_order, s.pickup_seen = false, nil;
+            s.retry_after = now + C.rune_retry_s;
+            pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
+                owner = "midbot_rune_only", outcome = "unknown" } ) end );
+            return;
+        end;
+        -- Приказ ещё не начался: движок терял его при мгновенном схлопывании
+        -- режима (в матче — 3с IDLE после rune_order). Перевыдаём раз в
+        -- секунду до таймаута вместо отмены попытки.
+        if now >= ( s.next_order or -math.huge ) and s.rune ~= nil then
+            s.next_order = now + 1;
+            local called = pcall( function() bot:Action_PickUpRune( s.rune ) end );
+            pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = s.rune,
+                submitted = called, outcome = "unknown", owner = "midbot_rune_only", reissue = true } ) end );
+        end;
+        return;
+    end;
     local ok, plan = pcall( M.Decide, bot );
     if not ok or not plan or BOT_MODE_RUNE == nil or A.Call( bot, "GetActiveMode" ) ~= BOT_MODE_RUNE then
         M.Leave( bot, "plan_invalid_or_mode_changed" ); return;
     end;
-    -- Свежая проверка каждый Think; не идём искать руны за пределами650.
-    local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
-    if s.owned_order then
-        if s.started_at and now-s.started_at<C.rune_order_grace_s then
-            if s.rune~=plan.rune then M.Leave(bot,"rune_target_changed") end;
-            return; -- same grace as Decide: do not retire/reissue a still starting pickup
-        end;
-        if A.Call( bot, "GetCurrentActionType" ) == BOT_ACTION_TYPE_PICK_UP_RUNE then
-            if s.rune ~= plan.rune then M.Leave( bot, "rune_target_changed" ) end;
-            return; -- не перезапускаем уже идущий pickup каждый1с
-        end;
-        s.owned_order = false;
-    end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
-    s.owned_order, s.rune, s.started_at = true, plan.rune, now; -- исключение после побочного эффекта требует guard
+    s.owned_order, s.rune, s.started_at, s.pickup_seen = true, plan.rune, now, nil; -- исключение после побочного эффекта требует guard
     local called = pcall( function() bot:Action_PickUpRune( plan.rune ) end );
     pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = plan.rune, distance = plan.distance,
         submitted = called, outcome = "unknown", owner = "midbot_rune_only" } ) end );

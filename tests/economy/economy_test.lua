@@ -183,6 +183,13 @@ test( "distant, unseen, missing and impassable rune are never pursued", function
     t.visible = true; t.status = 2; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.status = 1; t.passable = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
 end );
+test( "missing rune spawn API reports spawn_location_unknown, not none_checked", function()
+    -- T026 (review GPT PR53): при nil-координатах причина терялась, в лог
+    -- уходило немое none_checked:d=? — диагностика теряла смысл.
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return nil end;
+    local plan, reason = s.rune_policy.Decide( s.bot );
+    eq( plan, nil ); eq( reason, "no_nearby_river_rune:spawn_location_unknown:d=?" );
+end );
 test( "blind power rune window pursues unseen rune after six minutes", function()
     local s = scenario(); s.time = 370; s.visible = false; s.status = 3; -- окно 6:05-6:45, руна не видна
     local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );
