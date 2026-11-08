@@ -23,6 +23,7 @@ local RAZE_CAST_POINT = 0.55;        -- задержка каста для уп�
 
 local abilityRaze = { nil, nil, nil };
 local abilityRequiem = nil;
+local abilityFeast = nil; -- Feast of Souls (7.4x): самобафф, скорость атаки/передвижения
 local bAbilitiesInit = false;
 
 ----------------------------------------------------------------------------------------------------
@@ -119,6 +120,15 @@ function InitAbilities( npcBot )
 	abilityRaze[2] = npcBot:GetAbilityByName( "nevermore_shadowraze2" );
 	abilityRaze[3] = npcBot:GetAbilityByName( "nevermore_shadowraze3" );
 	abilityRequiem = npcBot:GetAbilityByName( "nevermore_requiem" );
+	abilityFeast = npcBot:GetAbilityByName( "nevermore_feast_of_souls" ); -- 7.4x, активка на D
+	if ( abilityFeast == nil )
+	then
+		-- Явная диагностика (ревью GPT): раньше nil глушился молча и фича
+		-- выглядела рабочей. Имя не подтверждено игрой: в дампе SteamTracking
+		-- активка значится как nevermore_frenzy — подтвердить по [MIDBOT diag]
+		-- печати имён способностей в слотах, потом поправить имя здесь.
+		print( "[MIDBOT diag] nevermore_feast_of_souls НЕ НАЙДЕНА в этом патче — активка на D отключена, проверить имя" );
+	end
 	bAbilitiesInit = true;
 end
 
@@ -145,6 +155,32 @@ end
 function AbilityUsageThink()
 
 	local npcBot = GetBot();
+	if ( npcBot == nil ) then return end;
+
+	-- Диагностическая обёртка: в логе 08.11 были «Script Runtime Error: error in
+	-- error handling» без указания источника. Теперь наши ошибки печатаются
+	-- с текстом и traceback — источник будет виден сразу.
+	local ok, err = xpcall( function() AbilityUsageThinkInner( npcBot ) end,
+		function( e )
+			-- Защита обработчика (ревью GPT): прямой debug.traceback() может
+			-- быть недоступен в VM — тогда диагностика сама падает с «error in
+			-- error handling» и стирает первоначальную ошибку. Исходный текст
+			-- сохраняем всегда, traceback получаем через защищённый вызов.
+			local msg = tostring( e );
+			local okTb, tb = pcall( function()
+				if ( debug ~= nil and type( debug.traceback ) == "function" )
+				then
+					return debug.traceback();
+				end
+				return "traceback unavailable";
+			end );
+			return msg .. " | " .. ( okTb and tostring( tb ) or "traceback call failed" );
+		end );
+	if ( not ok ) then print( "[MIDBOT ability ERROR] " .. tostring( err ) ); end
+
+end
+
+function AbilityUsageThinkInner( npcBot )
 
 	if ( not bAbilitiesInit ) then InitAbilities( npcBot ); end
 
@@ -177,6 +213,13 @@ function AbilityUsageThink()
 		return;
 	end
 
+	-- 3. Feast of Souls — самобафф перед дракой или под пачку крипов
+	if ( ConsiderFeastOfSouls( npcBot ) > 0 )
+	then
+		npcBot:Action_UseAbility( abilityFeast );
+		return;
+	end
+
 	-- 3. Рейз по крипам (фарм)
 	local desireFarm, locFarm, farmAbility = ConsiderRazeOnCreeps( npcBot );
 	if ( desireFarm > 0 )
@@ -190,12 +233,84 @@ end
 ----------------------------------------------------------------------------------------------------
 -- Каст рейза. Рейзы — NO_TARGET способности: бьют на фикс. дистанции
 -- в направлении, КУДА СМОТРИТ герой. Action_UseAbilityOnLocation тут не работает
--- (фикс аудита GPT). Делаем как эталонный bot_nevermore от Valve:
--- сначала AttackMove в сторону цели (разворачивает героя), затем каст.
+-- (фикс аудита GPT).
+-- Фикс 2 (ревью GPT по логу observe): AttackMove -> каст в одном тике НЕ
+-- гарантирует, что герой успел развернуться — рейз уходит по старому взгляду.
+-- Поэтому: если ещё не смотрим на цель — только доворачиваемся этим тиком;
+-- каст уходит следующим тиком, когда IsFacingLocation подтвердит разворот.
 ----------------------------------------------------------------------------------------------------
+-- Ревью GPT (PR #27): допуск по углу НЕ гарантирует попадание — при ошибке 19°
+-- центр рейза уходит на ~360 ед. мимо (радиус 250). Поэтому перед кастом
+-- проверяем ФАКТИЧЕСКИЙ центр удара по текущему направлению взгляда героя,
+-- а не только угол. Доворот — коротким шагом (как Prepare в runtime GPT:
+-- face_distance=48), а не движением до самой цели.
+local RAZE_HIT_MARGIN = 40;     -- факт. центр должен быть внутри радиуса с запасом
+local RAZE_FACE_STEP = 48;      -- длина шага доворота (паттерн GPT face_distance)
+local RAZE_FACE_THROTTLE = 0.15;-- пауза между шагами доворота, сек
+local TOWER_DANGER_RANGE = 750; -- дальность вышки 700 + запас
+local nNextFaceTime = 0;
+
+function GetRazeIndexOf( razeAbility )
+	for i = 1, 3
+	do
+		if ( abilityRaze[i] == razeAbility ) then return i end;
+	end
+	return nil;
+end
+
+-- Фактический центр удара i-го рейза при ТЕКУЩЕМ направлении взгляда героя
+function GetCurrentRazeImpact( npcBot, i )
+	local vBot = npcBot:GetLocation();
+	local rad = math.rad( npcBot:GetFacing() );
+	return vBot + Vector( math.cos( rad ) * RAZE_DIST[i], math.sin( rad ) * RAZE_DIST[i], 0 );
+end
+
 function CastRaze( npcBot, razeAbility, vLoc )
-	npcBot:Action_AttackMove( vLoc );
-	npcBot:Action_UseAbility( razeAbility );
+	-- Прерывание подготовки: в отступлении не ходим к цели и не кастуем.
+	-- (Остальные прерывания — устаревшая цель/мана/доступность — ловятся сами:
+	-- Consider-функции пересчитываются каждый тик и просто перестанут звать CastRaze.)
+	if ( npcBot:GetActiveMode() == BOT_MODE_RETREAT ) then return end;
+
+	local i = GetRazeIndexOf( razeAbility );
+	if ( i ~= nil )
+	then
+		local vImpact = GetCurrentRazeImpact( npcBot, i );
+		if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
+		then
+			npcBot:Action_UseAbility( razeAbility );
+			return;
+		end
+	elseif ( npcBot:IsFacingLocation( vLoc, 5 ) )
+	then
+		-- Запасной вариант (способность не из abilityRaze): жёсткий допуск 5°
+		npcBot:Action_UseAbility( razeAbility );
+		return;
+	end
+
+	-- Доворот: КОРОТКИЙ шаг в сторону цели, а не движение до неё
+	local now = GameTime();
+	if ( now < nNextFaceTime ) then return end;
+
+	local vBot = npcBot:GetLocation();
+	local dx = vLoc.x - vBot.x;
+	local dy = vLoc.y - vBot.y;
+	local len = math.sqrt( dx * dx + dy * dy );
+	if ( len < 1 ) then return end;
+
+	local vStep = vBot + Vector( dx / len * RAZE_FACE_STEP, dy / len * RAZE_FACE_STEP, 0 );
+
+	-- Шаг не должен заводить нас под вражескую вышку
+	local tableTowers = npcBot:GetNearbyTowers( 900, true );
+	for _, npcTower in pairs( tableTowers )
+	do
+		if ( GetUnitToLocationDistance( npcTower, vStep ) <= TOWER_DANGER_RANGE ) then return end;
+	end
+
+	if ( IsLocationPassable( vStep ) )
+	then
+		npcBot:Action_MoveDirectly( vStep ); -- прямой микрошаг, без построения пути
+		nNextFaceTime = now + RAZE_FACE_THROTTLE;
+	end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -274,6 +389,50 @@ function GetRazeImpactPoint( npcBot, vTarget, i )
 	local len = math.sqrt( dx * dx + dy * dy );
 	if ( len < 1 ) then len = 1 end;
 	return vBot + Vector( dx / len * RAZE_DIST[i], dy / len * RAZE_DIST[i], 0 );
+end
+
+----------------------------------------------------------------------------------------------------
+-- Feast of Souls (7.4x, активка на D): самобафф скорости атаки/передвижения.
+-- Прожимаем перед боем (враг рядом) или под жирную пачку крипов.
+-- Ману на рейзы бережём: ниже 50% маны не баффаемся.
+-- Имя способности в патче не подтверждено игрой: если GetAbilityByName вернул
+-- nil — функция выключена (nil-safe), но InitAbilities печатает явную
+-- диагностику; имя текущего патча подтверждается по печати слотов в diag.
+----------------------------------------------------------------------------------------------------
+local FEAST_MANA_PCT = 0.50;      -- минимум маны для баффа
+local FEAST_ENEMY_RADIUS = 900;   -- враг в этом радиусе = скоро драка
+local FEAST_CREEP_PACK = 4;       -- столько крипов рядом = фарм-бафф
+
+function ConsiderFeastOfSouls( npcBot )
+
+	if ( abilityFeast == nil or not abilityFeast:IsFullyCastable() )
+	then
+		return BOT_ACTION_DESIRE_NONE;
+	end
+
+	if ( npcBot:GetMana() / npcBot:GetMaxMana() < FEAST_MANA_PCT )
+	then
+		return BOT_ACTION_DESIRE_NONE;
+	end
+
+	-- Враг рядом — бафф перед дракой (приоритет)
+	local tableEnemyHeroes = npcBot:GetNearbyHeroes( FEAST_ENEMY_RADIUS, true, BOT_MODE_NONE );
+	for _, npcEnemy in pairs( tableEnemyHeroes )
+	do
+		if ( npcEnemy:CanBeSeen() and not npcEnemy:IsInvulnerable() )
+		then
+			return BOT_ACTION_DESIRE_MODERATE;
+		end
+	end
+
+	-- Пачка крипов — бафф под фарм
+	local tableEnemyCreeps = npcBot:GetNearbyLaneCreeps( 700, true );
+	if ( #tableEnemyCreeps >= FEAST_CREEP_PACK )
+	then
+		return BOT_ACTION_DESIRE_LOW;
+	end
+
+	return BOT_ACTION_DESIRE_NONE;
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -538,6 +697,15 @@ function DebugPrintModifiers( npcBot )
 	if ( not MIDBOT_DEBUG_MODIFIERS ) then return end;
 	if ( GameTime() < nextDiagTime ) then return end;
 	nextDiagTime = GameTime() + 3.0;
+	-- Имена способностей в слотах (проверка имён текущего патча, напр. feast_of_souls)
+	for nSlot = 0, 8
+	do
+		local ability = npcBot:GetAbilityInSlot( nSlot );
+		if ( ability ~= nil )
+		then
+			print( "[MIDBOT diag] ability[" .. nSlot .. "]=" .. ability:GetName() );
+		end
+	end
 	for i = 0, ModifierCountOf( npcBot ) - 1
 	do
 		print( "[MIDBOT diag] self: " .. npcBot:GetModifierName( i )
