@@ -66,12 +66,12 @@ local SKILL_ORDER = {
 	"nevermore_shadowraze1",
 	"nevermore_shadowraze1",
 	"nevermore_requiem",          -- 6
-	"nevermore_feast_of_souls",   -- активка на D (7.4x)
-	"nevermore_feast_of_souls",
+	"nevermore_frenzy",   -- активка на D (7.4x)
+	"nevermore_frenzy",
 	"nevermore_requiem",          -- 12
-	"nevermore_feast_of_souls",
+	"nevermore_frenzy",
 	"nevermore_dark_lord",        -- аура
-	"nevermore_feast_of_souls",
+	"nevermore_frenzy",
 	"nevermore_dark_lord",
 	"nevermore_requiem",          -- 18
 	"nevermore_dark_lord",
@@ -120,14 +120,13 @@ function InitAbilities( npcBot )
 	abilityRaze[2] = npcBot:GetAbilityByName( "nevermore_shadowraze2" );
 	abilityRaze[3] = npcBot:GetAbilityByName( "nevermore_shadowraze3" );
 	abilityRequiem = npcBot:GetAbilityByName( "nevermore_requiem" );
-	abilityFeast = npcBot:GetAbilityByName( "nevermore_feast_of_souls" ); -- 7.4x, активка на D
+	abilityFeast = npcBot:GetAbilityByName( "nevermore_frenzy" ); -- 7.4x, активка на D
 	if ( abilityFeast == nil )
 	then
-		-- Явная диагностика (ревью GPT): раньше nil глушился молча и фича
-		-- выглядела рабочей. Имя не подтверждено игрой: в дампе SteamTracking
-		-- активка значится как nevermore_frenzy — подтвердить по [MIDBOT diag]
-		-- печати имён способностей в слотах, потом поправить имя здесь.
-		print( "[MIDBOT diag] nevermore_feast_of_souls НЕ НАЙДЕНА в этом патче — активка на D отключена, проверить имя" );
+		-- Имя ПОДТВЕРЖДЕНО игрой: матчи 9080995642/9081000035 (08.11), дамп
+		-- слотов [MIDBOT diag] показал ability[3]=nevermore_frenzy. Если эта
+		-- строка снова появилась в логе — имя сменилось в новом патче.
+		print( "[MIDBOT diag] nevermore_frenzy НЕ НАЙДЕНА в этом патче — активка на D отключена, проверить имя" );
 	end
 	bAbilitiesInit = true;
 end
@@ -403,12 +402,10 @@ function GetRazeImpactPoint( npcBot, vTarget, i )
 end
 
 ----------------------------------------------------------------------------------------------------
--- Feast of Souls (7.4x, активка на D): самобафф скорости атаки/передвижения.
--- Прожимаем перед боем (враг рядом) или под жирную пачку крипов.
--- Ману на рейзы бережём: ниже 50% маны не баффаемся.
--- Имя способности в патче не подтверждено игрой: если GetAbilityByName вернул
--- nil — функция выключена (nil-safe), но InitAbilities печатает явную
--- диагностику; имя текущего патча подтверждается по печати слотов в diag.
+-- Feast of Souls (7.4x, активка на D, nevermore_frenzy): самобафф скорости
+-- атаки/передвижения. Прожимаем перед боем (враг рядом) или под жирную пачку
+-- крипов. Ману на рейзы бережём: ниже 50% маны не баффаемся.
+-- Имя nevermore_frenzy подтверждено игрой (дамп слотов, 08.11).
 ----------------------------------------------------------------------------------------------------
 local FEAST_MANA_PCT = 0.50;      -- минимум маны для баффа
 local FEAST_ENEMY_RADIUS = 900;   -- враг в этом радиусе = скоро драка
