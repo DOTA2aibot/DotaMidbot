@@ -32,11 +32,16 @@ local function scenario( opt )
 	env.GetItemCost = opt.cost or function() return 100 end;
 	env.GetItemComponents = opt.recipe or function() return {} end;
 	env.GetNumCouriers = function() return #( opt.couriers or {} ) end;
+	-- T023: константы курьера в реальной Доте есть всегда — фикстура их отражает,
+	-- иначе диагностика «нет API» честно печатается и ломает проверки логов.
+	env.COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS = 5;
+	env.COURIER_STATE_IDLE, env.COURIER_STATE_AT_BASE = 0, 1;
 	env.GetCourier = function( index )
 		local c = opt.couriers[index + 1];
 		return {
 			GetPlayerID = function() return c.owner end,
 			GetItemInSlot = function( _, n ) return c.slots[n] and item( c.slots[n] ) or nil end,
+			GetCourierState = function() return 0 end,
 		};
 	end;
 	env.print = function( message ) table.insert( s.logs, message ) end;

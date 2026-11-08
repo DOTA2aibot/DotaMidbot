@@ -4,10 +4,14 @@
 -- крип в 1200» и «требуется видимость руны» при отсутствии вардов делали режим
 -- недостижимым. Поднимаем desire над лайнингом, крипы блокируют только вплотную,
 -- добавлено слепое окно силовых рун (см. runes.lua).
+-- T023 (матч 9082042282: даже в слепом окне desire=0 — 56× no_nearby_visible):
+-- mid-front до руны ~900+ единиц, rune_distance=650 не доставал; бот на unfair
+-- часто ниже 50% HP (health_or_unknown ×31) — а руна как раз заряжает ботл.
+-- rune_distance 1100 + enemy_radius 500: scan 1600 — предел API GetNearbyHeroes.
 return {
-    lane_radius = 1200, rune_distance = 650, rune_desire = 0.85,
-    rune_enemy_radius = 900, rune_min_hp = 0.5, rune_window_end = 900,
-    rune_creep_block_radius = 450,
+    lane_radius = 1200, rune_distance = 1100, rune_desire = 0.85,
+    rune_enemy_radius = 500, rune_min_hp = 0.35, rune_window_end = 900,
+    rune_creep_block_radius = 250,
     rune_order_timeout_s = 4, rune_retry_s = 10,
     mana_fraction = 0.35, mana_missing = 100, mana_window_end = 600,
     mana_purchase_interval = 90, mana_attempt_interval = 5,

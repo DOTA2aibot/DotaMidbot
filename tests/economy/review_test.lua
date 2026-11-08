@@ -12,8 +12,8 @@ local function pickup( s )
 end;
 test( "enemy outside bot radius but near rune blocks pickup", function()
     local s = scenario(); pickup( s ); local enemy = s:unit();
-    enemy.GetLocation = function() return { x = 1200, y = 0 } end;
-    s.bot.GetNearbyHeroes = function( _, radius ) return radius >= 1200 and { enemy } or {} end;
+    enemy.GetLocation = function() return { x = 800, y = 0 } end; -- T023: до руны (400,0) = 400 <= rune_enemy_radius 500
+    s.bot.GetNearbyHeroes = function( _, radius ) return radius >= 800 and { enemy } or {} end;
     eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 0 );
 end );
 test( "wave arriving during pickup cancels the owned rune order", function()
