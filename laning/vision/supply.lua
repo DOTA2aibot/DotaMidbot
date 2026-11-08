@@ -8,6 +8,13 @@ local function state(bot)
     if not s or now<(s.time or now) then s={};states[bot]=s end;s.time=now;return s;
 end;
 local function emit(bot,s,kind,data) B.Emit(B.State(bot),kind,data) end;
+function M.StartupAttempt(bot,result)
+    local s=state(bot);if not s then return end;
+    if not U.Number(result) or (PURCHASE_ITEM_SUCCESS~=nil and result==PURCHASE_ITEM_SUCCESS) then
+        s.pending=U.Now();s.pendingReported=false;
+    else s.nextBuy=U.Now()+C.purchase_retry_s end;
+    emit(bot,s,"vision_startup_purchase",{result=result,outcome="delivery_unverified"});
+end;
 function M.Placed(bot,ward,spot)
     local s=state(bot);if not s then return end;
     s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;
@@ -36,6 +43,7 @@ local function supply(bot)
     end;
     return count;
 end;
+M.Stock=supply;
 function M.TryPurchase(bot)
     local ctx,why=Site.Context(bot);
     if not ctx or ctx.now < -90 then

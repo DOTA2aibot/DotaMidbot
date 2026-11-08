@@ -1,6 +1,7 @@
 # CHANGELOG — MIDBOT
 
 ## v0.3.7-vision — кандидат T026, 2026-11-08
+- Уточнение Artem: один Observer возвращён в стартовую очередь после Tango; последующее пополнение отдельно. Startup gate и передача success/unknown в pending предотвращают гонку/дубли; первая покупка не зависит от mid/геометрии.
 - Radiant mid: один детерминированный bank Observer с геометрическим покрытием руны, без прежнего обязательного cliff3; координаты/фактическая team visibility пишутся после постановки. Фото не выдаётся за точные world coordinates.
 - Убрана закупка sentry; отдельный Observer supply до15:00 на mid, один запас с учётом stash/backpack/own courier, lifetime360с и prefetch30с, unknown pending без дублей. Доставка прежним courier handler.
 - Добавлен безопасный ward-specific equip/restore из backpack, без общей inventory cleanup и без перезаписи BKB/PT/bottle/wand. Движение/AA Valve и изменения рун Олега не трогаются.

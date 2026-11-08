@@ -127,9 +127,10 @@ local function purchaseRoot(s)
     s.env.GetItemComponents=function() return {} end;s.bot.SetNextItemPurchaseValue=function() end;
     local f=assert(loadfile("item_purchase_nevermore.lua"));setfenv(f,s.env);f();
 end;
-test("actual purchase root buys one Observer and then preserves its normal queue",function()
-    local s=scenario();purchaseRoot(s);s.env.ItemPurchaseThink();eq(s.buys[1],"item_ward_observer");
-    s:item("item_ward_observer",9);s.time=1;s.env.ItemPurchaseThink();eq(s.buys[2],"item_tango");
+test("actual purchase root buys one starting Observer before allowing refill",function()
+    local s=scenario();purchaseRoot(s);s.env.ItemPurchaseThink();eq(s.buys[1],"item_tango");
+    s.time=.5;s.env.ItemPurchaseThink();s.time=1;s.env.ItemPurchaseThink();eq(s.buys[2],"item_ward_observer");
+    s:item("item_ward_observer",9);s.time=1.5;s.env.ItemPurchaseThink();s.time=2;s.env.ItemPurchaseThink();eq(s.buys[3],"item_branches");
     assert(not table.concat(s.logs,"\n"):find("ERROR",1,true));
 end);
 test("existing courier callback fetches the Observer from stash",function()
@@ -147,5 +148,44 @@ test("disabled wards or diagnostic profile cannot buy or place fixed observers",
         eq(s:vision("supply").TryPurchase(s.bot),false);s:item("item_ward_observer",0);
         eq(s:mod("wards").Tick(s.bot,s.state),false);eq(#s.buys,0);eq(#s.orders,0);
     end;
+end);
+local function startQueue(s)
+    purchaseRoot(s);s.env.ItemPurchaseThink();s.time=s.time+.5;s.env.ItemPurchaseThink();s.time=s.time+.5;s.env.ItemPurchaseThink();
+end;
+local function wardPurchases(s)
+    local n=0;for _,name in ipairs(s.buys) do if name=="item_ward_observer" then n=n+1 end;assert(name~="item_ward_sentry") end;return n;
+end;
+test("starting Observer is bought on the fountain before mid or geometry checks",function()
+    local s=scenario();s.time=-70;s.bot.x=-7000;s.env.GetHeightLevel=nil;
+    startQueue(s);eq(s.buys[1],"item_tango");eq(s.buys[2],"item_ward_observer");eq(wardPurchases(s),1);
+end);
+test("unknown starting result advances the normal queue without duplicate Observer",function()
+    for _,variant in ipairs({"nil","error","nan","false"}) do
+        local s=scenario();local original=s.bot.ActionImmediate_PurchaseItem;
+        s.bot.ActionImmediate_PurchaseItem=function(bot,name)
+            local result=original(bot,name);if name~="item_ward_observer" then return result end;
+            if variant=="error" then error("unknown after effect") elseif variant=="nan" then return 0/0
+            elseif variant=="false" then return false end;return nil;
+        end;
+        startQueue(s);for _,t in ipairs({1.5,2,30,100}) do s.time=t;s.env.ItemPurchaseThink() end;
+        eq(wardPurchases(s),1);eq(s.buys[3],"item_branches");
+    end;
+end);
+test("existing starting Observer or dispenser skips the queued copy",function()
+    for _,slot in ipairs({0,6,9}) do local s=scenario();s:item("item_ward_dispenser",slot,{charges=1,secondary=0});
+        startQueue(s);s.time=2;s.env.ItemPurchaseThink();eq(wardPurchases(s),0);
+    end;
+end);
+test("starting stock failure hands off to refill without blocking the build",function()
+    local s=scenario();local original=s.bot.ActionImmediate_PurchaseItem;
+    s.bot.ActionImmediate_PurchaseItem=function(bot,name) local result=original(bot,name);if name=="item_ward_observer" then return 100 end;return result end;
+    startQueue(s);s.time=2;s.env.ItemPurchaseThink();eq(s.buys[3],"item_branches");eq(wardPurchases(s),1);
+    s.time=31;s.env.ItemPurchaseThink();eq(wardPurchases(s),2);
+end);
+test("temporary starting ward failures do not defer its ownership behind late items",function()
+    local s=scenario();s.bot.x=-7000;local original=s.bot.ActionImmediate_PurchaseItem;
+    s.bot.ActionImmediate_PurchaseItem=function(bot,name) local result=original(bot,name);if name=="item_ward_observer" then return 4 end;return result end;
+    purchaseRoot(s);for i=0,29 do s.time=i*.5;s.env.ItemPurchaseThink() end;
+    eq(wardPurchases(s),20);assert(s.buys[#s.buys]~="item_ward_observer");
 end);
 print("VISION PASSED "..count.." cases (mock API; real rune vision unverified)");

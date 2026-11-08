@@ -6,9 +6,9 @@ local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, не вызывать магазин каждый кадр
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
 local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> скипаем предмет, не встаём насмерть
--- T026: жёлтый вард покупает отдельный vision supply; синие не покупаем.
+-- T026: один стартовый Observer, дальнейшее пополнение — vision supply.
 local tableItemsToBuy = {
-	"item_tango",
+	"item_tango", "item_ward_observer",
 	"item_branches", "item_branches", "item_bottle", "item_flask",
 	"item_wraith_band", "item_magic_wand",
 	"item_power_treads", "item_dragon_lance", "item_black_king_bar", "item_desolator",
@@ -18,6 +18,7 @@ local pendingComponents = nil;
 local nextAttemptTime = -math.huge;
 local lastMessage = nil;
 local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
+local startupObserverPending = true; -- supply не конкурирует со стартовой очередью
 local ManaEconomy;
 local VisionSupply;
 do
@@ -176,7 +177,7 @@ function ItemPurchaseThinkInner( bot )
 	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
 	-- сначала забираем их курьером, потом продолжаем покупки.
 	ConsiderCourierDelivery( bot );
-    if VisionSupply then
+    if VisionSupply and not startupObserverPending then
         local ok,attempted=pcall(VisionSupply.TryPurchase,bot);
         if ok and attempted then return end;
     end;
@@ -197,6 +198,10 @@ function ItemPurchaseThinkInner( bot )
 		return;
 	end
 	local target = tableItemsToBuy[1];
+    if target=="item_ward_observer" and pendingComponents==nil and VisionSupply then
+        local ok,n=pcall(VisionSupply.Stock,bot);
+        if ok and type(n)=="number" and n>0 then pendingComponents={} end;
+    end;
 	if target == "item_flask" and pendingComponents == nil and ManaEconomy then
 		local ok, skip = pcall( ManaEconomy.SkipFlask, bot );
 		if ok and skip then
@@ -214,6 +219,7 @@ function ItemPurchaseThinkInner( bot )
 		pendingComponents = plan;
 	end
 	if ( #pendingComponents == 0 ) then
+		if target=="item_ward_observer" then startupObserverPending=false end;
 		table.remove( tableItemsToBuy, 1 );
 		pendingComponents = nil;
 		componentFailures = 0;
@@ -231,7 +237,17 @@ function ItemPurchaseThinkInner( bot )
 	end
 	bot:SetNextItemPurchaseValue( cost );
 	if ( bot:GetGold() < cost ) then return end;
-	local result = bot:ActionImmediate_PurchaseItem( component );
+    local result;
+    if target=="item_ward_observer" then
+        local ok,value=pcall(function() return bot:ActionImmediate_PurchaseItem(component) end);
+        if VisionSupply then pcall(VisionSupply.StartupAttempt,bot,ok and value or nil) end;
+        if not ok or type(value)~="number" or value~=value or math.abs(value)==math.huge then
+            -- Unknown can follow a real purchase. Advance the queue, keep the
+            -- supply pending guard; do not retry the same starting ward.
+            pendingComponents={};Report("startup_observer_pending outcome=unknown");return;
+        end;
+        result=value;
+    else result=bot:ActionImmediate_PurchaseItem(component) end;
 	Report( "target=" .. target .. " item=" .. component .. " result=" .. tostring( result ) );
 	if ( result == PURCHASE_ITEM_SUCCESS ) then
 		table.remove( pendingComponents, 1 );
@@ -246,6 +262,7 @@ function ItemPurchaseThinkInner( bot )
 		or ( PURCHASE_ITEM_INVALID_ITEM_NAME ~= nil and result == PURCHASE_ITEM_INVALID_ITEM_NAME )
 		or ( PURCHASE_ITEM_DISALLOWED_ITEM ~= nil and result == PURCHASE_ITEM_DISALLOWED_ITEM ) ) then
 		Report( "skip target=" .. target .. " reason=unavailable result=" .. tostring( result ) );
+		if target=="item_ward_observer" then startupObserverPending=false end;
 		pendingComponents = nil;
 		componentFailures = 0;
 		table.remove( tableItemsToBuy, 1 );
@@ -262,6 +279,8 @@ function ItemPurchaseThinkInner( bot )
 		pendingComponents = nil;
 		componentFailures = 0;
 		table.remove( tableItemsToBuy, 1 );
-		table.insert( tableItemsToBuy, target );
+        if target=="item_ward_observer" then
+            startupObserverPending=false; -- дальнейшие попытки принадлежат supply
+        else table.insert(tableItemsToBuy,target) end;
 	end
 end
