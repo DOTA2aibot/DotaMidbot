@@ -26,6 +26,16 @@ local componentFailures = 0; -- подряд неудачные попытки �
 ----------------------------------------------------------------------------------------------------
 local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
 local nextCourierCheck = -math.huge;
+local nextCourierDiag = -math.huge; -- T022: раз в 15 сек печатаем, ПОЧЕМУ не отправили
+
+-- T022: диагностика молчания доставки (матч 9081927137: манго лежал в стэше,
+-- слот 9, а строк "courier:" в логе ноль — значит, где-то ранний выход).
+local function CourierDiag( bot, reason )
+	local now = GameTime();
+	if ( now < nextCourierDiag ) then return end;
+	nextCourierDiag = now + 15.0;
+	Report( "courier_skip reason=" .. reason );
+end
 
 -- Слоты 9-14 у бота — стэш (0-5 инвентарь, 6-8 рюкзак). GetItemInSlot
 -- есть и в тестовой фикстуре, поэтому скан слотов безопаснее GetStashValue.
@@ -43,23 +53,29 @@ local function ConsiderCourierDelivery( bot )
 	if ( now < nextCourierCheck ) then return end;
 	nextCourierCheck = now + COURIER_CHECK_INTERVAL;
 	if ( not HasStashItems( bot ) ) then return end;
-	for index = 0, GetNumCouriers() - 1 do
+	local nCouriers = GetNumCouriers();
+	if ( nCouriers == 0 ) then CourierDiag( bot, "no_couriers" ); return end;
+	for index = 0, nCouriers - 1 do
 		local courier = GetCourier( index );
 		if ( courier ~= nil and courier:GetPlayerID() == bot:GetPlayerID() ) then
 			-- Курьер может быть занят другим героем: шлём только из состояния
 			-- покоя/базы. Метод может отсутствовать в моке тестов — тогда
 			-- осторожно не шлём вовсе (fail-closed).
-			if ( type( courier.GetCourierState ) ~= "function" ) then return end;
+			if ( type( courier.GetCourierState ) ~= "function" ) then CourierDiag( bot, "no_state_method" ); return end;
 			local state = courier:GetCourierState();
 			if ( state == COURIER_STATE_IDLE or state == COURIER_STATE_AT_BASE ) then
 				local ok = pcall( function()
 					bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
 				end );
 				if ( ok ) then Report( "courier: take_and_transfer (stash not empty)" ); end
+				if ( not ok ) then CourierDiag( bot, "send_failed" ); end
+			else
+				CourierDiag( bot, "courier_busy state=" .. tostring( state ) );
 			end
 			return; -- свой курьер один, дальше чужие
 		end
 	end
+	CourierDiag( bot, "no_own_courier total=" .. nCouriers );
 end
 
 local function Report( message )

@@ -122,7 +122,26 @@ local SKILL_ORDER = {
 
 function LevelUpThink( npcBot )
 
-	if ( npcBot:GetAbilityPoints() < 1 ) then return end;
+	-- T022: свой учёт очков. Матч 9081927137 (патч с бесплатными талантами
+	-- 10/15/20/25): в логе НОЛЬ строк [MIDBOT levelup], при этом способности
+	-- прокачивались — это движок автокачает по СТАРОМУ дефолтному билду
+	-- (без frenzy), потому что GetAbilityPoints() у бота в этом окружении
+	-- всегда 0 (все observer-снапшоты: ability_points=0). Считаем сами:
+	-- очко за каждый уровень героя, таланты бесплатные (Олег, 08.11).
+	-- Рейзы 2/3 зеркалят первый — считаем только shadowraze1.
+	local nPoints = npcBot:GetAbilityPoints();
+	if ( nPoints < 1 )
+	then
+		local nSpent = 0;
+		for _, sName in ipairs( { "nevermore_shadowraze1", "nevermore_frenzy",
+			"nevermore_requiem", "nevermore_dark_lord", "special_bonus_attributes" } )
+		do
+			local ab = npcBot:GetAbilityByName( sName );
+			if ( ab ~= nil ) then nSpent = nSpent + ab:GetLevel(); end
+		end
+		if ( npcBot:GetLevel() <= nSpent ) then return end; -- очков нет
+		-- Движок мог уже автокачать что-то своё — nSpent это учитывает.
+	end
 
 	local seen = {};
 	for _, sName in ipairs( SKILL_ORDER )
@@ -344,6 +363,28 @@ function ItemUsageThinkInner( npcBot )
 				print( "[MIDBOT item] bottle sip mana=" .. npcBot:GetMana() .. " hp%=" .. hpPct );
 				return;
 			end
+		end
+	end
+
+	-- Манго (T022): экономика GPT его покупает, но использовать некому.
+	-- Экстренная мана перед кастом: враг рядом, маны нет на рейз, ботл пуст/занят.
+	-- Манго — consumable без цели, работает только из инвентаря (слоты 0-5,
+	-- из стэша не съесть — поэтому доставка курьером критична).
+	local nMangoSlot = npcBot:FindItemSlot( "item_enchanted_mango" );
+	if ( nMangoSlot >= 0 and nMangoSlot <= 5 )
+	then
+		local itemMango = npcBot:GetItemInSlot( nMangoSlot );
+		if ( itemMango ~= nil
+			and itemMango:IsFullyCastable()
+			and npcBot:GetMana() < RAZE_MANA_COST
+			and GetBottleCharges( npcBot ) == 0
+			and bEnemyClose )
+		then
+			Observe( "BeforeAction", npcBot, itemMango );
+			npcBot:Action_UseAbility( itemMango );
+			Observe( "Action", npcBot, "item_use", itemMango, nil, "t022_mango_emergency_mana" );
+			print( "[MIDBOT item] mango mana=" .. npcBot:GetMana() );
+			return;
 		end
 	end
 
