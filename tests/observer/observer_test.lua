@@ -224,10 +224,14 @@ test( "opt-in ward places in range and observes resulting ward", function()
     s.time = 100.1; s.entry.Tick( s.bot );
     assert( table.concat( s.logs, "\n" ):find( '"kind":"ward_observed"', 1, true ) );
 end );
-test( "nearby enemy and native movement each prevent ward use", function()
+test( "nearby enemy and busy action each prevent ward use", function()
     local s = scenario(); s:ward_item(); s.enemies = { s.enemy };
     local p, why = s.ward.Plan( s.bot, s.core.State( s.bot ) ); eq( p, nil ); eq( why, "ward_enemy_nearby" );
+    -- T024: MOVE_TO (2) больше НЕ блокирует вард — иначе на линии он не ставился
+    -- никогда (бот почти не бывает IDLE). Неизвестное/боевое действие блокирует.
     s.enemies = {}; s.action = 2; p, why = s.ward.Plan( s.bot, s.core.State( s.bot ) );
+    eq( why, nil ); assert( p ~= nil );
+    s.action = 99; p, why = s.ward.Plan( s.bot, s.core.State( s.bot ) );
     eq( p, nil ); eq( why, "ward_preserve_native_action" );
 end );
 test( "an existing observer suppresses a redundant ward", function()

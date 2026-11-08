@@ -35,9 +35,14 @@ function M.Plan( bot, s )
     local mode = A.Call( bot, "GetActiveMode" );
     if BOT_MODE_RETREAT == nil or not A.Number( mode ) or mode == BOT_MODE_RETREAT then return nil, "ward_retreat_or_mode_unknown" end;
     local current = A.Call( bot, "GetCurrentActionType" );
-    local idle = current ~= nil and ( ( BOT_ACTION_TYPE_IDLE ~= nil and current == BOT_ACTION_TYPE_IDLE )
-        or ( BOT_ACTION_TYPE_NONE ~= nil and current == BOT_ACTION_TYPE_NONE ) );
-    if not idle then return nil, "ward_preserve_native_action" end;
+    -- T024 (Олег 08.11): бот почти никогда не IDLE на линии, поэтому вард не
+    -- ставился вообще. Разрешаем прервать и обычное ПЕРЕДВИЖЕНИЕ (MOVE_TO) —
+    -- движок штатно перевыдаст приказ на следующем тике, а спам режет
+    -- ward_interval_s. Атаки/касты/pickup по-прежнему не трогаем.
+    local interruptible = current ~= nil and ( ( BOT_ACTION_TYPE_IDLE ~= nil and current == BOT_ACTION_TYPE_IDLE )
+        or ( BOT_ACTION_TYPE_NONE ~= nil and current == BOT_ACTION_TYPE_NONE )
+        or ( BOT_ACTION_TYPE_MOVE_TO ~= nil and current == BOT_ACTION_TYPE_MOVE_TO ) );
+    if not interruptible then return nil, "ward_preserve_native_action" end;
     local enemies = A.Call( bot, "GetNearbyHeroes", C.ward_enemy_radius, true, BOT_MODE_NONE );
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( enemies ) ~= "table" or type( towers ) ~= "table" then return nil, "ward_safety_unknown" end;
