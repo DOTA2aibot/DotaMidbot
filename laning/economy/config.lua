@@ -26,6 +26,13 @@ return {
     -- 3500 (весь мид), без cap 15 минут, близкие крипы не блокируют. Опасность
     -- (враги/вышки/hp/taken) по-прежнему отменяет поход.
     rune_bottle_mana = 90, rune_distance_desperate = 3500,
+    -- T028 (матч 9082444290): движок молча отклоняет Action_PickUpRune до спавна
+    -- руны и часто издалека (8 перевыдач за 8с в IDLE). Теперь к точке ИДЁМ через
+    -- MoveToLocation, PickUp отдаём только ближе rune_pickup_range. Таймаут
+    -- попытки = distance/280+3 (мин 8, макс 15); после реального старта pickup
+    -- движком продлеваем ещё на rune_commit_extend_s (t=122.5: живой pickup
+    -- убит таймаутом у порога руны).
+    rune_pickup_range = 900, rune_commit_extend_s = 6,
     mana_fraction = 0.35, mana_missing = 100, mana_window_end = 600,
     mana_purchase_interval = 90, mana_attempt_interval = 5,
     mana_max_purchases = 3, mana_max_gold = 200,
