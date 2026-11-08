@@ -10,8 +10,29 @@ function M.Decide( bot )
     if not Actor.Real(bot) then return nil,"not_real_sf" end;
     local now = A.Time();
     if Profile.economy_enabled ~= true then return nil, "profile_disabled" end;
-    if not now or now < 0 or now > C.rune_window_end then return nil, "outside_rune_window" end;
     local prior = states[bot];
+    -- T027 (гайд Олега 09.11): пустая бутылка (0 зарядов) + маны меньше одного
+    -- рейза (< rune_bottle_mana) + потенциальная руна = идём ВСЕГДА: слепое окно
+    -- шире (tmod >= 100), дистанция до rune_distance_desperate, без cap 15 минут,
+    -- близкие крипы не блокируют. Гейты опасности (враги рядом/у руны, вышки,
+    -- hp, taken, combat/retreat) продолжают работать — «если руну забрали или
+    -- нас убивают» поход отменяется.
+    local desperate = false;
+    local mana0 = A.Call( bot, "GetMana" );
+    if A.Number( mana0 ) and mana0 < C.rune_bottle_mana then
+        for slot = 0, 5 do
+            local item = A.Call( bot, "GetItemInSlot", slot );
+            if item ~= nil then
+                local okn, name = pcall( function() return item:GetName() end );
+                if okn and name == "item_bottle" then
+                    local okc, charges = pcall( function() return item:GetCurrentCharges() end );
+                    desperate = ( okc and A.Number( charges ) and charges <= 0 ) or false;
+                    break;
+                end;
+            end;
+        end;
+    end;
+    if not now or now < 0 or ( now > C.rune_window_end and not desperate ) then return nil, "outside_rune_window" end;
     if prior and now < ( prior.retry_after or -math.huge ) then return nil, "rune_retry_cooldown" end;
     if prior and prior.owned_order and prior.started_at and now - prior.started_at >= C.rune_order_timeout_s then
         return nil, "rune_pickup_timeout";
@@ -75,11 +96,14 @@ function M.Decide( bot )
     -- T022: блокируют только крипы ВПЛОТНУЮ к боту (rune_creep_block_radius).
     -- Раньше любой видимый крип в lane_radius=1200 отменял руну — на миде крипы
     -- видны почти всегда, поэтому desire ни разу не поднялся выше 0.
+    -- T027: при пустой бутылке и низкой мане крипы не блокируют поход вовсе.
     local bp0 = A.Position( bot );
-    for _, creep in ipairs( creeps ) do
-        if A.Visible( creep ) then
-            local cp = A.Position( creep );
-            if not cp or not bp0 or A.Distance( bp0, cp ) <= C.rune_creep_block_radius then return nil, "lane_creeps_first" end;
+    if not desperate then
+        for _, creep in ipairs( creeps ) do
+            if A.Visible( creep ) then
+                local cp = A.Position( creep );
+                if not cp or not bp0 or A.Distance( bp0, cp ) <= C.rune_creep_block_radius then return nil, "lane_creeps_first" end;
+            end;
         end;
     end;
     local target = A.Call( bot, "GetTarget" );
@@ -134,6 +158,10 @@ function M.Decide( bot )
     -- чтобы бот встречал руну, а не реагировал постфактум.
     local tmod = now % 120;
     local blind_window = now >= 110 and ( tmod >= 110 or tmod <= 45 );
+    -- T027: с пустой бутылкой выходим ещё раньше (tmod >= 100, ~20с на дальний
+    -- подход) и достаём руны с любой позиции на миде.
+    if desperate then blind_window = now >= 100 and ( tmod >= 100 or tmod <= 45 ) end;
+    local max_distance = desperate and C.rune_distance_desperate or C.rune_distance;
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( towers ) ~= "table" then return nil, "tower_data_unknown" end;
     local best, distance;
@@ -165,7 +193,7 @@ function M.Decide( bot )
         local fail = nil;
         if not ( valid and location and A.Number( d ) ) then fail = "spawn_location_unknown"
         elseif not safe then fail = "unsafe"
-        elseif d > C.rune_distance then fail = "too_far"
+        elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
         elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
         elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
@@ -185,7 +213,8 @@ function M.Decide( bot )
         local dd = ( dmin < math.huge ) and tostring( math.floor( dmin ) ) or "?";
         return nil, "no_nearby_river_rune:" .. dwhy .. ":d=" .. dd;
     end;
-    return { rune = best, distance = distance, desire = C.rune_desire }, "nearby_river_rune_after_lane";
+    return { rune = best, distance = distance, desire = C.rune_desire },
+        desperate and "bottle_empty_rune_run" or "nearby_river_rune_after_lane";
 end;
 function M.Report( bot, plan, reason )
     local now = A.Time(); if not now then return end;

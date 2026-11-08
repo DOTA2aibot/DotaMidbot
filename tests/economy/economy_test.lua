@@ -190,6 +190,29 @@ test( "missing rune spawn API reports spawn_location_unknown, not none_checked",
     local plan, reason = s.rune_policy.Decide( s.bot );
     eq( plan, nil ); eq( reason, "no_nearby_river_rune:spawn_location_unknown:d=?" );
 end );
+test( "empty bottle and low mana always pursue a potential rune", function()
+    -- T027 (Олег 09.11): 0 зарядов бутылки + маны < 90 + потенциальная руна = идём.
+    local s = scenario(); s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    s.time = 460; s.visible = false; -- tmod=100: раньше обычного слепого окна
+    local plan, reason = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );
+    eq( reason, "bottle_empty_rune_run" );
+    s.time = 1000; assert( s.rune_policy.Decide( s.bot ) ); -- cap 15 минут не действует
+    s.mana = 200; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- мана есть: не desperate, окно закрыто
+end );
+test( "empty bottle run ignores close creeps but respects danger and taken runes", function()
+    local s = scenario(); s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    s.creeps = { s:unit() }; -- вплотную: обычно блокирует
+    assert( s.rune_policy.Decide( s.bot ) ); -- desperate: крипы не блокируют
+    s.enemies = { s:unit() }; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- враг рядом: опасность блокирует
+    s.enemies = {}; s.status = 3; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- руну забрали на глазах
+end );
+test( "empty bottle extends the rune search distance", function()
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 2400, y = 0 } end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- 2400 > 2200
+    s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    assert( s.rune_policy.Decide( s.bot ) ); -- 2400 <= 3500
+    s.items[0] = s:item( "item_bottle", 3 ); eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- полная бутылка: обычный лимит
+end );
 test( "blind power rune window pursues unseen rune after six minutes", function()
     local s = scenario(); s.time = 370; s.visible = false; s.status = 3; -- окно 6:05-6:45, руна не видна
     local plan = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );

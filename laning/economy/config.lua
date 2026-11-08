@@ -21,6 +21,11 @@ return {
     -- T024b: grace держит desire, пока движок начинает наш pickup (матч 9082231706:
     -- схлопывание через 0.13с); timeout 8с — пешком до дальней руны ~1100 ед. ≈ 3.5с.
     rune_order_timeout_s = 8, rune_order_grace_s = 3, rune_retry_s = 10,
+    -- T027 (Олег 09.11): пустая бутылка (0 зарядов) + маны < 90 (меньше одного
+    -- рейза) + потенциальная руна = идём всегда: окно tmod>=100, дистанция до
+    -- 3500 (весь мид), без cap 15 минут, близкие крипы не блокируют. Опасность
+    -- (враги/вышки/hp/taken) по-прежнему отменяет поход.
+    rune_bottle_mana = 90, rune_distance_desperate = 3500,
     mana_fraction = 0.35, mana_missing = 100, mana_window_end = 600,
     mana_purchase_interval = 90, mana_attempt_interval = 5,
     mana_max_purchases = 3, mana_max_gold = 200,
