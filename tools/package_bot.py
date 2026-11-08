@@ -6,21 +6,29 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
+import time
 import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
-PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True)}
+PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
+            'valve_wards': ('valve_native', False)}
 
 
-def profile_source(profile):
+def profile_source(profile, revision='uncommitted'):
+    if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', revision):
+        raise ValueError('Revision must be a plain ASCII identifier or commit SHA')
     controller, enabled = PROFILES[profile]
     return (f'return {{ name = "{profile}", controller = "{controller}", '
-            f'runtime_enabled = {str(enabled).lower()} }};\n').encode('utf-8')
+            f'runtime_enabled = {str(enabled).lower()}, '
+            f'observer_enabled = {str(not enabled).lower()}, '
+            f'wards_enabled = {str(profile == "valve_wards").lower()}, '
+            f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
 def sha(data):
@@ -32,7 +40,7 @@ def below(path, parent):
     return path
 
 
-def collect(profile, root=ROOT):
+def collect(profile, root=ROOT, revision='uncommitted'):
     if profile not in PROFILES:
         raise ValueError('Unknown controller profile')
     # Source tree itself is the play layout; the old root entry must be removed.
@@ -46,7 +54,7 @@ def collect(profile, root=ROOT):
         if path.is_symlink():
             raise ValueError('Source links are not supported')
         files[path.relative_to(root).as_posix()] = path.read_bytes()
-    files['laning/profile.lua'] = profile_source(profile)
+    files['laning/profile.lua'] = profile_source(profile, revision)
     if profile == 'lane_probe':
         source = root / 'profiles/lane_probe' / PROBE_ENTRY
         below(source, root)
@@ -55,18 +63,19 @@ def collect(profile, root=ROOT):
 
 
 def build(profile, output, revision='uncommitted', root=ROOT):
-    files = collect(profile, root)
+    files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.2', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.3', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
+        'observer_enabled': not enabled, 'wards_enabled': profile == 'valve_wards',
         'source_revision': revision, 'revision_claim_verified_by_packager': False,
         'dota_execution_verified': False, 'clean_folder_install_required': True,
         'results_attribution': 'Valve movement/attacks + MIDBOT abilities/purchases'
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.2 / PROFILE: %s
+    readme = '''MIDBOT v0.3.3 / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
@@ -75,6 +84,7 @@ The installer in tools/package_bot.py --install performs a checked backup + repl
 Start a NEW match after installation; hot reload is not a supported profile switch.
 
 valve_play: native engine movement/attacks; custom abilities and purchases.
+valve_wards: same baseline + opt-in in-range mid ward placement test.
 lane_probe: existing diagnostic controller, one attack and a 600-second lane window.
 This bundle does not fix extra bot slots or claim any measured LH/hit-rate result.
 Game execution must be verified in the installed client.
@@ -108,12 +118,14 @@ def verify(path):
         controller, enabled = PROFILES[profile]
         if manifest['controller'] != controller or manifest['runtime_enabled'] is not enabled:
             raise ValueError('Profile metadata mismatch')
+        if manifest.get('observer_enabled') is not (not enabled) or manifest.get('wards_enabled') is not (profile == 'valve_wards'):
+            raise ValueError('Observer/ward profile mismatch')
         files = manifest['files_sha256']
         if set(names) != {'MANIFEST.json', 'INSTALL.txt'} | {'bots/' + n for n in files}:
             raise ValueError('Archive and manifest file sets differ')
         if not set(ROOT_LUA).issubset(files):
             raise ValueError('Missing hero/ability/purchase entry')
-        if archive.read('bots/laning/profile.lua') != profile_source(profile):
+        if archive.read('bots/laning/profile.lua') != profile_source(profile, manifest['source_revision']):
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
         if entries != ({PROBE_ENTRY} if enabled else set()):
@@ -161,14 +173,25 @@ def install(archive_path, game_dir, check_running=True):
                 raise ValueError('Staged verification failed')
     (stage / 'MIDBOT-INSTALL.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     had_previous = target.exists()
+    def rename_checked(source, destination):
+        below(source, game); below(destination, game)
+        # Windows indexing/AV can briefly lock a just-written directory.
+        for delay in (0.05, 0.1, 0.2, None):
+            try:
+                source.rename(destination)
+                return
+            except PermissionError:
+                if delay is None:
+                    raise
+                time.sleep(delay)
     # Both resolved absolute rename targets have been checked within this game directory.
     if had_previous:
-        target.rename(backup)
+        rename_checked(target, backup)
     try:
-        stage.rename(target)
+        rename_checked(stage, target)
     except Exception:
         if had_previous:
-            backup.rename(target)
+            rename_checked(backup, target)
         raise
     return {'installed': str(target), 'profile': manifest['profile'],
             'previous_bots_backup': str(backup) if had_previous else None,

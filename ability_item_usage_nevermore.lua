@@ -25,6 +25,29 @@ local abilityRaze = { nil, nil, nil };
 local abilityRequiem = nil;
 local abilityFeast = nil; -- Feast of Souls (7.4x): самобафф, скорость атаки/передвижения
 local bAbilitiesInit = false;
+local Observer, nextObserverWarning = nil, -math.huge;
+do
+    local ok, helper = pcall( require, GetScriptDirectory() .. "/laning/observer/entry" );
+    if ok then Observer = helper
+    else pcall( print, "[MIDBOT observer WARN] observer module unavailable; gameplay continues" ) end;
+end
+local function Observe( method, ... )
+    if Observer and type( Observer[method] ) == "function" then
+        local ok = pcall( Observer[method], ... );
+        if not ok then
+            local valid, now = pcall( function() return GameTime() end );
+            if valid and type( now ) == "number" and now >= nextObserverWarning then
+                pcall( print, "[MIDBOT observer WARN] " .. method .. " failed; gameplay continues" );
+                nextObserverWarning = now + 10;
+            end;
+        end;
+    end;
+end
+local function TrackedCast( bot, ability, reason )
+    Observe( "BeforeAction", bot, ability );
+    bot:Action_UseAbility( ability );
+    Observe( "Action", bot, "cast", ability, nil, reason );
+end
 
 ----------------------------------------------------------------------------------------------------
 -- Интеграция T007 x T016 (план следующего этапа, п.4; ревью GPT по PR #23).
@@ -155,6 +178,7 @@ function AbilityUsageThink()
 
 	local npcBot = GetBot();
 	if ( npcBot == nil ) then return end;
+	Observe( "Tick", npcBot ); -- read-only, 1Hz sample; работает и во время using/retreat
 
 	-- Диагностическая обёртка: в логе 08.11 были «Script Runtime Error: error in
 	-- error handling» без указания источника. Теперь наши ошибки печатаются
@@ -200,7 +224,7 @@ function AbilityUsageThinkInner( npcBot )
 	local desireReq, targetReq = ConsiderRequiem( npcBot );
 	if ( desireReq > 0 )
 	then
-		npcBot:Action_UseAbility( abilityRequiem );
+		TrackedCast( npcBot, abilityRequiem, "existing_requiem_rule" );
 		return;
 	end
 
@@ -215,7 +239,7 @@ function AbilityUsageThinkInner( npcBot )
 	-- 3. Feast of Souls — самобафф перед дракой или под пачку крипов
 	if ( ConsiderFeastOfSouls( npcBot ) > 0 )
 	then
-		npcBot:Action_UseAbility( abilityFeast );
+		TrackedCast( npcBot, abilityFeast, "existing_frenzy_rule" );
 		return;
 	end
 
@@ -226,6 +250,7 @@ function AbilityUsageThinkInner( npcBot )
 		CastRaze( npcBot, farmAbility, locFarm );
 		return;
 	end
+	Observe( "AfterAbilities", npcBot ); -- отдельный opt-in ward profile; без перемещений
 
 end
 
@@ -276,13 +301,13 @@ function CastRaze( npcBot, razeAbility, vLoc )
 		local vImpact = GetCurrentRazeImpact( npcBot, i );
 		if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
 		then
-			npcBot:Action_UseAbility( razeAbility );
+			TrackedCast( npcBot, razeAbility, "existing_raze_geometry_verified" );
 			return;
 		end
 	elseif ( npcBot:IsFacingLocation( vLoc, 5 ) )
 	then
 		-- Запасной вариант (способность не из abilityRaze): жёсткий допуск 5°
-		npcBot:Action_UseAbility( razeAbility );
+		TrackedCast( npcBot, razeAbility, "existing_raze_facing_fallback" );
 		return;
 	end
 
@@ -308,6 +333,7 @@ function CastRaze( npcBot, razeAbility, vLoc )
 	if ( IsLocationPassable( vStep ) )
 	then
 		npcBot:Action_MoveDirectly( vStep ); -- прямой микрошаг, без построения пути
+		Observe( "Action", npcBot, "existing_face_move", nil, vStep, "existing_raze_turn" );
 		nNextFaceTime = now + RAZE_FACE_THROTTLE;
 	end
 end

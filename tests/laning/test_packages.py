@@ -61,6 +61,15 @@ class Packages(unittest.TestCase):
             self.assertEqual(z.read('bots/' + package.PROBE_ENTRY),
                              (ROOT / 'profiles/lane_probe' / package.PROBE_ENTRY).read_bytes())
 
+    def test_wards_are_an_explicit_profile_and_never_enable_lane_runtime(self):
+        info = package.verify(self.bundle('valve_wards'))
+        self.assertTrue(info['observer_enabled']); self.assertTrue(info['wards_enabled'])
+        self.assertFalse(info['runtime_enabled']); self.assertNotIn(package.PROBE_ENTRY, info['files_sha256'])
+
+    def test_default_play_keeps_ward_actions_disabled(self):
+        info = package.verify(self.bundle())
+        self.assertTrue(info['observer_enabled']); self.assertFalse(info['wards_enabled'])
+
     def test_install_replaces_stale_probe_and_preserves_backup(self):
         game = self.fake_game()
         old = game / 'scripts/vscripts/bots'
@@ -97,6 +106,21 @@ class Packages(unittest.TestCase):
             with self.assertRaisesRegex(OSError, 'simulated'):
                 package.install(archive, game, check_running=False)
         self.assertEqual((old / 'original.lua').read_text(), 'original contents')
+
+    def test_temporary_windows_rename_lock_is_retried_without_losing_backup(self):
+        game = self.fake_game(); old = game / 'scripts/vscripts/bots'; old.mkdir(parents=True)
+        (old / 'original.lua').write_text('preserved')
+        archive = self.bundle(); rename = Path.rename; attempts = []
+        def locked(path, destination):
+            if path.name.startswith('.midbot-stage-'):
+                attempts.append(path)
+                if len(attempts) < 3:
+                    raise PermissionError('temporary Windows lock')
+            return rename(path, destination)
+        with mock.patch.object(Path, 'rename', locked), mock.patch.object(package.time, 'sleep'):
+            result = package.install(archive, game, check_running=False)
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual((Path(result['previous_bots_backup']) / 'original.lua').read_text(), 'preserved')
 
     def test_unlisted_entry_is_rejected_before_install(self):
         path = self.bundle()
