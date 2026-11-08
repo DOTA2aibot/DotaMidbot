@@ -17,7 +17,7 @@ local heroes_pool = {
 -- Имена ботов в игре: первый (наш SF) помечен, чтобы сразу было видно, что это наш
 function GetBotNames()
 	return {
-		"MIDBOT v0.2",
+		"MIDBOT v0.3",
 		"MIDBOT teammate 2",
 		"MIDBOT teammate 3",
 		"MIDBOT teammate 4",

@@ -1,9 +1,9 @@
--- Кандидат v0.2: контролируемый mid probe, не полный farming/release.
+-- Кандидат v0.3: контролируемый mid probe, не полный farming/release.
 return {
     operation = "lane_probe", -- observe | lane_probe | probe_attack | probe_raze | execute
     stage = "attacks", -- attacks -> raze -> combos; каталог options при этом не перенумеровывается
     option_allowlist = nil, -- для отдельного combo probe можно ограничить, например { [6] = true }
-    build = "T007-lane-stability-candidate", run_id = "lane-probe-01",
+    build = "v0.3-T007-lane-stability-candidate", run_id = "lane-probe-01",
     scan_radius = 1500, collect_interval_s = 0.05, log_interval_s = 1,
     full_records = false, max_damage_queries = 96,
     max_probe_orders = 1, attack_use_proficiency = true,
