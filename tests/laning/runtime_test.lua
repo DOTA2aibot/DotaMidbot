@@ -544,3 +544,73 @@ stabletest( "probe log identifies driver, actual mode, heartbeat ages and diagno
     assert( joined:find( '"reason":"awaiting_ability_plan_ack"', 1, true ) );
 end );
 print( "STABILITY PASSED " .. stability );
+
+local movementTests = 0;
+local function movetest( name, fn ) fn(); movementTests = movementTests + 1; print( "PASS MOVE_RUNTIME " .. name ) end;
+local function positioning( s )
+    s.cfg.lane_positioning = true;
+    local snapshot = s.backend.Snapshot( s.bot );
+    local planner = s.env.require( "bots/laning/advanced/planner" );
+    local config = s.env.require( "bots/laning/advanced/config" );
+    return s.backend.Filter( s.bot, snapshot, planner.Build( snapshot, config ) );
+end
+movetest( "blocked movement is masked before a plan acquires ownership", function()
+    local s = scenario( "lane_probe" ); s.bot.x, s.creep.x, s.impassable = -2000, 1000, true;
+    local p = positioning( s );
+    for _, candidate in ipairs( p.candidates ) do
+        for _, step in ipairs( candidate.steps ) do
+            if step.kind == "move" then eq( candidate.available, false ); eq( candidate.mask_reason, "move_point_impassable" ) end;
+        end;
+    end;
+    eq( p.selected.available, false ); eq( #s.moves, 0 );
+end );
+movetest( "persistent blockage waits instead of repeatedly submitting invalid points", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s ); s.cfg.lane_positioning = true;
+    s.bot.x, s.creep.x, s.impassable = -2000, 1000, true;
+    for i = 1, 25 do frame( s ) end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 );
+    local log = table.concat( s.logs, "\n" );
+    assert( log:find( '"reason":"move_point_impassable"', 1, true ) );
+    assert( not log:find( 'unsupported_order', 1, true ) );
+end );
+movetest( "blocked direct step can choose a checked bounded side step", function()
+    local s = scenario( "lane_probe" ); s.bot.x, s.creep.x = -2000, 1000;
+    s.env.IsLocationPassable = function( v ) return not ( v.x > -1950 and math.abs( v.y ) < 20 ) end;
+    local p = positioning( s ); eq( p.selected.available, true );
+    local step = p.selected.steps[1]; eq( step.kind, "move" );
+    assert( step.location.x > s.bot.x and math.abs( step.location.y ) > 20 );
+    s:own( p.selected.candidate_key );
+    assert( s.backend.Submit( s.bot, { plan_id = "side", step_id = 1, step = step } ) );
+    eq( #s.moves, 1 ); eq( #s.attacks, 0 );
+end );
+movetest( "point becoming blocked after ACK fails with a precise reason", function()
+    local s = scenario( "execute" ); s:own(); s.impassable = true;
+    local ok, reason = s.backend.Submit( s.bot, { step = { kind = "move", location = { x = 250, y = 0 } } } );
+    eq( ok, false ); eq( reason, "move_point_impassable" ); eq( #s.moves, 0 );
+end );
+movetest( "position drift cannot extend an acknowledged step", function()
+    local s = scenario( "execute" ); s:own(); s.bot.x = -100;
+    local ok, reason = s.backend.Submit( s.bot, { step = { kind = "move", location = { x = 250, y = 0 } } } );
+    eq( ok, false ); eq( reason, "move_step_too_long" ); eq( #s.moves, 0 );
+end );
+movetest( "unavailable passability API is a controlled wait", function()
+    local s = scenario( "lane_probe" ); s.bot.x, s.creep.x = -2000, 1000; s.env.IsLocationPassable = false;
+    local p = positioning( s ); eq( p.selected.available, false );
+    eq( p.selected.mask_reason, "move_passability_unavailable" ); eq( #s.moves, 0 );
+end );
+movetest( "throwing passability API cannot crash the driver", function()
+    local s = scenario( "execute" ); s:own();
+    s.env.IsLocationPassable = function() error( "test API failure" ) end;
+    local ok, reason = s.backend.Submit( s.bot, { step = { kind = "move", location = { x = 250, y = 0 } } } );
+    eq( ok, false ); eq( reason, "move_passability_failed" ); eq( #s.moves, 0 );
+end );
+movetest( "compact records include the rejected point and fresh validation phase", function()
+    local s = scenario( "execute" ); s:own(); s.impassable = true;
+    local ok, reason = s.backend.Submit( s.bot, { step = { kind = "move", location = { x = 250, y = 0 } } } );
+    eq( ok, false ); s.backend.Record( s.backend.snapshot, nil, { status = "aborted", reason = reason } );
+    local log = s.logs[#s.logs];
+    assert( log:find( '"movement":', 1, true ) );
+    assert( log:find( '"phase":"submission"', 1, true ) );
+    assert( log:find( '"destination":{"x":250,"y":0}', 1, true ) );
+end );
+print( "MOVE_RUNTIME PASSED " .. movementTests );
