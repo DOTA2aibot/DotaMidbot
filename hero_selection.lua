@@ -6,6 +6,15 @@
 -- Если в команде есть живой игрок — его слот пропускаем, он пикает сам.
 ----------------------------------------------------------------------------------------------------
 
+-- Режим ОДНОГО бота для тестов 1v1 против живого игрока (Олег просил 08.11):
+-- true = в команде будет ТОЛЬКО наш SF, ботов-тиммейтов нет вообще.
+-- Вернуть false, когда снова понадобится полная команда 5x5.
+local SOLO_1V1 = true;
+
+local heroes_pool_solo = {
+	"npc_dota_hero_nevermore",        -- наш мидер, единственный бот
+};
+
 local heroes_pool = {
 	"npc_dota_hero_nevermore",        -- наш мидер
 	"npc_dota_hero_juggernaut",
@@ -16,6 +25,12 @@ local heroes_pool = {
 
 -- Имена ботов в игре: первый (наш SF) помечен, чтобы сразу было видно, что это наш
 function GetBotNames()
+	if ( SOLO_1V1 )
+	then
+		return {
+			"MIDBOT v0.3 SOLO",
+		};
+	end
 	return {
 		"MIDBOT v0.3",
 		"MIDBOT teammate 2",
@@ -28,13 +43,14 @@ end
 function Think()
 
 	local ids = GetTeamPlayers( GetTeam() );
+	local pool = SOLO_1V1 and heroes_pool_solo or heroes_pool;
 	local i = 1;
 
 	for _, id in pairs( ids )
 	do
-		if ( IsPlayerBot( id ) and i <= #heroes_pool )
+		if ( IsPlayerBot( id ) and i <= #pool )
 		then
-			SelectHero( id, heroes_pool[i] );
+			SelectHero( id, pool[i] );
 			i = i + 1;
 		end
 	end
