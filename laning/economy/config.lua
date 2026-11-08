@@ -33,6 +33,10 @@ return {
     -- движком продлеваем ещё на rune_commit_extend_s (t=122.5: живой pickup
     -- убит таймаутом у порога руны).
     rune_pickup_range = 900, rune_commit_extend_s = 6,
+    -- T029: сколько перевыдач pickup ВПЛОТНУЮ к споту после спавна терпим, прежде
+    -- чем признать точку пустой (матч 9082458295, t=297-306: d=1.0, 4 молчаливых
+    -- отказа движка). До спавна ожидание на точке — норма, не считается.
+    rune_close_reject_tries = 4,
     mana_fraction = 0.35, mana_missing = 100, mana_window_end = 600,
     mana_purchase_interval = 90, mana_attempt_interval = 5,
     mana_max_purchases = 3, mana_max_gold = 200,

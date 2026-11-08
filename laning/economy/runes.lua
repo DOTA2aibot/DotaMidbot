@@ -6,6 +6,17 @@ local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local O = require( GetScriptDirectory() .. "/laning/observer/core" );
 local M, states = {}, setmetatable( {}, { __mode = "k" } );
 local function global( name, ... ) return O.Global( name, ... ) end;
+-- T029: эффективный deadline попытки — базовый (distance/280+3) плюс продление
+-- от РЕАЛЬНОГО старта pickup движком. Матч 9082458295, t=130.5: продление
+-- вычислялось только в Think, а GetDesire срабатывал раньше на 0.07с — гонка.
+function M.Deadline( s )
+    local d = s.deadline or ( s.started_at and s.started_at + C.rune_order_timeout_s ) or nil;
+    if d and s.pickup_seen_at then
+        local ext = s.pickup_seen_at + C.rune_commit_extend_s;
+        if ext > d then d = ext end;
+    end;
+    return d;
+end;
 function M.Decide( bot )
     if not Actor.Real(bot) then return nil,"not_real_sf" end;
     local now = A.Time();
@@ -38,8 +49,7 @@ function M.Decide( bot )
     -- продлевается после реального старта pickup движком), а не тупо от первого
     -- приказа — матч 9082444290: pickup, начатый движком после спавна, убивался
     -- ClearActions ровно на 8с у порога руны.
-    local prior_deadline = prior and ( prior.deadline
-        or ( prior.started_at and prior.started_at + C.rune_order_timeout_s ) or nil ) or nil;
+    local prior_deadline = prior and M.Deadline( prior ) or nil;
     if prior and prior.owned_order and prior_deadline and now >= prior_deadline then
         return nil, "rune_pickup_timeout";
     end;
@@ -65,11 +75,15 @@ function M.Decide( bot )
         else
             -- T028: ждать руну на пустой точке нормально (слепое окно), но если
             -- она на глазах ЗАБРАНА — уходим немедленно, не стоим до таймаута.
-            local loc0 = global( "GetRuneSpawnLocation", prior.rune );
-            local st0 = loc0 and global( "GetRuneStatus", prior.rune ) or nil;
-            if loc0 and global( "IsLocationVisible", loc0 ) == true and RUNE_STATUS_AVAILABLE ~= nil
-                and A.Number( st0 ) and st0 ~= RUNE_STATUS_AVAILABLE then
-                return nil, "rune_taken_while_committed";
+            -- T029 (матч 9082458295): ДО спавна (tmod >= 100) статус «нет руны»
+            -- это MISSING, а не «забрали» — 4 подхода убиты ложным taken.
+            if ( now % 120 ) < 100 then
+                local loc0 = global( "GetRuneSpawnLocation", prior.rune );
+                local st0 = loc0 and global( "GetRuneStatus", prior.rune ) or nil;
+                if loc0 and global( "IsLocationVisible", loc0 ) == true and RUNE_STATUS_AVAILABLE ~= nil
+                    and A.Number( st0 ) and st0 ~= RUNE_STATUS_AVAILABLE then
+                    return nil, "rune_taken_while_committed";
+                end;
             end;
         end;
         local chp, cmaxhp = A.Call( bot, "GetHealth" ), A.Call( bot, "GetMaxHealth" );
@@ -250,7 +264,7 @@ end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
     local seen, decide_reason = s.pickup_seen, s.last_reason;
-    s.owned_order = false; s.pickup_seen = nil; s.deadline = nil;
+    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil;
     local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
@@ -276,14 +290,19 @@ function M.Approach( bot, s, distance, reason, reissue )
         if okd and A.Number( dd ) then d = dd end;
     end;
     local called, kind = false, "pickup";
-    if A.Number( d ) and d > C.rune_pickup_range then
-        local loc = global( "GetRuneSpawnLocation", s.rune );
-        if loc then kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end ) end;
+    local loc = global( "GetRuneSpawnLocation", s.rune );
+    if A.Number( d ) and d > C.rune_pickup_range and loc then
+        kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end );
     end;
     if kind == "pickup" then called = pcall( function() bot:Action_PickUpRune( s.rune ) end ) end;
+    -- T029: статус и видимость точки в событии — матч 9082458295, t=297-306:
+    -- бот стоял НА споте (d=1.0), 4 pickup молча отклонены движком.
     pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = s.rune, distance = d,
         submitted = called, kind = kind, rule = reason, reissue = reissue or nil,
+        rune_status = global( "GetRuneStatus", s.rune ),
+        spot_visible = loc ~= nil and global( "IsLocationVisible", loc ) or nil,
         outcome = "unknown", owner = "midbot_rune_only" } ) end );
+    return d, kind;
 end;
 function M.Think( bot )
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
@@ -292,24 +311,18 @@ function M.Think( bot )
     -- (кластеры 0.2с — мгновенное схлопывание desire, 3с — конец grace без
     -- старта движка; один живой pickup убит ClearActions в пути).
     if s.owned_order then
-        if not now or now >= ( s.deadline or ( ( s.started_at or now ) + C.rune_order_timeout_s ) ) then
+        if not now or now >= ( M.Deadline( s ) or now ) then
             M.Leave( bot, "rune_pickup_timeout" ); return;
         end;
         local action = A.Call( bot, "GetCurrentActionType" );
         if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE then
-            if not s.pickup_seen then
-                s.pickup_seen = true;
-                -- движок РЕАЛЬНО начал подбор: продлеваем deadline — матч
-                -- 9082444290, t=122.5: живой pickup убит таймаутом у порога руны.
-                local extended = now + C.rune_commit_extend_s;
-                if not s.deadline or extended > s.deadline then s.deadline = extended end;
-            end;
-            return; -- движок в пути на руну — не трогаем
+            if not s.pickup_seen then s.pickup_seen, s.pickup_seen_at = true, now end;
+            return; -- движок в пути на руну — не трогаем (продление через M.Deadline)
         end;
         if s.pickup_seen then
             -- pickup был и закончился (руна взята или исчезла) — отпускаем бота
             -- на линию без ClearActions: чужое/завершённое действие не трогаем.
-            s.owned_order, s.pickup_seen, s.deadline = false, nil, nil;
+            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.deadline = false, nil, nil, nil;
             s.retry_after = now + C.rune_retry_s;
             pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
                 owner = "midbot_rune_only", outcome = "unknown" } ) end );
@@ -319,8 +332,19 @@ function M.Think( bot )
         -- режима (в матче — 3с IDLE после rune_order). Перевыдаём раз в
         -- секунду до таймаута вместо отмены попытки; издалека идём MoveTo.
         if now >= ( s.next_order or -math.huge ) and s.rune ~= nil then
+            -- T029 (матч 9082458295, t=297-306): стоим НА споте, движок молча
+            -- отклоняет pickup — после спавна это пустая точка, не ждём таймаут.
+            -- Лимит проверяем ДО перевыдачи: rune_close_reject_tries близких
+            -- перевыдач без старта движка → закрываем попытку. До спавна
+            -- (tmod >= 100) ожидание на точке — НОРМА, не считаем.
+            if ( s.close_tries or 0 ) >= C.rune_close_reject_tries then
+                M.Leave( bot, "pickup_rejected_at_point_blank" ); return;
+            end;
             s.next_order = now + 1;
-            M.Approach( bot, s, nil, nil, true );
+            local d, kind = M.Approach( bot, s, nil, nil, true );
+            if kind == "pickup" and A.Number( d ) and d <= 150 and ( now % 120 ) < 100 then
+                s.close_tries = ( s.close_tries or 0 ) + 1;
+            else s.close_tries = 0 end;
         end;
         return;
     end;
@@ -330,7 +354,7 @@ function M.Think( bot )
     end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
-    s.owned_order, s.rune, s.started_at, s.pickup_seen = true, plan.rune, now, nil; -- исключение после побочного эффекта требует guard
+    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries = true, plan.rune, now, nil, nil, 0; -- исключение после побочного эффекта требует guard
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
     -- rune_order_timeout_s, максимум 15с — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.

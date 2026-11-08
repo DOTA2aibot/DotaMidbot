@@ -140,11 +140,31 @@ test( "finished pickup releases the bot without clearing and blocks instant reor
 end );
 test( "rune taken in plain sight aborts the committed wait", function()
     -- T028: ждать руну на пустой точке в слепом окне — норма, но если точку
-    -- видно и руны там НЕТ — уходим сразу, а не стоим до таймаута.
-    local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+    -- видно и руны там НЕТ (после спавна) — уходим сразу, а не стоим до таймаута.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7; -- tmod=10: после спавна
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
     s.action = 2; -- ещё идём, pickup не начался
-    s.status = 3; s.time = 101; -- точка видна, руна забрана на глазах
+    s.status = 3; s.time = 131; -- точка видна, руна забрана на глазах
     eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune_taken_while_committed
+end );
+test( "missing rune before spawn does not abort the committed wait", function()
+    -- T029 (матч 9082458295): до спавна (tmod >= 100) статус «нет руны» — это
+    -- MISSING, а не «забрали»; 4 подхода матча убиты этим ложным срабатыванием.
+    local s = scenario(); pickup( s ); s.time = 350; s.visible = false; -- blind, tmod=110
+    s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.moves + #s.runes, 1 );
+    s.action = 2; s.status = 3; s.visible = true; s.time = 356; -- точка видна, пусто, ДО спавна
+    assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- держим: это MISSING, не taken
+end );
+test( "pickup rejected at point blank after spawn ends the attempt", function()
+    -- T029 (матч 9082458295, t=297-306): бот стоит НА споте, движок молча
+    -- отклоняет pickup — после 4 перевыдач закрываем попытку без ClearActions.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.bot.GetLocation = function() return { x = 380, y = 0 } end; -- d=20 до руны 0
+    s.bot.Action_PickUpRune = function( _, rune ) s.runes[#s.runes + 1] = rune end; -- движок НЕ начинает
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+    for i = 1, 4 do s.time = 130 + i; s.rune_policy.Think( s.bot ); end; eq( #s.runes, 5 );
+    s.time = 135; s.rune_policy.Think( s.bot ); -- 4 близкие перевыдачи без старта → Leave
+    eq( s.cancelled, nil ); eq( #s.runes, 5 ); eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- retry
 end );
 test( "distant rune is approached by move before pickup", function()
     -- T028 (матч 9082444290): движок молча отклоняет PickUp издалека и до
