@@ -1,6 +1,6 @@
 """Offline tests against the real Lua 5.1 code; no Dota engine simulation claim."""
 from pathlib import Path
-import os, json, hashlib
+import os, json, hashlib, subprocess, sys
 from lupa.lua51 import LuaRuntime
 
 root = Path(__file__).resolve().parents[2]
@@ -41,3 +41,5 @@ lua.execute('Trace.Emit({text="quote: \\" slash: \\\\ newline: \\n", value=0/0})
 event = json.loads(captured[-1].split('] ', 1)[1])
 assert event['value'] is None
 print('TRACE JSON PASSED 2 cases')
+subprocess.run([sys.executable, '-X', 'utf8', str(root / 'tests/laning/test_packages.py')],
+               cwd=root, check=True)

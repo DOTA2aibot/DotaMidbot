@@ -2,6 +2,7 @@
 -- без видимых heartbeat/ACK в этом же состоянии приказов не будет.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local C = require( GetScriptDirectory() .. "/laning/runtime/config" );
+local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local M, actors, calls, serial = {}, {}, {}, 0;
 function M.Actor( bot )
     local id, team = A.Call( bot, "GetPlayerID" ), A.Call( bot, "GetTeam" );
@@ -9,6 +10,7 @@ function M.Actor( bot )
     return tostring( team ) .. ":" .. tostring( id );
 end
 function M.LanePulse( bot, now )
+    if Profile.runtime_enabled ~= true then M.Release( bot ); return nil end;
     local actor = M.Actor( bot ); if not actor or not A.Number( now ) then return nil end;
     local s = actors[actor];
     if not s or now < s.lane_at then serial = serial + 1; s = { nonce = actor .. ":channel:" .. serial, lane_at = now }; actors[actor] = s end;
@@ -17,12 +19,14 @@ function M.LanePulse( bot, now )
     return s.nonce;
 end
 function M.ChannelReady( bot, now )
+    if Profile.runtime_enabled ~= true then return false end;
     if not A.Number( now ) then return false end;
     local s = actors[M.Actor( bot )];
     return s ~= nil and s.ability_nonce == s.nonce and s.ability_at ~= nil
         and now >= s.ability_at and now - s.ability_at <= C.owner_ttl_s;
 end
 function M.AbilityGate( bot )
+    if Profile.runtime_enabled ~= true then M.Release( bot ); return false end;
     local now, actor = A.Time(), M.Actor( bot );
     if now and actor then
         local c = calls[actor] or { count = 0 }; calls[actor] = c;
@@ -44,6 +48,7 @@ function M.Diagnostics( bot, now )
     local function age( at ) return A.Number( now ) and A.Number( at ) and now >= at and now - at or nil end;
     local lease = s and s.lease;
     return { channel_ready = ready, owner_ttl_s = C.owner_ttl_s,
+        controller_profile = Profile.name, runtime_enabled = Profile.runtime_enabled == true,
         lane_age_s = s and age( s.lane_at ), ability_seen_age_s = c and age( c.at ),
         ability_accepted_age_s = s and age( s.ability_at ), ability_calls = c and c.count or 0,
         channel_reason = ready and "ready" or ( not c and "ability_callback_not_seen"
@@ -53,6 +58,7 @@ function M.Diagnostics( bot, now )
         lease_remaining_s = lease and math.max( 0, lease.until_s - now ) or nil };
 end
 function M.Acquire( bot, key, now )
+    if Profile.runtime_enabled ~= true then return false, "runtime_profile_disabled" end;
     local s = actors[M.Actor( bot )];
     if not M.ChannelReady( bot, now ) then return false, "ability_hook_not_observed" end;
     if s.lease and s.lease.until_s <= now then s.lease = nil end;

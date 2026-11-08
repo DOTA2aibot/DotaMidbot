@@ -1,4 +1,4 @@
--- T007: игровой адаптер SF; историческая primitive policy оставлена только для fixtures.
+-- T007: диагностический entrypoint. В корень bots попадает только в профиле lane_probe.
 local C = require( GetScriptDirectory() .. "/laning/config" );
 local Policy = require( GetScriptDirectory() .. "/laning/policy" );
 local Trace = require( GetScriptDirectory() .. "/laning/trace" );

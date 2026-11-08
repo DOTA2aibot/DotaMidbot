@@ -13,6 +13,11 @@ local SOLO_1V1 = true;
 -- DOTA_GAMEMODE_1V1MID = 21 в клиентском dota_shared_enums.proto.
 local NATIVE_1V1_MODE = 21;
 local soloPlayerID, lastSelectionLog = nil, nil;
+local ControllerProfile = { name = "unknown", controller = "unknown" };
+do
+    local ok, info = pcall( function() return require( GetScriptDirectory() .. "/laning/profile" ) end );
+    if ok and type( info ) == "table" then ControllerProfile = info end;
+end
 
 local function profile()
     if type( GetGameMode ) ~= "function" then return false, nil end;
@@ -41,7 +46,9 @@ local function report( ids, solo, mode, reason )
         or ( unknown > 0 and "selected_names_unknown" or "check_match_roster" ) ) or "team_selection" );
     local line = "[MIDBOT selection] profile=" .. ( solo and "solo_1v1" or "team" )
         .. " game_mode=" .. tostring( mode ) .. " bot_slots=" .. bots .. " selected_bot_heroes=" .. selected
-        .. " human_slots=" .. humans .. " unknown_bot_names=" .. unknown .. " status=" .. status;
+        .. " human_slots=" .. humans .. " unknown_bot_names=" .. unknown .. " status=" .. status
+        .. " controller_profile=" .. tostring( ControllerProfile.name )
+        .. " controller=" .. tostring( ControllerProfile.controller );
     if line ~= lastSelectionLog then print( line ); lastSelectionLog = line end;
 end
 
@@ -62,11 +69,11 @@ function GetBotNames()
 	if ( profile() )
 	then
 		return {
-			"MIDBOT v0.3.1",
+			"MIDBOT v0.3.2",
 		};
 	end
 	return {
-		"MIDBOT v0.3.1",
+		"MIDBOT v0.3.2",
 		"MIDBOT teammate 2",
 		"MIDBOT teammate 3",
 		"MIDBOT teammate 4",
