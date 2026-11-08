@@ -16,8 +16,10 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
+RUNE_ENTRY = 'mode_rune_nevermore.lua'
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
-            'valve_wards': ('valve_native', False)}
+            'valve_wards': ('valve_native', False),
+            'valve_lane_economy': ('valve_native_with_midbot_rune', False)}
 
 
 def profile_source(profile, revision='uncommitted'):
@@ -28,6 +30,7 @@ def profile_source(profile, revision='uncommitted'):
             f'runtime_enabled = {str(enabled).lower()}, '
             f'observer_enabled = {str(not enabled).lower()}, '
             f'wards_enabled = {str(profile == "valve_wards").lower()}, '
+            f'economy_enabled = {str(profile == "valve_lane_economy").lower()}, '
             f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
@@ -59,6 +62,10 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/lane_probe' / PROBE_ENTRY
         below(source, root)
         files[PROBE_ENTRY] = source.read_bytes()
+    if profile == 'valve_lane_economy':
+        source = root / 'profiles/lane_economy' / RUNE_ENTRY
+        below(source, root)
+        files[RUNE_ENTRY] = source.read_bytes()
     return files
 
 
@@ -66,16 +73,18 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.3', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.4', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile == 'valve_wards',
+        'economy_enabled': profile == 'valve_lane_economy',
         'source_revision': revision, 'revision_claim_verified_by_packager': False,
         'dota_execution_verified': False, 'clean_folder_install_required': True,
-        'results_attribution': 'Valve movement/attacks + MIDBOT abilities/purchases'
+        'results_attribution': ('Valve lane movement/attacks + MIDBOT rune mode, abilities/purchases'
+        if profile == 'valve_lane_economy' else 'Valve movement/attacks + MIDBOT abilities/purchases')
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.3 / PROFILE: %s
+    readme = '''MIDBOT v0.3.4 / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
@@ -85,6 +94,9 @@ Start a NEW match after installation; hot reload is not a supported profile swit
 
 valve_play: native engine movement/attacks; custom abilities and purchases.
 valve_wards: same baseline + opt-in in-range mid ward placement test.
+valve_lane_economy: native lane movement/attacks, custom nearby-only river rune mode,
+limited mana purchases. All other rune trips, including bounty, are suppressed for SF.
+Wards remain disabled. This profile is an unverified gameplay experiment.
 lane_probe: existing diagnostic controller, one attack and a 600-second lane window.
 This bundle does not fix extra bot slots or claim any measured LH/hit-rate result.
 Game execution must be verified in the installed client.
@@ -120,15 +132,23 @@ def verify(path):
             raise ValueError('Profile metadata mismatch')
         if manifest.get('observer_enabled') is not (not enabled) or manifest.get('wards_enabled') is not (profile == 'valve_wards'):
             raise ValueError('Observer/ward profile mismatch')
+        legacy_observer = (manifest.get('version') == 'v0.3.3' and 'economy_enabled' not in manifest
+                           and profile in ('valve_play', 'valve_wards', 'lane_probe'))
+        if not legacy_observer and manifest.get('economy_enabled') is not (profile == 'valve_lane_economy'):
+            raise ValueError('Economy profile mismatch')
         files = manifest['files_sha256']
         if set(names) != {'MANIFEST.json', 'INSTALL.txt'} | {'bots/' + n for n in files}:
             raise ValueError('Archive and manifest file sets differ')
         if not set(ROOT_LUA).issubset(files):
             raise ValueError('Missing hero/ability/purchase entry')
-        if archive.read('bots/laning/profile.lua') != profile_source(profile, manifest['source_revision']):
+        expected_profile = profile_source(profile, manifest['source_revision'])
+        if legacy_observer:
+            expected_profile = expected_profile.replace(b'economy_enabled = false, ', b'')
+        if archive.read('bots/laning/profile.lua') != expected_profile:
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
-        if entries != ({PROBE_ENTRY} if enabled else set()):
+        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile == 'valve_lane_economy' else set())
+        if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         for name, expected in files.items():
             if sha(archive.read('bots/' + name)) != expected:

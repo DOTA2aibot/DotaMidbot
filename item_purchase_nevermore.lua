@@ -17,6 +17,11 @@ local pendingComponents = nil;
 local nextAttemptTime = -math.huge;
 local lastMessage = nil;
 local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
+local ManaEconomy;
+do
+	local ok, mod = pcall( function() return require( GetScriptDirectory() .. "/laning/economy/mana" ) end );
+	if ok then ManaEconomy = mod end;
+end;
 
 local function Report( message )
 	if ( message ~= lastMessage ) then
@@ -79,6 +84,10 @@ end
 function ItemPurchaseThink()
 	local bot = GetBot();
 	if ( bot == nil ) then return end;
+	if ManaEconomy then
+		local ok, attempted = pcall( ManaEconomy.TryPurchase, bot );
+		if ok and attempted then return end;
+	end;
 	if ( #tableItemsToBuy == 0 ) then
 		bot:SetNextItemPurchaseValue( 0 );
 		return;
@@ -92,6 +101,14 @@ function ItemPurchaseThink()
 		return;
 	end
 	local target = tableItemsToBuy[1];
+	if target == "item_flask" and pendingComponents == nil and ManaEconomy then
+		local ok, skip = pcall( ManaEconomy.SkipFlask, bot );
+		if ok and skip then
+			table.remove( tableItemsToBuy, 1 );
+			Report( "skip target=item_flask reason=healthy_but_mana_low" );
+			return;
+		end;
+	end;
 	if ( pendingComponents == nil ) then
 		local plan = {};
 		if ( not ExpandRecipe( target, OwnedItems( bot ), plan, {}, 0 ) ) then
@@ -129,9 +146,9 @@ function ItemPurchaseThink()
 	-- и бот вечно ретраил вард, не идя дальше по списку.
 	-- Предмет недоступен принципиально (нет на складе / запрещён / невалиден) —
 	-- скипаем его целиком и идём к следующему.
-	if ( result == PURCHASE_ITEM_OUT_OF_STOCK
-		or result == PURCHASE_ITEM_INVALID_ITEM_NAME
-		or result == PURCHASE_ITEM_DISALLOWED_ITEM ) then
+	if ( ( PURCHASE_ITEM_OUT_OF_STOCK ~= nil and result == PURCHASE_ITEM_OUT_OF_STOCK )
+		or ( PURCHASE_ITEM_INVALID_ITEM_NAME ~= nil and result == PURCHASE_ITEM_INVALID_ITEM_NAME )
+		or ( PURCHASE_ITEM_DISALLOWED_ITEM ~= nil and result == PURCHASE_ITEM_DISALLOWED_ITEM ) ) then
 		Report( "skip target=" .. target .. " reason=unavailable result=" .. tostring( result ) );
 		pendingComponents = nil;
 		componentFailures = 0;
