@@ -4,6 +4,7 @@ local Observer = require( GetScriptDirectory() .. "/laning/runtime/observe" );
 local D = require( GetScriptDirectory() .. "/laning/advanced/mechanics" );
 local Trace = require( GetScriptDirectory() .. "/laning/advanced/trace" );
 local PlannerConfig = require( GetScriptDirectory() .. "/laning/advanced/config" );
+local Movement = require( GetScriptDirectory() .. "/laning/runtime/movement" );
 local M = {};
 local function find( s, id ) for _, t in ipairs( s.targets ) do if t.id == id then return t end end end;
 local function laneProbeSafe( cfg, s )
@@ -68,6 +69,7 @@ function M.New( cfg )
         return ok, value;
     end
     function b.Filter( bot, s, planning )
+        b.move_diagnostic = nil;
         local laneProbe = cfg.operation == "lane_probe";
         local probing = laneProbe or cfg.operation == "probe_attack" or cfg.operation == "probe_raze";
         local probeSafe = not s.danger;
@@ -129,12 +131,12 @@ function M.New( cfg )
         if ( cfg.operation == "execute" or laneProbe ) and cfg.lane_positioning and ( not cfg.option_allowlist or cfg.option_allowlist[0] )
             and destination and probeSafe and not s.hero.casting
             and D.Distance( s.hero, destination ) > ( destination == s.lane_anchor and cfg.anchor_tolerance or 40 ) then
-            local distance = D.Distance( s.hero, destination ); local stepLength = math.min( cfg.move_step, distance );
-            local point = { x = s.hero.x + ( destination.x - s.hero.x ) / distance * stepLength,
-                y = s.hero.y + ( destination.y - s.hero.y ) / distance * stepLength };
+            local point, reason, detail = Movement.Plan( s, destination, cfg );
+            detail.phase = "selection"; b.move_diagnostic = detail;
             planning.candidates[#planning.candidates + 1] = { option_id = 0, option_key = "hold_equilibrium",
                 candidate_key = "0|move:mid_front",
-                steps = { { kind = "move", location = point } }, available = true, baseline_utility = -0.1,
+                steps = point and { { kind = "move", location = point } } or {},
+                available = point ~= nil, mask_reason = reason, baseline_utility = -0.1,
                 reason = "bounded_move_toward_own_mid_front", runtime_parameterization = true, diagnostic_probe = laneProbe };
         end
         table.sort( planning.candidates, function( a, z )
@@ -173,12 +175,8 @@ function M.New( cfg )
                 o.geometry_valid = impact ~= nil and D.Distance( aim, impact ) + ( t.position_error_per_s or 0 ) * r.cast_point_s <= r.radius;
             end
         elseif step.kind == "move" then
-            local v = step.location and A.Vector( step.location );
-            o.movement_valid = v ~= nil and type( IsLocationPassable ) == "function" and IsLocationPassable( v ) == true
-                and D.Distance( s.hero, step.location ) <= cfg.move_step + 1;
-            for _, tower in ipairs( s.towers ) do
-                if tower.enemy and ( not tower.range_verified or D.Distance( tower, step.location ) <= tower.attack_range + tower.range_margin ) then o.movement_valid = false end;
-            end
+            o.movement_valid, o.movement_reason, o.movement_detail = Movement.Check( s, step.location, cfg );
+            o.movement_detail.phase = "validation"; b.move_diagnostic = o.movement_detail;
         end
         local current = A.Call( bot, "GetCurrentActionType" );
         local last = A.Call( bot, "GetLastAttackTime" );
@@ -237,6 +235,10 @@ function M.New( cfg )
                 or D.Distance( t, s.lane_anchor ) > cfg.lane_probe_radius ) then return false, "lane_probe_target_outside_mid" end;
         end
         if o.emergency or o.casting or o.attack_windup then return false, "fresh_safety_rejected" end;
+        if step.kind == "move" then
+            o.movement_detail.phase = "submission"; b.move_diagnostic = o.movement_detail;
+            if not o.movement_valid then return false, o.movement_reason end;
+        end;
         if step.kind ~= "move" and not o.valid_targets[step.target_id] then return false, "fresh_target_rejected" end;
         local unit = b.context.handles[step.target_id];
         if step.kind ~= "move" and not A.Visible( unit ) then return false, "target_changed_before_api" end;
@@ -320,6 +322,7 @@ function M.New( cfg )
                 last_hits = s.last_hits, denies = s.denies, reward_status = "not_defined", outcome_attribution = "not_attributed" };
         end
         record.operation = cfg.operation;
+        record.movement = b.move_diagnostic;
         record.diagnostic_probe = cfg.operation == "lane_probe" or cfg.operation == "probe_attack" or cfg.operation == "probe_raze"
             or ( planning and planning.selected and planning.selected.diagnostic_probe ) or false;
         print( "[MIDBOT runtime] " .. Trace.Encode( record ) );
