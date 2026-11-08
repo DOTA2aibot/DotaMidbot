@@ -1,3 +1,4 @@
+local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 -- Только покупка. Расходники использует прежний item-controller Valve.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local C = require( GetScriptDirectory() .. "/laning/economy/config" );
@@ -64,6 +65,7 @@ function M.SkipFlask( bot )
     return A.Number( hp ) and A.Number( max ) and max > 0 and hp / max >= 0.85;
 end;
 function M.TryPurchase( bot )
+    if not Actor.Real( bot ) then return false end;
     if Profile.economy_enabled ~= true then return false end;
     local s = state( bot ); local now = s.time;
     if not now or now < 0 or now > C.mana_window_end or A.Call( bot, "IsAlive" ) ~= true then return false end;

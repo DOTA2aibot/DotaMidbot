@@ -1,3 +1,4 @@
+local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 -- Только rune mode SF. Другие режимы и обычные атаки остаются Valve.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local C = require( GetScriptDirectory() .. "/laning/economy/config" );
@@ -6,6 +7,7 @@ local O = require( GetScriptDirectory() .. "/laning/observer/core" );
 local M, states = {}, setmetatable( {}, { __mode = "k" } );
 local function global( name, ... ) return O.Global( name, ... ) end;
 function M.Decide( bot )
+    if not Actor.Real(bot) then return nil,"not_real_sf" end;
     local now = A.Time();
     if Profile.economy_enabled ~= true then return nil, "profile_disabled" end;
     if not now or now < 0 or now > C.rune_window_end then return nil, "outside_rune_window" end;
@@ -176,6 +178,10 @@ function M.Think( bot )
     -- Свежая проверка каждый Think; не идём искать руны за пределами650.
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
     if s.owned_order then
+        if s.started_at and now-s.started_at<C.rune_order_grace_s then
+            if s.rune~=plan.rune then M.Leave(bot,"rune_target_changed") end;
+            return; -- same grace as Decide: do not retire/reissue a still starting pickup
+        end;
         if A.Call( bot, "GetCurrentActionType" ) == BOT_ACTION_TYPE_PICK_UP_RUNE then
             if s.rune ~= plan.rune then M.Leave( bot, "rune_target_changed" ) end;
             return; -- не перезапускаем уже идущий pickup каждый1с

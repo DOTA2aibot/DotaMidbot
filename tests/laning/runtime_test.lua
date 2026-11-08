@@ -53,6 +53,7 @@ local function scenario( operation )
         return u;
     end
     local bot = unit( "bot", "hero", 0, 1000 ); bot.mana, bot.stacks = 250, 10;
+    function bot:IsHero() return true end; function bot:IsIllusion() return false end;
     local creep, enemy = unit( "c", "creep", 450, 40 ), unit( "h", "hero", 450, 1000 );
     s.bot, s.creep, s.enemy, s.unit = bot, creep, enemy, unit;
     s.enemy_creeps, s.allied_creeps, s.enemies, s.towers = { creep }, {}, {}, {};

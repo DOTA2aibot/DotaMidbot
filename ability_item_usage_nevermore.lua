@@ -1156,3 +1156,13 @@ function DebugPrintModifiers( npcBot )
 		end
 	end
 end
+
+-- MIDBOT T024 optional tactical attachment
+do
+    local ok, helper = pcall(require, GetScriptDirectory() .. "/laning/tactical/entry");
+    if ok then
+        local loaded, attached, reason = pcall(helper.BindLegacy, getfenv(1));
+        if not loaded or not attached then print("[MIDBOT tactical] attach_skipped " .. tostring(reason or attached))
+        else pcall(print,"[MIDBOT tactical] attached version=tactical-1 source=main-ab5a2aa-r46-556717f-i2") end;
+    else print("[MIDBOT tactical] module_unavailable") end;
+end;

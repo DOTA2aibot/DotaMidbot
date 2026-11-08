@@ -32,6 +32,9 @@ end;
 function M.BindLegacy(env)
     if type(env)~="table" then return false,"script_environment_required" end;
     if type(env.GetBot)~="function" then return false,"bot_api_missing" end;
+    local profileOK,profile=pcall(require,GetScriptDirectory().."/laning/profile");
+    if not profileOK or type(profile)~="table" then return false,"profile_unknown" end;
+    if profile.runtime_enabled==true then return false,"diagnostic_runtime_disabled" end;
     if env.MIDBOT_TACTICAL_BOUND then return true,"already_bound" end;
     local required={"AbilityUsageThink","ItemUsageThink","ConsiderRequiem","ConsiderRazeOnHero","ConsiderFeastOfSouls","ConsiderRazeOnCreeps","CastRaze"};
     local old={};for _,name in ipairs(required) do if type(env[name])~="function" then return false,"callback_contract_missing:"..name end;old[name]=env[name] end;
