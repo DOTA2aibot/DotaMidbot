@@ -72,10 +72,12 @@ local function ConsiderCourierDelivery( bot )
 		local courier = GetCourier( index );
 		if ( courier ~= nil and courier:GetPlayerID() == bot:GetPlayerID() ) then
 			-- Курьер может быть занят другим героем: шлём только из состояния
-			-- покоя/базы. Метод может отсутствовать в моке тестов — тогда
-			-- осторожно не шлём вовсе (fail-closed).
-			if ( type( courier.GetCourierState ) ~= "function" ) then CourierDiag( bot, "no_state_method" ); return end;
-			local state = courier:GetCourierState();
+			-- покоя/базы. T023: GetCourierState может быть ГЛОБАЛЬНОЙ функцией
+			-- (интеграция GPT, матч 9082079610), а не методом — пробуем оба.
+			local state;
+			if ( type( courier.GetCourierState ) == "function" ) then state = courier:GetCourierState();
+			elseif ( type( GetCourierState ) == "function" ) then state = GetCourierState( courier );
+			else CourierDiag( bot, "no_state_method" ); return end;
 			if ( state == COURIER_STATE_IDLE or state == COURIER_STATE_AT_BASE ) then
 				local ok = pcall( function()
 					bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
