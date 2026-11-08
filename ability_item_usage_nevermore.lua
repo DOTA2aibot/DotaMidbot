@@ -215,6 +215,20 @@ function LevelUpThink( npcBot )
 end
 
 ----------------------------------------------------------------------------------------------------
+-- T023: AbilityLevelUpThink — ОТДЕЛЬНЫЙ колбэк движка для прокачки. Интеграционная
+-- сборка GPT (матч 9082079610, v0.3.5-all-test) показала: с этим колбэком движок
+-- отдаёт очки НАМ, а не автокачает по старому билду — frenzy/dark_lord прокачаны
+-- полностью по нашему SKILL_ORDER. Держим и вызов из AbilityUsageThink: если
+-- колбэк в каком-то окружении не вызывается, сработает наш учёт по слотам;
+-- backoff 5с в TryLevelAbility защищает от спама при гонке.
+----------------------------------------------------------------------------------------------------
+function AbilityLevelUpThink()
+	local npcBot = GetBot();
+	if ( npcBot == nil ) then return end;
+	LevelUpThink( npcBot );
+end
+
+----------------------------------------------------------------------------------------------------
 
 function InitAbilities( npcBot )
 	abilityRaze[1] = npcBot:GetAbilityByName( "nevermore_shadowraze1" );
