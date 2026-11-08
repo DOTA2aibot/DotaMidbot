@@ -293,6 +293,19 @@ function M.Approach( bot, s, distance, reason, reissue )
     local loc = global( "GetRuneSpawnLocation", s.rune );
     if A.Number( d ) and d > C.rune_pickup_range and loc then
         kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end );
+    elseif A.Number( d ) and d < C.rune_pickup_min and loc then
+        -- T030 (матч 9082480212): стоим ТОЧНО на споте (d≈0) — движок молча
+        -- отклоняет pickup (5 эпизодов: t=137, 236, 354, 476, 596). Отступаем
+        -- от точки к центру реки на rune_backoff_dist, следующий тик выдаст
+        -- pickup с рабочей дистанции.
+        kind = "backoff";
+        called = pcall( function()
+            local px, py = -loc.x, -loc.y;
+            local n = math.sqrt( px * px + py * py ); if n < 1 then px, py, n = 1, 0, 1 end;
+            local bx, by = loc.x + px / n * C.rune_backoff_dist, loc.y + py / n * C.rune_backoff_dist;
+            local okv, back = pcall( Vector, bx, by, loc.z or 0 );
+            bot:Action_MoveToLocation( okv and back or { x = bx, y = by } );
+        end );
     end;
     if kind == "pickup" then called = pcall( function() bot:Action_PickUpRune( s.rune ) end ) end;
     -- T029: статус и видимость точки в событии — матч 9082458295, t=297-306:
@@ -342,7 +355,7 @@ function M.Think( bot )
             end;
             s.next_order = now + 1;
             local d, kind = M.Approach( bot, s, nil, nil, true );
-            if kind == "pickup" and A.Number( d ) and d <= 150 and ( now % 120 ) < 100 then
+            if kind == "pickup" and A.Number( d ) and d <= 250 and ( now % 120 ) < 100 then
                 s.close_tries = ( s.close_tries or 0 ) + 1;
             else s.close_tries = 0 end;
         end;
@@ -356,10 +369,18 @@ function M.Think( bot )
     s.next_order = now + 1;
     s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries = true, plan.rune, now, nil, nil, 0; -- исключение после побочного эффекта требует guard
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
-    -- rune_order_timeout_s, максимум 15с — дальние desperate-походы (3500)
+    -- rune_order_timeout_s — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.
     local walk = A.Number( plan.distance ) and plan.distance / 280 + 3 or C.rune_order_timeout_s;
-    if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > 15 then walk = 15 end;
+    -- T030 (матч 9082480212): дедлайн срезал ДОСПАВНОВОЕ ожидание на точке —
+    -- t=357.5 за 2.5с до спавна, t=479.5 за 0.5с, t=600.0 ровно в спавн. Идём
+    -- под спавн (tmod >= 100) → дедлайн покрывает ожидание до спавна + grace.
+    local tmod = now % 120;
+    if tmod >= 100 then
+        local wait_spawn = ( 120 - tmod ) + C.rune_commit_extend_s;
+        if walk < wait_spawn then walk = wait_spawn end;
+    end;
+    if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
     M.Approach( bot, s, plan.distance, reason );
 end;
