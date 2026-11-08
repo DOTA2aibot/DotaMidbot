@@ -6,6 +6,16 @@ local Trace = require( GetScriptDirectory() .. "/laning/advanced/trace" );
 local PlannerConfig = require( GetScriptDirectory() .. "/laning/advanced/config" );
 local M = {};
 local function find( s, id ) for _, t in ipairs( s.targets ) do if t.id == id then return t end end end;
+local function laneProbeSafe( cfg, s )
+    if s.danger or not s.lane_anchor then return false end;
+    for _, t in ipairs( s.targets ) do
+        if t.kind == "enemy_hero" and D.Distance( s.hero, t ) <= cfg.lane_probe_enemy_radius then return false end;
+    end
+    for _, tower in ipairs( s.towers ) do
+        if tower.enemy and ( not tower.range_verified or D.Distance( s.hero, tower ) <= tower.attack_range + tower.range_margin ) then return false end;
+    end
+    return true;
+end
 local function projectiles( bot, target )
     local out = { count = 0, handles = {}, near = false };
     local list, origin = A.Call( target, "GetIncomingTrackingProjectiles" ), A.Position( bot );
@@ -27,9 +37,11 @@ function M.New( cfg )
         Guard.LanePulse( bot, now );
         b.snapshot, b.snapshot_error = Observer.Collect( b.context, bot );
         if b.snapshot then
+            b.snapshot.driver = b.driver;
             b.snapshot.capabilities.joint_executor = Guard.ChannelReady( bot, now );
-            b.snapshot.integration = { operation = cfg.operation, stage = cfg.stage,
-                channel_ready = b.snapshot.capabilities.joint_executor, probe_orders = b.probe_orders };
+            b.snapshot.integration = Guard.Diagnostics( bot, now );
+            b.snapshot.integration.operation, b.snapshot.integration.stage = cfg.operation, cfg.stage;
+            b.snapshot.integration.probe_orders = b.probe_orders;
         end
         return b.snapshot;
     end
@@ -56,7 +68,11 @@ function M.New( cfg )
         return ok, value;
     end
     function b.Filter( bot, s, planning )
-        local probing = cfg.operation == "probe_attack" or cfg.operation == "probe_raze";
+        local laneProbe = cfg.operation == "lane_probe";
+        local probing = laneProbe or cfg.operation == "probe_attack" or cfg.operation == "probe_raze";
+        local probeSafe = not s.danger;
+        if laneProbe then probeSafe = laneProbeSafe( cfg, s ) end;
+        b.lane_probe_safe = probeSafe;
         for _, p in ipairs( planning.candidates ) do
             local attacks, casts = 0, 0;
             for _, step in ipairs( p.steps ) do if step.kind == "attack" then attacks = attacks + 1 elseif step.kind == "raze" then casts = casts + 1 end end;
@@ -66,11 +82,13 @@ function M.New( cfg )
             if cfg.option_allowlist and not cfg.option_allowlist[p.option_id] then p.available, p.mask_reason = false, "runtime_option_allowlist" end;
             if s.hero.casting then p.available, p.mask_reason = false, "current_action_busy" end;
         end
-        if probing and not s.danger and not s.hero.casting and b.probe_orders < cfg.max_probe_orders then
+        if probing and probeSafe and not s.hero.casting and b.probe_orders < cfg.max_probe_orders then
             for _, t in ipairs( s.targets ) do
-                if t.kind == "enemy_creep" and not t.invulnerable and not t.attack_immune then
+                if t.kind == "enemy_creep" and not t.invulnerable and not t.attack_immune
+                    and ( not laneProbe or ( D.Distance( s.hero, s.lane_anchor ) <= cfg.lane_probe_radius
+                        and D.Distance( t, s.lane_anchor ) <= cfg.lane_probe_radius ) ) then
                     local step;
-                    if cfg.operation == "probe_attack" and not s.hero.disarmed and A.Number( s.hero.attack_range ) and D.Distance( s.hero, t ) <= s.hero.attack_range then
+                    if ( laneProbe or cfg.operation == "probe_attack" ) and not s.hero.disarmed and A.Number( s.hero.attack_range ) and D.Distance( s.hero, t ) <= s.hero.attack_range then
                         step = { kind = "attack", target_id = t.id };
                     elseif cfg.operation == "probe_raze" and not s.hero.silenced and not t.magic_immune then
                         for _, name in ipairs( { "nevermore_shadowraze1", "nevermore_shadowraze2", "nevermore_shadowraze3" } ) do
@@ -93,15 +111,31 @@ function M.New( cfg )
                 end
             end
         end
-        if cfg.operation == "execute" and cfg.lane_positioning and ( not cfg.option_allowlist or cfg.option_allowlist[0] ) and s.lane_anchor and not s.danger
-            and not s.hero.casting and D.Distance( s.hero, s.lane_anchor ) > cfg.anchor_tolerance then
-            local distance = D.Distance( s.hero, s.lane_anchor ); local stepLength = math.min( cfg.move_step, distance );
-            local point = { x = s.hero.x + ( s.lane_anchor.x - s.hero.x ) / distance * stepLength,
-                y = s.hero.y + ( s.lane_anchor.y - s.hero.y ) / distance * stepLength };
+        local destination = s.lane_anchor;
+        if laneProbe and probeSafe and b.probe_orders < cfg.max_probe_orders and destination
+            and D.Distance( s.hero, destination ) <= cfg.lane_probe_radius and A.Number( s.hero.attack_range ) then
+            local closest, nearest = nil, math.huge;
+            for _, t in ipairs( s.targets ) do
+                local distance = D.Distance( s.hero, t );
+                if t.kind == "enemy_creep" and not t.invulnerable and not t.attack_immune
+                    and D.Distance( t, s.lane_anchor ) <= cfg.lane_probe_radius and distance < nearest then closest, nearest = t, distance end;
+            end
+            if closest and nearest > s.hero.attack_range and nearest > 0 then
+                local approach = math.min( cfg.move_step, nearest - math.max( 0, s.hero.attack_range - 50 ) );
+                destination = { x = s.hero.x + ( closest.x - s.hero.x ) / nearest * approach,
+                    y = s.hero.y + ( closest.y - s.hero.y ) / nearest * approach };
+            end
+        end
+        if ( cfg.operation == "execute" or laneProbe ) and cfg.lane_positioning and ( not cfg.option_allowlist or cfg.option_allowlist[0] )
+            and destination and probeSafe and not s.hero.casting
+            and D.Distance( s.hero, destination ) > ( destination == s.lane_anchor and cfg.anchor_tolerance or 40 ) then
+            local distance = D.Distance( s.hero, destination ); local stepLength = math.min( cfg.move_step, distance );
+            local point = { x = s.hero.x + ( destination.x - s.hero.x ) / distance * stepLength,
+                y = s.hero.y + ( destination.y - s.hero.y ) / distance * stepLength };
             planning.candidates[#planning.candidates + 1] = { option_id = 0, option_key = "hold_equilibrium",
                 candidate_key = "0|move:mid_front",
                 steps = { { kind = "move", location = point } }, available = true, baseline_utility = -0.1,
-                reason = "bounded_move_toward_own_mid_front", runtime_parameterization = true };
+                reason = "bounded_move_toward_own_mid_front", runtime_parameterization = true, diagnostic_probe = laneProbe };
         end
         table.sort( planning.candidates, function( a, z )
             if a.available ~= z.available then return a.available end;
@@ -186,11 +220,22 @@ function M.New( cfg )
         return ok, "face_order_submitted_not_completed";
     end
     function b.Submit( bot, order )
-        if cfg.operation ~= "execute" and cfg.operation ~= "probe_attack" and cfg.operation ~= "probe_raze" then return false, "operation_has_no_orders" end;
+        if cfg.operation ~= "execute" and cfg.operation ~= "probe_attack" and cfg.operation ~= "probe_raze" and cfg.operation ~= "lane_probe" then return false, "operation_has_no_orders" end;
+        if cfg.operation == "lane_probe" and ( order.step.kind ~= "move" and order.step.kind ~= "attack" ) then return false, "lane_probe_attack_or_move_only" end;
+        if ( cfg.operation == "lane_probe" or cfg.operation == "probe_attack" or cfg.operation == "probe_raze" )
+            and order.step.kind ~= "move" and b.probe_orders >= cfg.max_probe_orders then return false, "probe_limit_reached" end;
         if ( cfg.operation == "probe_attack" and order.step.kind ~= "attack" ) or ( cfg.operation == "probe_raze" and order.step.kind ~= "raze" )
             or ( cfg.operation == "execute" and cfg.stage == "attacks" and order.step.kind == "raze" )
             or ( cfg.operation == "execute" and cfg.stage == "raze" and order.step.kind == "attack" ) then return false, "stage_changed" end;
         local o = b.Validate( bot, order.step ); local s = b.snapshot; local step = order.step;
+        if not s then return false, "snapshot_missing" end;
+        if cfg.operation == "lane_probe" then
+            if not laneProbeSafe( cfg, s ) then return false, "lane_probe_unsafe" end;
+            local t = step.target_id and find( s, step.target_id );
+            if step.kind == "attack" and ( not t or t.kind ~= "enemy_creep" or not s.lane_anchor
+                or D.Distance( s.hero, s.lane_anchor ) > cfg.lane_probe_radius
+                or D.Distance( t, s.lane_anchor ) > cfg.lane_probe_radius ) then return false, "lane_probe_target_outside_mid" end;
+        end
         if o.emergency or o.casting or o.attack_windup then return false, "fresh_safety_rejected" end;
         if step.kind ~= "move" and not o.valid_targets[step.target_id] then return false, "fresh_target_rejected" end;
         local unit = b.context.handles[step.target_id];
@@ -213,7 +258,7 @@ function M.New( cfg )
         else return false, "unsupported_order" end;
         if not ok then return false, "action_api_error" end;
         b.pending, b.takeover = pending, nil;
-        if cfg.operation == "probe_attack" or cfg.operation == "probe_raze" then b.probe_orders = b.probe_orders + 1 end;
+        if ( cfg.operation == "lane_probe" or cfg.operation == "probe_attack" or cfg.operation == "probe_raze" ) and step.kind ~= "move" then b.probe_orders = b.probe_orders + 1 end;
         return true; -- факт вызова API, не release/hit/kill
     end
     function b.Events( bot )
@@ -256,6 +301,9 @@ function M.New( cfg )
         local force = event.status == "submit" or event.status == "aborted" or event.status == "plan_finished"
             or event.status == "attack_released" or event.status == "cast_completed" or event.status == "move_completed"
             or event.status == "cancelled" or event.status == "rejected";
+        if event.status == "waiting_owner" and ( b.wait_reason ~= event.reason or s.time >= ( b.next_wait_log or -math.huge ) ) then
+            force = true; b.wait_reason, b.next_wait_log = event.reason, s.time + cfg.log_interval_s;
+        end;
         if not force and s.time < b.next_log then return end;
         b.next_log = s.time + cfg.log_interval_s;
         local record;
@@ -268,9 +316,12 @@ function M.New( cfg )
                 plan_id = event.plan_id, step_id = event.step_id,
                 selected_option = selected and selected.option_id, selected_key = selected and selected.candidate_key,
                 diagnostic_probe = selected and selected.diagnostic_probe or false,
-                hero = s.hero, targets = s.targets, probe = s.probe,
+                hero = s.hero, targets = s.targets, probe = s.probe, driver = s.driver,
                 last_hits = s.last_hits, denies = s.denies, reward_status = "not_defined", outcome_attribution = "not_attributed" };
         end
+        record.operation = cfg.operation;
+        record.diagnostic_probe = cfg.operation == "lane_probe" or cfg.operation == "probe_attack" or cfg.operation == "probe_raze"
+            or ( planning and planning.selected and planning.selected.diagnostic_probe ) or false;
         print( "[MIDBOT runtime] " .. Trace.Encode( record ) );
     end
     return b;

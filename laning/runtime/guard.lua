@@ -2,7 +2,7 @@
 -- без видимых heartbeat/ACK в этом же состоянии приказов не будет.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local C = require( GetScriptDirectory() .. "/laning/runtime/config" );
-local M, actors, serial = {}, {}, 0;
+local M, actors, calls, serial = {}, {}, {}, 0;
 function M.Actor( bot )
     local id, team = A.Call( bot, "GetPlayerID" ), A.Call( bot, "GetTeam" );
     if id == nil or team == nil then return nil end;
@@ -24,6 +24,10 @@ function M.ChannelReady( bot, now )
 end
 function M.AbilityGate( bot )
     local now, actor = A.Time(), M.Actor( bot );
+    if now and actor then
+        local c = calls[actor] or { count = 0 }; calls[actor] = c;
+        c.count, c.at = c.count + 1, now; -- видим вызов даже при ещё неготовом heartbeat
+    end;
     local s = actor and actors[actor];
     if not now or not s or now < s.lane_at or now - s.lane_at > C.owner_ttl_s then return false end;
     s.ability_at, s.ability_nonce = now, s.nonce;
@@ -33,6 +37,20 @@ function M.AbilityGate( bot )
     end
     s.lease.ack = s.lease.token;
     return true; -- подготовка/исполнение плана: самостоятельный каст Kimi уступает управление
+end
+function M.Diagnostics( bot, now )
+    local actor = M.Actor( bot ); local s, c = actors[actor], calls[actor];
+    local ready = M.ChannelReady( bot, now );
+    local function age( at ) return A.Number( now ) and A.Number( at ) and now >= at and now - at or nil end;
+    local lease = s and s.lease;
+    return { channel_ready = ready, owner_ttl_s = C.owner_ttl_s,
+        lane_age_s = s and age( s.lane_at ), ability_seen_age_s = c and age( c.at ),
+        ability_accepted_age_s = s and age( s.ability_at ), ability_calls = c and c.count or 0,
+        channel_reason = ready and "ready" or ( not c and "ability_callback_not_seen"
+            or ( not s and "lane_callback_not_seen" or "heartbeat_not_fresh" ) ),
+        lease_state = not lease and "none" or ( lease.until_s <= now and "expired"
+            or ( lease.ack == lease.token and "acked" or "awaiting_plan_ack" ) ),
+        lease_remaining_s = lease and math.max( 0, lease.until_s - now ) or nil };
 end
 function M.Acquire( bot, key, now )
     local s = actors[M.Actor( bot )];
