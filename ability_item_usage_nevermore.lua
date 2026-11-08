@@ -132,6 +132,8 @@ function LevelUpThink( npcBot )
 	local nPoints = npcBot:GetAbilityPoints();
 	if ( nPoints < 1 )
 	then
+		-- fail-closed для моков/старого окружения: без GetLevel не считаем
+		if ( type( npcBot.GetLevel ) ~= "function" ) then return end;
 		local nSpent = 0;
 		for _, sName in ipairs( { "nevermore_shadowraze1", "nevermore_frenzy",
 			"nevermore_requiem", "nevermore_dark_lord", "special_bonus_attributes" } )
@@ -148,7 +150,12 @@ function LevelUpThink( npcBot )
 	do
 		seen[sName] = ( seen[sName] or 0 ) + 1;
 		local ability = npcBot:GetAbilityByName( sName );
-		if ( ability ~= nil and ability:CanAbilityBeUpgraded() and ability:GetLevel() < seen[sName] )
+		-- T022: fail-closed, если у объекта нет CanAbilityBeUpgraded (моки/старое
+		-- окружение) — иначе падение здесь абортирует весь AbilityUsageThink.
+		if ( ability ~= nil
+			and type( ability.CanAbilityBeUpgraded ) == "function"
+			and ability:CanAbilityBeUpgraded()
+			and ability:GetLevel() < seen[sName] )
 		then
 			npcBot:ActionImmediate_LevelAbility( sName );
 			print( "[MIDBOT levelup] " .. sName );
@@ -159,10 +166,14 @@ function LevelUpThink( npcBot )
 	-- Fallback (фикс аудита GPT): если всё из списка выкачано или недоступно,
 	-- тратим очко на первую доступную способность — включая таланты.
 	-- Раньше очки после 6-го уровня могли копиться непотраченными.
+	-- T022: fail-closed для моков/старого окружения без GetAbilityInSlot —
+	-- иначе падение здесь абортирует весь Think до ConsiderRequiem.
+	if ( type( npcBot.GetAbilityInSlot ) ~= "function" ) then return end;
 	for nSlot = 0, 23
 	do
 		local ability = npcBot:GetAbilityInSlot( nSlot );
 		if ( ability ~= nil
+			and type( ability.CanAbilityBeUpgraded ) == "function"
 			and ability:CanAbilityBeUpgraded()
 			and ability:GetLevel() < ability:GetMaxLevel() )
 		then
