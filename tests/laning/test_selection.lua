@@ -4,7 +4,10 @@ local function eq( a, b ) assert( a == b, tostring( a ) .. " ~= " .. tostring( b
 local function test( name, fn ) fn(); passed = passed + 1; print( "PASS SELECTION " .. name ) end;
 local function scenario( mode, disabled )
     local s = { mode = mode, ids = { 5, 8, 9, 11, 15 }, humans = {}, selected = {}, picks = {}, logs = {} };
+    s.profile = { name = "valve_play", controller = "valve_native", runtime_enabled = false };
     local env = setmetatable( {
+        GetScriptDirectory = function() return "bots" end,
+        require = function( path ) assert( path == "bots/laning/profile" ); return s.profile end,
         GetTeam = function() return 3 end,
         GetGameMode = function() return s.mode end,
         GetTeamPlayers = function() return s.ids end,
@@ -22,7 +25,7 @@ local function scenario( mode, disabled )
 end
 test( "native 1v1 picks only one SF and preserves stable version name", function()
     local s = scenario( 21 ); s.env.Think(); eq( #s.picks, 1 ); eq( s.picks[1].hero, "npc_dota_hero_nevermore" );
-    eq( #s.env.GetBotNames(), 1 ); eq( s.env.GetBotNames()[1], "MIDBOT v0.3.1" );
+    eq( #s.env.GetBotNames(), 1 ); eq( s.env.GetBotNames()[1], "MIDBOT v0.3.2" );
 end );
 test( "ordinary all pick keeps full team and names", function()
     local s = scenario( 1 ); s.env.Think(); eq( #s.picks, 5 ); eq( #s.env.GetBotNames(), 5 );
@@ -74,5 +77,13 @@ test( "selection log separates slot count from selected hero count without spam"
     local line = s.logs[#s.logs]; assert( line:find( "bot_slots=5 selected_bot_heroes=1", 1, true ) );
     assert( line:find( "profile=solo_1v1", 1, true ) );
     local count = #s.logs; s.env.Think(); eq( #s.logs, count ); eq( #s.ids, 5 );
+end );
+test( "play controller attribution is visible during selection", function()
+    local s = scenario( 21 ); s.env.Think();
+    assert( s.logs[1]:find( "controller_profile=valve_play controller=valve_native", 1, true ) );
+end );
+test( "probe controller is reported separately from native play", function()
+    local s = scenario( 21 ); s.profile.name, s.profile.controller = "lane_probe", "midbot_runtime"; s.env.Think();
+    assert( s.logs[1]:find( "controller_profile=lane_probe controller=midbot_runtime", 1, true ) );
 end );
 print( "SELECTION PASSED " .. passed );

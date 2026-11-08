@@ -1,6 +1,7 @@
 -- Вызывается mode_laning: collector работает и при observe/нулевом desire.
 local A = require( GetScriptDirectory() .. "/laning/runtime/api" );
 local C = require( GetScriptDirectory() .. "/laning/runtime/config" );
+local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local Backend = require( GetScriptDirectory() .. "/laning/runtime/backend" );
 local Guard = require( GetScriptDirectory() .. "/laning/runtime/guard" );
 local Bridge = require( GetScriptDirectory() .. "/laning/advanced/bridge" );
@@ -8,6 +9,7 @@ local Planner = require( GetScriptDirectory() .. "/laning/advanced/planner" );
 local PolicyConfig = require( GetScriptDirectory() .. "/laning/advanced/config" );
 local M, actors = {}, {};
 local function ensure( bot )
+    if Profile.runtime_enabled ~= true then return nil end;
     local key, now = Guard.Actor( bot ), A.Time();
     if not key or not now then return nil end;
     if C.operation ~= "observe" and C.operation ~= "execute" and C.operation ~= "probe_attack" and C.operation ~= "probe_raze" and C.operation ~= "lane_probe" then

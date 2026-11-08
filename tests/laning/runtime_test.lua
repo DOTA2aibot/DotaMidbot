@@ -14,6 +14,7 @@ local function scenario( operation )
     env.DAMAGE_TYPE_PHYSICAL, env.DAMAGE_TYPE_MAGICAL = 1, 2;
     env.DOTA_ABILITY_BEHAVIOR_NO_TARGET = 4;
     env.BOT_MODE_RETREAT, env.BOT_MODE_LANING, env.BOT_MODE_NONE = 3, 1, 0;
+    env.BOT_ACTION_DESIRE_NONE, env.BOT_ACTION_DESIRE_LOW, env.BOT_ACTION_DESIRE_MODERATE = 0, 0.2, 0.5;
     env.BOT_ACTION_TYPE_ATTACK, env.BOT_ACTION_TYPE_ATTACKMOVE, env.BOT_MODE_DESIRE_MODERATE = 7, 8, 0.5; env.LANE_MID = 2;
     env.print = function( line ) s.logs[#s.logs + 1] = line end;
     env.require = function( path )
@@ -107,6 +108,8 @@ local function scenario( operation )
     end
     function bot:GetAbilityByName( name ) return abilities[name] end;
     s.abilities, s.env = abilities, env;
+    s.profile = env.require( "bots/laning/profile" );
+    s.profile.name, s.profile.controller, s.profile.runtime_enabled = "lane_probe", "midbot_runtime", true;
     s.cfg = env.require( "bots/laning/runtime/config" ); s.cfg.operation, s.cfg.lane_positioning = operation or "observe", false;
     s.guard = env.require( "bots/laning/runtime/guard" );
     s.observer = env.require( "bots/laning/runtime/observe" );
@@ -344,8 +347,9 @@ print( "RUNTIME PASSED " .. passed );
 -- Append to runtime_test.lua to reuse its isolated API fixture and real modules.
 local audited = 0;
 local function audit( name, fn ) fn(); audited = audited + 1; print( "PASS COMBINED_PR25 " .. name ) end;
-local function loadCandidate( s, missingGuard, debugEnabled )
-    local f = assert( io.open( "tests/laning/audit_sources/t016_merged_f4bf3aa.lua", "r" ) ); local text = f:read( "*a" ); f:close();
+local function loadCandidate( s, missingGuard, debugEnabled, currentAbility )
+    local f = assert( io.open( currentAbility and "ability_item_usage_nevermore.lua"
+        or "tests/laning/audit_sources/t016_merged_f4bf3aa.lua", "r" ) ); local text = f:read( "*a" ); f:close();
     if debugEnabled then text = text:gsub( "local MIDBOT_DEBUG_MODIFIERS = false;", "local MIDBOT_DEBUG_MODIFIERS = true;" ) end;
     local previous = s.env.require;
     if missingGuard then s.env.require = function( path )
@@ -614,3 +618,45 @@ movetest( "compact records include the rejected point and fresh validation phase
     assert( log:find( '"destination":{"x":250,"y":0}', 1, true ) );
 end );
 print( "MOVE_RUNTIME PASSED " .. movementTests );
+
+local profileTests = 0;
+local function profiletest( name, fn ) fn(); profileTests = profileTests + 1; print( "PASS PROFILE_RUNTIME " .. name ) end;
+profiletest( "play profile cannot create heartbeat, channel or ownership", function()
+    local s = scenario( "lane_probe" ); s.profile.runtime_enabled = false;
+    eq( s.guard.LanePulse( s.bot, s.time ), nil ); eq( s.guard.AbilityGate( s.bot ), false );
+    eq( s.guard.ChannelReady( s.bot, s.time ), false );
+    local ok, reason = s.guard.Acquire( s.bot, "p", s.time ); eq( ok, false ); eq( reason, "runtime_profile_disabled" );
+    eq( s.guard.Diagnostics( s.bot, s.time ).ability_calls, 0 );
+end );
+profiletest( "play rejects accidental runtime entry calls before and after ten minutes", function()
+    local s = scenario( "lane_probe" ); s.profile.runtime_enabled = false; s.cfg.lane_positioning = true;
+    for _, time in ipairs( { 0, 120, 599, 600, 601, 900 } ) do
+        s.time = time; eq( s.entry.Desire( s.bot ), 0 ); s.entry.Think( s.bot );
+    end;
+    eq( #s.moves, 0 ); eq( #s.attacks, 0 ); eq( #s.casts, 0 );
+end );
+profiletest( "disabled profile revokes a previous lease without clearing other actions", function()
+    local s = scenario( "lane_probe" ); s:own(); local token = s.backend.token;
+    assert( s.guard.Owns( s.bot, token, s.time ) ); s.profile.runtime_enabled = false;
+    eq( s.guard.AbilityGate( s.bot ), false ); eq( s.guard.Owns( s.bot, token, s.time ), false );
+    eq( s.guard.Diagnostics( s.bot, s.time ).lease_state, "none" );
+    s.entry.Leave( s.bot ); eq( s.cleared, 0 );
+end );
+profiletest( "actual merged PR32 ability callback stays autonomous in play", function()
+    local s = scenario( "lane_probe" ); loadCandidate( s, false, false, true );
+    s.profile.runtime_enabled = false; s.env.AbilityUsageThink();
+    eq( s.autonomous, 1 ); eq( s.level_reads, 1 );
+    local log = table.concat( s.logs, "\n" ); assert( not log:find( "[MIDBOT ability ERROR]", 1, true ) );
+end );
+profiletest( "truthy nonboolean config cannot enable the controller", function()
+    local s = scenario( "lane_probe" ); s.profile.runtime_enabled = "true";
+    eq( s.entry.Desire( s.bot ), 0 ); eq( s.guard.AbilityGate( s.bot ), false );
+end );
+profiletest( "actual merged callback still acknowledges a probe in enabled profile", function()
+    local s = scenario( "probe_attack" ); loadCandidate( s, false, false, true );
+    s.entry.Desire( s.bot ); s.env.AbilityUsageThink();
+    s.entry.Think( s.bot ); eq( #s.attacks, 0 );
+    s.env.AbilityUsageThink(); s.time = s.time + 0.16; s.entry.Think( s.bot );
+    eq( #s.attacks, 1 );
+end );
+print( "PROFILE_RUNTIME PASSED " .. profileTests );
