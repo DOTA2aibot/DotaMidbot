@@ -709,6 +709,16 @@ function DebugPrintModifiers( npcBot )
 	if ( not MIDBOT_DEBUG_MODIFIERS ) then return end;
 	if ( GameTime() < nextDiagTime ) then return end;
 	nextDiagTime = GameTime() + 3.0;
+	-- Фарм-телеметрия (T019). Матч 9081051372: души=0 весь матч, и по логу
+	-- было неотличимо «бот не добивает» от «Necromastery не действует».
+	-- Necromastery — врождённая (качается сама с уровнем, Олег 08.11), значит
+	-- души=0 означает именно отсутствие добиваний; lvl/lh/denies закрывают
+	-- этот пробел измерения напрямую из Bot API.
+	print( "[MIDBOT diag] stats: lvl=" .. npcBot:GetLevel()
+		.. " lh=" .. npcBot:GetLastHits()
+		.. " denies=" .. npcBot:GetDenies()
+		.. " gold=" .. npcBot:GetGold()
+		.. " souls=" .. tostring( GetSoulsCount( npcBot ) ) );
 	-- Имена способностей в слотах (проверка имён текущего патча, напр. feast_of_souls)
 	for nSlot = 0, 8
 	do
