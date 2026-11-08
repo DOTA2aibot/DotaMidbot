@@ -102,22 +102,25 @@ end
 -- сам решит, что доступно. Если способности из списка нет в текущем патче,
 -- GetAbilityByName вернёт nil и она просто пропустится.
 ----------------------------------------------------------------------------------------------------
+-- Порядок утверждён Олегом 08.11: сначала рейзы 4 и аура 4, Feast of Souls
+-- ПЕРВЫЙ раз на 10-м уровне (после 4+4+ульт). Список приоритетный:
+-- CanAbilityBeUpgraded сам отложит реквием до 6/12/18.
 local SKILL_ORDER = {
-	"nevermore_shadowraze1",      -- рейзы максимум в первую очередь
+	"nevermore_shadowraze1",      -- 1-4: рейзы максимум в первую очередь
 	"nevermore_shadowraze1",
 	"nevermore_shadowraze1",
 	"nevermore_shadowraze1",
+	"nevermore_dark_lord",        -- 5: аура
 	"nevermore_requiem",          -- 6
-	"nevermore_frenzy",   -- активка на D (7.4x)
-	"nevermore_frenzy",
+	"nevermore_dark_lord",        -- 7-9: аура до 4
+	"nevermore_dark_lord",
+	"nevermore_dark_lord",
+	"nevermore_frenzy",           -- 10: Feast of Souls, ПЕРВЫЙ поинт
 	"nevermore_requiem",          -- 12
+	"nevermore_frenzy",           -- 11,13,14
 	"nevermore_frenzy",
-	"nevermore_dark_lord",        -- аура
 	"nevermore_frenzy",
-	"nevermore_dark_lord",
 	"nevermore_requiem",          -- 18
-	"nevermore_dark_lord",
-	"nevermore_dark_lord",
 };
 
 -- T023: анти-спам прокачки. Матч 9082042282: учёт очков решил, что очко есть
@@ -803,17 +806,60 @@ end
 ----------------------------------------------------------------------------------------------------
 -- T023: не тратим рейз на крипа, которого ДОБЬЮТ свои до удара (каст 0.55с).
 -- Репорт Олега 08.11: «крип уже мёртв, а он спустя 0.5 сек жмёт койл в труп».
--- Оценка: летящие атакующие снаряды × ~22 урона. Нет API/ошибка — не пропускаем.
+-- Усиление 08.11 (вечер): считаем не только снаряды в полёте, но и союзных
+-- крипов/вышки, которые УЖЕ бьют цель — за каст-поинт долетит минимум по удару.
+-- Нет API/ошибка — не пропускаем (fail-open, как раньше).
 ----------------------------------------------------------------------------------------------------
 local CREEP_PROJECTILE_DAMAGE = 22;
-local function WillDieBeforeRaze( npcCreep )
-	local ok, projectiles = pcall( function() return npcCreep:GetIncomingTrackingProjectiles() end );
-	if ( not ok or type( projectiles ) ~= "table" ) then return false end;
-	local incoming = 0;
-	for _, proj in pairs( projectiles ) do
-		if ( proj.is_attack ) then incoming = incoming + CREEP_PROJECTILE_DAMAGE end;
+local TOWER_HIT_DAMAGE = 110;
+local function SafeAttackTarget( unit )
+	local ok, target = pcall( function() return unit:GetAttackTarget() end );
+	if ( ok ) then return target end;
+	return nil;
+end
+local function WillDieBeforeRaze( npcBot, npcCreep )
+	-- Труп/умирающий — не кастуем вообще
+	if ( npcCreep:GetHealth() <= 0
+		or ( type( npcCreep.IsAlive ) == "function" and not npcCreep:IsAlive() ) )
+	then
+		return true;
 	end
-	return incoming >= npcCreep:GetHealth();
+	local nHp = npcCreep:GetHealth();
+	local incoming = 0;
+	-- 1) летящие снаряды союзников
+	local ok, projectiles = pcall( function() return npcCreep:GetIncomingTrackingProjectiles() end );
+	if ( ok and type( projectiles ) == "table" )
+	then
+		for _, proj in pairs( projectiles ) do
+			if ( proj.is_attack ) then incoming = incoming + CREEP_PROJECTILE_DAMAGE end;
+		end
+	end
+	if ( incoming >= nHp ) then return true end;
+	-- 2) союзные крипы, которые уже атакуют эту цель
+	local okA, allies = pcall( function() return npcBot:GetNearbyLaneCreeps( 1200, false ) end );
+	if ( okA and type( allies ) == "table" )
+	then
+		for _, ally in pairs( allies ) do
+			if ( SafeAttackTarget( ally ) == npcCreep )
+			then
+				incoming = incoming + CREEP_PROJECTILE_DAMAGE;
+				if ( incoming >= nHp ) then return true end;
+			end
+		end
+	end
+	-- 3) союзная вышка, которая бьёт цель
+	local okT, towers = pcall( function() return npcBot:GetNearbyTowers( 1200, false ) end );
+	if ( okT and type( towers ) == "table" )
+	then
+		for _, npcTower in pairs( towers ) do
+			if ( SafeAttackTarget( npcTower ) == npcCreep )
+			then
+				incoming = incoming + TOWER_HIT_DAMAGE;
+				if ( incoming >= nHp ) then return true end;
+			end
+		end
+	end
+	return false;
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -883,7 +929,7 @@ function ConsiderRazeOnCreeps( npcBot )
 				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
 				then
 					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep )
-						and not WillDieBeforeRaze( npcCreep ) ) -- T023: свои уже добивают
+						and not WillDieBeforeRaze( npcBot, npcCreep ) ) -- T023: свои уже добивают
 					then
 						-- П.3: дальний крип (маг) — приоритет. Катапульты отдельно:
 						-- у них ~80% маг. сопротивления, рейз их почти не добивает
