@@ -74,7 +74,9 @@ class Packages(unittest.TestCase):
         path = self.bundle('valve_lane_economy')
         info = package.verify(path)
         self.assertTrue(info['economy_enabled'])
-        self.assertFalse(info['wards_enabled'])
+        # T024 (Олег 08.11): economy-профиль теперь включает и установку вардов —
+        # иначе купленные варды лежали мёртвым грузом.
+        self.assertTrue(info['wards_enabled'])
         self.assertFalse(info['runtime_enabled'])
         self.assertEqual(info['controller'], 'valve_native_with_midbot_rune')
         roots = {n for n in info['files_sha256'] if '/' not in n}

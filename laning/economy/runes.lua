@@ -50,6 +50,26 @@ function M.Decide( bot )
         local tp, bp = A.Position( target ), A.Position( bot );
         if not tp or not bp or A.Distance( tp, bp ) <= C.lane_radius then return nil, "hero_target_first" end;
     end;
+    -- T024 (гайд Олега 08.11): если вражеская пачка уже у НАШЕЙ вышки/хг,
+    -- сначала защищаем лайн — руна подождёт («приоритет убить крипов»).
+    local ownTowers = A.Call( bot, "GetNearbyTowers", 1600, false );
+    if type( ownTowers ) == "table" then
+        for _, tower in ipairs( ownTowers ) do
+            if A.Visible( tower ) then
+                local tp = A.Position( tower );
+                if tp then
+                    for _, creep in ipairs( creeps ) do
+                        if A.Visible( creep ) then
+                            local cp = A.Position( creep );
+                            if cp and A.Distance( tp, cp ) <= C.rune_lane_defense_radius then
+                                return nil, "lane_defense_first";
+                            end;
+                        end;
+                    end;
+                end;
+            end;
+        end;
+    end;
     local scan_radius = C.rune_distance + C.rune_enemy_radius;
     if scan_radius > 1600 then return nil, "enemy_scan_radius_unsupported" end;
     local enemies = A.Call( bot, "GetNearbyHeroes", scan_radius, true, BOT_MODE_NONE );
@@ -69,7 +89,11 @@ function M.Decide( bot )
     -- отвечают «нет» — поэтому в коротком окне после спавна идём «вслепую».
     -- Безопасность уже отфильтрована выше (враги, вышки, hp, крипы вплотную);
     -- если руны на месте нет, pickup timeout и Leave вернут бота на линию.
-    local blind_window = now >= 360 and ( now % 120 ) >= 5 and ( now % 120 ) <= 45;
+    -- T024 (гайд Олега 08.11): окно покрывает и ВОДЯНЫЕ руны 2:00/4:00 (те же
+    -- точки POWERUP_1/2), и выход ЗАРАНЕЕ — tmod >= 110 (1:50/3:50/5:50…),
+    -- чтобы бот встречал руну, а не реагировал постфактум.
+    local tmod = now % 120;
+    local blind_window = now >= 110 and ( tmod >= 110 or tmod <= 45 );
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( towers ) ~= "table" then return nil, "tower_data_unknown" end;
     local best, distance;
@@ -89,11 +113,17 @@ function M.Decide( bot )
                 end;
             end;
         end;
+        local visible = global( "IsLocationVisible", location ) == true;
+        local status = global( "GetRuneStatus", rune );
+        -- T024 (гайд Олега 08.11): точку видно и руны там НЕТ — её уже забрал
+        -- союзник или враг. В пустую точку не ходим даже в слепом окне;
+        -- приоритет возвращается на харас/ластхит (desire падает в 0).
+        local taken = visible and A.Number( status ) and status ~= RUNE_STATUS_AVAILABLE;
         if valid and safe and A.Number( d ) and d <= C.rune_distance
             and global( "IsLocationPassable", location ) == true
+            and not taken
             and ( blind_window
-                or ( global( "IsLocationVisible", location ) == true
-                    and global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE ) )
+                or ( visible and status == RUNE_STATUS_AVAILABLE ) )
             and ( not distance or d < distance ) then best, distance = rune, d end;
     end;
     if not best then return nil, "no_nearby_visible_available_river_rune" end;

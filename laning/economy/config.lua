@@ -12,6 +12,7 @@ return {
     lane_radius = 1200, rune_distance = 1100, rune_desire = 0.85,
     rune_enemy_radius = 500, rune_min_hp = 0.35, rune_window_end = 900,
     rune_creep_block_radius = 250,
+    rune_lane_defense_radius = 900, -- T024: враги у нашей вышки → сначала лайн
     rune_order_timeout_s = 4, rune_retry_s = 10,
     mana_fraction = 0.35, mana_missing = 100, mana_window_end = 600,
     mana_purchase_interval = 90, mana_attempt_interval = 5,
