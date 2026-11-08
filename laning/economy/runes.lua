@@ -28,9 +28,19 @@ function M.Decide( bot )
     -- небезопасно. Свежий pickup поверх атаки движок принимает штатно.
     local action = A.Call( bot, "GetCurrentActionType" );
     if action == nil then return nil, "action_unknown" end;
-    if BOT_ACTION_TYPE_PICK_UP_RUNE == nil or A.Call( bot, "NumQueuedActions" ) ~= 0 then return nil, "rune_cancel_or_queue_unavailable" end;
-    if prior and prior.owned_order and action ~= BOT_ACTION_TYPE_PICK_UP_RUNE then return nil, "rune_order_replaced_or_action_type_unknown" end;
-    if action == BOT_ACTION_TYPE_PICK_UP_RUNE and not ( states[bot] and states[bot].owned_order ) then return nil, "unowned_rune_order" end;
+    -- T024b (матч 9082231706): после НАШЕГО pickup-приказа движку нужно время
+    -- его начать — первые доли секунды current action ещё MOVE_TO, а очередь
+    -- может быть непустой. Раньше гейты ниже схлопывали desire через 0.13с
+    -- после приказа (rune_order → rune_cancel mode_ended), и бот так и не шёл
+    -- на руну. Пока заказ наш и свежий (grace) — держим desire; гейты
+    -- безопасности (hp/враги/крипы у вышки) ниже продолжают работать.
+    local fresh_owned = prior ~= nil and prior.owned_order == true
+        and prior.started_at ~= nil and now - prior.started_at < C.rune_order_grace_s;
+    if not fresh_owned then
+        if BOT_ACTION_TYPE_PICK_UP_RUNE == nil or A.Call( bot, "NumQueuedActions" ) ~= 0 then return nil, "rune_cancel_or_queue_unavailable" end;
+        if prior and prior.owned_order and action ~= BOT_ACTION_TYPE_PICK_UP_RUNE then return nil, "rune_order_replaced_or_action_type_unknown" end;
+        if action == BOT_ACTION_TYPE_PICK_UP_RUNE and not ( states[bot] and states[bot].owned_order ) then return nil, "unowned_rune_order" end;
+    end;
     local hp, maxhp = A.Call( bot, "GetHealth" ), A.Call( bot, "GetMaxHealth" );
     if not A.Number( hp ) or not A.Number( maxhp ) or maxhp <= 0 or hp / maxhp < C.rune_min_hp then return nil, "health_or_unknown" end;
     local creeps = A.Call( bot, "GetNearbyLaneCreeps", C.lane_radius, true );

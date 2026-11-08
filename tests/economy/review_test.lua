@@ -71,10 +71,12 @@ test( "missing cancellation enum, root and evasion suppress new rune orders", fu
     t.rooted = false; t.mode = 19; eq( t.rune_policy.GetDesire( t.bot ), 0 );
 end );
 test( "pickup has a timeout and reentry cannot bypass retry cooldown", function()
+    -- T024b: timeout поднят 4→8с (пешком до дальней руны ~3.5с, матч 9082231706),
+    -- retry остался 10с.
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
-    s.time = 103; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- no periodic order restart
-    s.time = 104; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Leave( s.bot ); eq( s.cancelled, 1 );
-    s.time = 105; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.time = 114; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
+    s.time = 107; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- no periodic order restart
+    s.time = 108; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Leave( s.bot ); eq( s.cancelled, 1 );
+    s.time = 109; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.time = 118; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
 end );
 test( "unseen stale target is not read for hidden location", function()
     local s = scenario(); pickup( s ); s.target = s:unit(); s.target.CanBeSeen = function() return false end;
@@ -103,8 +105,13 @@ test( "failed attempts release budget reservation rather than exhausting supplie
 end );
 test( "unexpected action type retires pickup without restarting or clearing movement", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot );
-    s.action = 2; s.time = 101; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+    -- T024b: первые rune_order_grace_s секунд MOVE_TO — НОРМА, движок ещё
+    -- начинает наш приказ: desire держится (матч 9082231706: старое поведение
+    -- схлопывало режим через 0.13с после rune_order). После grace чужое
+    -- действие по-прежнему снимает desire без очистки движения.
+    s.action = 2; s.time = 101; eq( s.rune_policy.GetDesire( s.bot ), .85 );
+    s.time = 104; eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
     eq( s.cancelled, nil ); eq( s.action, 2 ); eq( #s.runes, 1 );
-    s.time = 102; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 105; eq( s.rune_policy.GetDesire( s.bot ), 0 );
 end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
