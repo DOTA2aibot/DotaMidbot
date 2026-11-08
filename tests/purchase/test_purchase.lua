@@ -7,6 +7,11 @@ local function scenario( opt )
 	local s = { now = 0, calls = {}, gold = 100000, result = 0, logs = {} };
 	local env = setmetatable( {}, { __index = _G } );
 	env.PURCHASE_ITEM_SUCCESS = 0;
+	if opt.unavailable_constants then
+		env.PURCHASE_ITEM_OUT_OF_STOCK = 100;
+		env.PURCHASE_ITEM_INVALID_ITEM_NAME = 101;
+		env.PURCHASE_ITEM_DISALLOWED_ITEM = 102;
+	end;
 	if ( opt.noConstant ) then env.PURCHASE_ITEM_SUCCESS = nil end;
 	local function item( name ) return { GetName = function() return name end } end;
 	local bot = {
@@ -45,7 +50,7 @@ test( "failure retries; success advances exactly once", function()
 	local s = scenario(); s.result = 4; s:tick(); s:tick();
 	eq( s.calls[1], "item_tango" ); eq( s.calls[2], "item_tango" );
 	s.result = 0; s:tick(); s:tick(); s:tick(); eq( s.calls[3], "item_tango" );
-	eq( s.calls[4], "item_wraith_band" ); eq( #s.calls, 4 );
+	eq( s.calls[4], "item_ward_observer" ); eq( #s.calls, 4 );
 end );
 test( "nil result is not success", function()
 	local s = scenario( { purchase = function() return nil end } ); s:tick(); s:tick();
@@ -64,22 +69,22 @@ test( "nested recipe, repeated component and first variant", function()
 		if ( name == "item_wraith_band" ) then return { { "part_a", "bundle", "part_a" }, { "unused" } } end;
 		if ( name == "bundle" ) then return { "part_b", "part_c" } end; return {};
 	end } );
-	for i = 1, 8 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,part_a,part_b,part_c,part_a,item_bottle" );
+	for i = 1, 20 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_ward_sentry,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,part_c,part_a,item_magic_wand" );
 end );
 test( "stash and own courier credit; other courier excluded", function()
 	local s = scenario( { slots = { [9] = "part_a" },
 		couriers = { { owner = 7, slots = { [0] = "part_b" } }, { owner = 8, slots = { [0] = "part_a" } } },
 		recipe = function( name ) if ( name == "item_wraith_band" ) then return { { "part_a", "part_a", "part_b" } } end; return {} end,
 	} );
-	for i = 1, 5 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,part_a,item_bottle" );
+	for i = 1, 17 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_ward_sentry,item_branches,item_branches,item_bottle,item_flask,part_a,item_magic_wand" );
 end );
 test( "delayed delivery and auto-combination do not rebuild paid components", function()
 	local s = scenario( { recipe = function( name )
 		if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {};
 	end } );
 	-- Инвентарь пуст даже после успеха: компоненты могут ещё доставляться/собираться.
-	for i = 1, 6 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,part_a,part_b,item_bottle" );
+	for i = 1, 18 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_ward_sentry,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,item_magic_wand" );
 end );
 test( "cycle blocks and log is deduplicated", function()
 	local s = scenario( { recipe = function( name )
@@ -96,13 +101,13 @@ test( "malformed recipe blocks", function()
 	local s = scenario( { recipe = function() return "bad" end } ); s:tick(); eq( #s.calls, 0 );
 end );
 test( "invalid costs never submit", function()
-	for _, cost in ipairs( { 0, -1, math.huge, "unknown" } ) do
+	for _, cost in ipairs( { -1, math.huge, "unknown" } ) do
 		local s = scenario( { cost = function() return cost end } ); s:tick(); s:tick(); eq( #s.calls, 0 );
 	end
 end );
 test( "all targets terminate without duplicate spending", function()
 	local s = scenario(); for i = 1, 30 do s:tick() end;
-	eq( #s.calls, 11 ); eq( s.calls[11], "item_satanic" ); eq( s.nextCost, 0 );
+	eq( #s.calls, 15 ); eq( s.calls[15], "item_satanic" ); eq( s.nextCost, 0 );
 end );
 test( "shop and stock failures retain position", function()
 	for _, result in ipairs( { 1, 2, 3, 5, 6, 7 } ) do
@@ -121,16 +126,29 @@ test( "failed middle component retries without repurchasing paid predecessor", f
 	local s = scenario( { recipe = function( name )
 		if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {};
 	end, purchase = function( state, name )
-		if ( name == "part_b" and #state.calls < 5 ) then return 4 end; return 0;
+		if name == "part_b" then
+			state.part_b_calls = ( state.part_b_calls or 0 ) + 1;
+			if state.part_b_calls < 3 then return 4 end;
+		end;
+		return 0;
 	end } );
-	for i = 1, 8 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,part_a,part_b,part_b,part_b,item_bottle" );
+	for i = 1, 20 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_ward_sentry,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,part_b,part_b,item_magic_wand" );
 end );
 test( "inventory and backpack components are reused", function()
 	local s = scenario( { slots = { [0] = "part_a", [6] = "part_b" },
 		recipe = function( name ) if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {} end,
 	} );
-	for i = 1, 4 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,item_bottle" );
+	for i = 1, 16 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_ward_sentry,item_branches,item_branches,item_bottle,item_flask,item_magic_wand" );
 end );
-print( "PASSED " .. passed .. " tests (mock API, not a Dota runtime test)" );
+test( "zero cost is a valid purchase rather than a queue blocker", function()
+	local s = scenario( { cost = function() return 0 end } ); s:tick(); eq( s.calls[1], "item_tango" );
+end );
+test( "known unavailable result skips target but nil still retries", function()
+	local s = scenario( { unavailable_constants = true } ); s.result = 100; s:tick(); s:tick();
+	eq( s.calls[1], "item_tango" ); eq( s.calls[2], "item_ward_observer" );
+	local t = scenario( { unavailable_constants = true, purchase = function() return nil end } );
+	t:tick(); t:tick(); eq( t.calls[1], "item_tango" ); eq( t.calls[2], "item_tango" );
+end );
+print( "PURCHASE PASSED " .. passed .. " tests (mock API, not a Dota runtime test)" );

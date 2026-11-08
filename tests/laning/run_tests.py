@@ -45,3 +45,6 @@ subprocess.run([sys.executable, '-X', 'utf8', str(root / 'tests/laning/test_pack
                cwd=root, check=True)
 subprocess.run([sys.executable, '-X', 'utf8', str(root / 'tests/observer/run_tests.py')],
                cwd=root, check=True)
+
+subprocess.run([sys.executable, "-X", "utf8", str(root / "tests/economy/run_tests.py")], cwd=root, check=True)
+subprocess.run([sys.executable, "-X", "utf8", str(root / "tests/purchase/run_tests.py")], cwd=root, check=True)

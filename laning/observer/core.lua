@@ -24,6 +24,14 @@ function M.State( bot )
             run_id = C.run_prefix .. ":" .. tostring( A.Call( bot, "GetPlayerID" ) ) .. ":" .. serial .. ":" .. now };
         states[bot] = s;
     end;
+function M.ModeName( mode )
+    for _, name in ipairs( { "BOT_MODE_NONE", "BOT_MODE_LANING", "BOT_MODE_ATTACK", "BOT_MODE_RETREAT",
+        "BOT_MODE_RUNE", "BOT_MODE_FARM", "BOT_MODE_ROAM", "BOT_MODE_TEAM_ROAM", "BOT_MODE_EVASIVE_MANEUVERS",
+        "BOT_MODE_PUSH_TOWER_MID", "BOT_MODE_DEFEND_TOWER_MID", "BOT_MODE_ITEM", "BOT_MODE_WARD" } ) do
+        if type( _G[name] ) == "number" and _G[name] == mode then return name end;
+    end;
+    return "unknown";
+end;
     s.last_time = now; return s;
 end
 function M.ID( s, unit )
@@ -109,7 +117,8 @@ function M.Capture( bot, s )
     local id = A.Call( bot, "GetPlayerID" );
     local hero = { position = p, height_level = own_height, hp = A.Call( bot, "GetHealth" ),
         max_hp = A.Call( bot, "GetMaxHealth" ), mana = A.Call( bot, "GetMana" ), max_mana = A.Call( bot, "GetMaxMana" ),
-        level = A.Call( bot, "GetLevel" ), gold = A.Call( bot, "GetGold" ), alive = A.Call( bot, "IsAlive" ),
+        level = A.Call( bot, "GetLevel" ), ability_points = A.Call( bot, "GetAbilityPoints" ),
+        gold = A.Call( bot, "GetGold" ), alive = A.Call( bot, "IsAlive" ),
         last_hits = A.Call( bot, "GetLastHits" ), denies = A.Call( bot, "GetDenies" ),
         kills = M.Global( "GetHeroKills", id ), deaths = M.Global( "GetHeroDeaths", id ),
         active_mode = A.Call( bot, "GetActiveMode" ), mode_desire = A.Call( bot, "GetActiveModeDesire" ),
@@ -119,7 +128,9 @@ function M.Capture( bot, s )
         facing = A.Call( bot, "GetFacing" ), casting = A.Call( bot, "IsUsingAbility" ),
         channeling = A.Call( bot, "IsChanneling" ), silenced = A.Call( bot, "IsSilenced" ),
         stunned = A.Call( bot, "IsStunned" ), hexed = A.Call( bot, "IsHexed" ), disarmed = A.Call( bot, "IsDisarmed" ),
-        modifiers = A.Modifiers( bot ), items = {}, abilities = {} };
+        modifiers = A.Modifiers( bot ), items = {}, abilities = {}, ability_slots = {},
+        has_scepter = A.Call( bot, "HasScepter" ) };
+    hero.mode_name = M.ModeName( hero.active_mode );
     for _, modifier in ipairs( hero.modifiers ) do
         if modifier.name == "modifier_nevermore_necromastery" and A.Number( modifier.stacks ) then
             hero.souls = modifier.stacks;
@@ -135,7 +146,19 @@ function M.Capture( bot, s )
         local a = A.Call( bot, "GetAbilityByName", name );
         if a then hero.abilities[#hero.abilities + 1] = { name = name, level = A.Call( a, "GetLevel" ),
             cooldown = A.Call( a, "GetCooldownTimeRemaining" ), mana_cost = A.Call( a, "GetManaCost" ),
-            castable = A.Call( a, "IsFullyCastable" ), phase = A.Call( a, "IsInAbilityPhase" ) } end;
+            castable = A.Call( a, "IsFullyCastable" ), phase = A.Call( a, "IsInAbilityPhase" ),
+            hidden = A.Call( a, "IsHidden" ), activated = A.Call( a, "IsActivated" ),
+            upgradable = A.Call( a, "CanAbilityBeUpgraded" ), max_level = A.Call( a, "GetMaxLevel" ),
+            upgrade_required_level = A.Call( a, "GetHeroLevelRequiredToUpgrade" ) } end;
+    end;
+    -- Имена фиксированного списка могут быть старыми/скрытыми placeholders.
+    -- Только собственные slots0..23; это диагностика binding, не смена skill build.
+    for slot = 0, 23 do
+        local a = A.Call( bot, "GetAbilityInSlot", slot );
+        local name = A.Call( a, "GetName" );
+        if type( name ) == "string" then hero.ability_slots[#hero.ability_slots + 1] = {
+            slot = slot, name = name, level = A.Call( a, "GetLevel" ), hidden = A.Call( a, "IsHidden" ),
+            activated = A.Call( a, "IsActivated" ), upgradable = A.Call( a, "CanAbilityBeUpgraded" ) } end;
     end;
     local targets, seen = {}, {};
     local function collect( list, kind )
@@ -169,6 +192,8 @@ function M.Capture( bot, s )
     if attack_target and A.Visible( attack_target ) then hero.attack_target_id = M.ID( s, attack_target ) end;
     return { hero = hero, targets = targets, height_status = own_height and "observed" or "unavailable",
         targets_truncated = #targets >= C.max_targets, field_absence = "unknown_not_zero",
-        attack_owner = "native_or_unattributed", ability_owner = "midbot_rules" };
+        attack_owner = "native_or_unattributed", ability_owner = "midbot_rules",
+        farm_objective = { primary = "lane_last_hits", full_wave_bonus_enabled = false,
+            full_wave_status = "unknown_no_complete_cohort_or_per_creep_credit" } };
 end
 return M;

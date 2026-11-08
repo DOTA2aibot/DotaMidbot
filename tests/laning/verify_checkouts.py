@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='.midbot-checkouts-', dir=root) as direc
         checkout.mkdir()
         for name in ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua'):
             shutil.copyfile(root / name, checkout / name)
-        for name in ('laning', 'tests/laning', 'tests/observer', 'profiles', 'tools'):
+        for name in ('laning', 'tests/laning', 'tests/observer', 'tests/economy', 'tests/purchase', 'profiles', 'tools'):
             shutil.copytree(root / name, checkout / name,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         for path in checkout.rglob('*'):
