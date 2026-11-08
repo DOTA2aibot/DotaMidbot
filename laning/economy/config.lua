@@ -9,7 +9,7 @@
 -- часто ниже 50% HP (health_or_unknown ×31) — а руна как раз заряжает ботл.
 -- rune_distance 1100 + enemy_radius 500: scan 1600 — предел API GetNearbyHeroes.
 return {
-    lane_radius = 1200, rune_distance = 1100, rune_desire = 0.85,
+    lane_radius = 1200, rune_distance = 1400, rune_desire = 0.85,
     rune_enemy_radius = 500, rune_min_hp = 0.35, rune_window_end = 900,
     rune_creep_block_radius = 250,
     rune_lane_defense_radius = 900, -- T024: враги у нашей вышки → сначала лайн

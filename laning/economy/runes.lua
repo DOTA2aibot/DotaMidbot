@@ -82,8 +82,11 @@ function M.Decide( bot )
             end;
         end;
     end;
-    local scan_radius = C.rune_distance + C.rune_enemy_radius;
-    if scan_radius > 1600 then return nil, "enemy_scan_radius_unsupported" end;
+    -- T025: скан врагов ВСЕГДА на 1600 (предел API GetNearbyHeroes), чтобы
+    -- rune_distance не был скован суммой с enemy_radius. Матч 9082384109:
+    -- 71× no_nearby за 9 минут — с лимитом 1100 бот из mid-front до рун
+    -- не доставал. Дистанция до руны теперь независима (см. config).
+    local scan_radius = 1600;
     local enemies = A.Call( bot, "GetNearbyHeroes", scan_radius, true, BOT_MODE_NONE );
     if type( enemies ) ~= "table" then return nil, "enemy_data_unknown" end;
     local p = A.Position( bot ); if not p then return nil, "position_unknown" end;
@@ -109,6 +112,9 @@ function M.Decide( bot )
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( towers ) ~= "table" then return nil, "tower_data_unknown" end;
     local best, distance;
+    -- T025: диагностика отказов — запоминаем, почему не подошла БЛИЖАЙШАЯ руна.
+    -- Матч 9082384109: 71× «no_nearby» без деталей, причина была невидима.
+    local dmin, dwhy = math.huge, "none_checked";
     for _, rune in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
         local location = global( "GetRuneSpawnLocation", rune );
         local valid, d = pcall( function() return location and A.Distance( p, location ) end );
@@ -131,14 +137,22 @@ function M.Decide( bot )
         -- союзник или враг. В пустую точку не ходим даже в слепом окне;
         -- приоритет возвращается на харас/ластхит (desire падает в 0).
         local taken = visible and A.Number( status ) and status ~= RUNE_STATUS_AVAILABLE;
-        if valid and safe and A.Number( d ) and d <= C.rune_distance
-            and global( "IsLocationPassable", location ) == true
-            and not taken
-            and ( blind_window
-                or ( visible and status == RUNE_STATUS_AVAILABLE ) )
-            and ( not distance or d < distance ) then best, distance = rune, d end;
+        local fail = nil;
+        if not ( valid and location and A.Number( d ) ) then fail = "spawn_location_unknown"
+        elseif not safe then fail = "unsafe"
+        elseif d > C.rune_distance then fail = "too_far"
+        elseif taken then fail = "taken"
+        elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
+        elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
+        end;
+        if fail and A.Number( d ) and d < dmin then dmin, dwhy = d, fail end;
+        if not fail and ( not distance or d < distance ) then best, distance = rune, d end;
     end;
-    if not best then return nil, "no_nearby_visible_available_river_rune" end;
+    if not best
+    then
+        local dd = ( dmin < math.huge ) and tostring( math.floor( dmin ) ) or "?";
+        return nil, "no_nearby_river_rune:" .. dwhy .. ":d=" .. dd;
+    end;
     return { rune = best, distance = distance, desire = C.rune_desire }, "nearby_river_rune_after_lane";
 end;
 function M.Report( bot, plan, reason )
