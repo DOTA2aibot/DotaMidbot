@@ -147,6 +147,18 @@ end
 function AbilityUsageThink()
 
 	local npcBot = GetBot();
+	if ( npcBot == nil ) then return end;
+
+	-- Диагностическая обёртка: в логе 08.11 были «Script Runtime Error: error in
+	-- error handling» без указания источника. Теперь наши ошибки печатаются
+	-- с текстом и traceback — источник будет виден сразу.
+	local ok, err = xpcall( function() AbilityUsageThinkInner( npcBot ) end,
+		function( e ) return tostring( e ) .. " | " .. tostring( debug.traceback() ) end );
+	if ( not ok ) then print( "[MIDBOT ability ERROR] " .. tostring( err ) ); end
+
+end
+
+function AbilityUsageThinkInner( npcBot )
 
 	if ( not bAbilitiesInit ) then InitAbilities( npcBot ); end
 
