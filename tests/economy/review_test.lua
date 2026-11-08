@@ -10,11 +10,14 @@ local function pickup( s )
     s.bot.Action_PickUpRune = function( _, rune ) s.runes[#s.runes + 1] = rune; s.action = 8 end;
     s.bot.Action_ClearActions = function( _, stop ) eq( stop, true ); s.cancelled = ( s.cancelled or 0 ) + 1; s.action = 0 end;
 end;
-test( "enemy outside bot radius but near rune blocks pickup", function()
+test( "enemy near one rune redirects pickup to the other", function()
     local s = scenario(); pickup( s ); local enemy = s:unit();
-    enemy.GetLocation = function() return { x = 800, y = 0 } end; -- T023: до руны (400,0) = 400 <= rune_enemy_radius 500
+    enemy.GetLocation = function() return { x = 800, y = 0 } end; -- до руны 1 (400,0) = 400 <= rune_enemy_radius 500
     s.bot.GetNearbyHeroes = function( _, radius ) return radius >= 800 and { enemy } or {} end;
-    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 0 );
+    -- T025: rune_distance 2200 — вторая руна (2000,0) досягаема; враг у первой
+    -- руны перенаправляет бота ко ВТОРОЙ, а не отменяет поход полностью.
+    eq( s.rune_policy.GetDesire( s.bot ), .85 ); s.mode = 7; s.rune_policy.Think( s.bot );
+    eq( #s.runes, 1 ); eq( s.runes[1], 1 ); -- заказана RUNE_POWERUP_2, не первая
 end );
 test( "wave arriving during pickup cancels the owned rune order", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );

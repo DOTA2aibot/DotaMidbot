@@ -178,7 +178,7 @@ test( "wave, combat, retreat and target hero outrank rune", function()
     s.mode = 1; s.target = s:unit(); eq( s.rune_policy.GetDesire( s.bot ), 0 );
 end );
 test( "distant, unseen, missing and impassable rune are never pursued", function()
-    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 1500, y = 0 } end; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- T025: 1500 > rune_distance 1400
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 2400, y = 0 } end; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- T025: 2400 > rune_distance 2200
     local t = scenario(); t.visible = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.visible = true; t.status = 2; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.status = 1; t.passable = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
