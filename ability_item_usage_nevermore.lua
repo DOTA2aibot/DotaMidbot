@@ -120,6 +120,24 @@ local SKILL_ORDER = {
 	"nevermore_dark_lord",
 };
 
+-- T023: анти-спам прокачки. Матч 9082042282: учёт очков решил, что очко есть
+-- (недосчитал dark_lord — by-name вернул nil), движок же всё потратил сам,
+-- и попытка качнуть frenzy не удавалась — 15828 строк [MIDBOT levelup] за матч,
+-- ActionImmediate_LevelAbility каждый фрейм. Запоминаем попытку: если за 5 сек
+-- уровень способности НЕ изменился — очков реально нет, молчим.
+local lastLvName, lastLvLevel, lastLvTime = nil, -1, -math.huge;
+local function TryLevelAbility( npcBot, ability, sName )
+	local lvl = ability:GetLevel();
+	local now = GameTime();
+	if ( sName == lastLvName and lvl == lastLvLevel and now - lastLvTime < 5.0 )
+	then
+		return; -- прошлая попытка не сработала — не спамим
+	end
+	lastLvName, lastLvLevel, lastLvTime = sName, lvl, now;
+	npcBot:ActionImmediate_LevelAbility( sName );
+	print( "[MIDBOT levelup] try " .. sName .. " from_lvl=" .. lvl );
+end
+
 function LevelUpThink( npcBot )
 
 	-- T022: свой учёт очков. Матч 9081927137 (патч с бесплатными талантами
@@ -128,18 +146,31 @@ function LevelUpThink( npcBot )
 	-- (без frenzy), потому что GetAbilityPoints() у бота в этом окружении
 	-- всегда 0 (все observer-снапшоты: ability_points=0). Считаем сами:
 	-- очко за каждый уровень героя, таланты бесплатные (Олег, 08.11).
-	-- Рейзы 2/3 зеркалят первый — считаем только shadowraze1.
+	-- T023: считаем по СЛОТАМ, а не по именам — матч 9082042282 показал, что
+	-- GetAbilityByName("nevermore_dark_lord") возвращает nil, хотя в слоте 4
+	-- аура есть, и by-name учёт недосчитывал потраченные движком очки.
+	-- Исключения: рейзы 2/3 зеркалят первый (очков не тратят), Necromastery —
+	-- врождённая (качается сама), таланты special_bonus_unique_* бесплатные.
 	local nPoints = npcBot:GetAbilityPoints();
 	if ( nPoints < 1 )
 	then
 		-- fail-closed для моков/старого окружения: без GetLevel не считаем
 		if ( type( npcBot.GetLevel ) ~= "function" ) then return end;
+		if ( type( npcBot.GetAbilityInSlot ) ~= "function" ) then return end;
 		local nSpent = 0;
-		for _, sName in ipairs( { "nevermore_shadowraze1", "nevermore_frenzy",
-			"nevermore_requiem", "nevermore_dark_lord", "special_bonus_attributes" } )
+		for nSlot = 0, 23
 		do
-			local ab = npcBot:GetAbilityByName( sName );
-			if ( ab ~= nil ) then nSpent = nSpent + ab:GetLevel(); end
+			local ab = npcBot:GetAbilityInSlot( nSlot );
+			if ( ab ~= nil and type( ab.GetLevel ) == "function" and type( ab.GetName ) == "function" )
+			then
+				local name = ab:GetName();
+				if ( name ~= "nevermore_shadowraze2" and name ~= "nevermore_shadowraze3"
+					and name ~= "nevermore_necromastery"
+					and not name:find( "special_bonus_unique", 1, true ) )
+				then
+					nSpent = nSpent + ab:GetLevel();
+				end
+			end
 		end
 		if ( npcBot:GetLevel() <= nSpent ) then return end; -- очков нет
 		-- Движок мог уже автокачать что-то своё — nSpent это учитывает.
@@ -157,8 +188,7 @@ function LevelUpThink( npcBot )
 			and ability:CanAbilityBeUpgraded()
 			and ability:GetLevel() < seen[sName] )
 		then
-			npcBot:ActionImmediate_LevelAbility( sName );
-			print( "[MIDBOT levelup] " .. sName );
+			TryLevelAbility( npcBot, ability, sName );
 			return;
 		end
 	end
@@ -177,8 +207,7 @@ function LevelUpThink( npcBot )
 			and ability:CanAbilityBeUpgraded()
 			and ability:GetLevel() < ability:GetMaxLevel() )
 		then
-			npcBot:ActionImmediate_LevelAbility( ability:GetName() );
-			print( "[MIDBOT levelup fallback] " .. ability:GetName() );
+			TryLevelAbility( npcBot, ability, ability:GetName() );
 			return;
 		end
 	end
@@ -395,6 +424,44 @@ function ItemUsageThinkInner( npcBot )
 			npcBot:Action_UseAbility( itemMango );
 			Observe( "Action", npcBot, "item_use", itemMango, nil, "t022_mango_emergency_mana" );
 			print( "[MIDBOT item] mango mana=" .. npcBot:GetMana() );
+			return;
+		end
+	end
+
+	-- Кларити (T023): матч 9082042282 — куплена и лежала мёртвым грузом.
+	-- Реген слетается от урона героев: только когда врагов нет в 900,
+	-- мана ниже половины и мы не под её эффектом. Только слоты 0-5.
+	local nClaritySlot = npcBot:FindItemSlot( "item_clarity" );
+	if ( nClaritySlot >= 0 and nClaritySlot <= 5 and manaPct < 0.50
+		and not npcBot:HasModifier( "modifier_clarity_potion" ) )
+	then
+		local itemClarity = npcBot:GetItemInSlot( nClaritySlot );
+		local tableEnemyWide = npcBot:GetNearbyHeroes( 900, true, BOT_MODE_NONE );
+		if ( itemClarity ~= nil and itemClarity:IsFullyCastable()
+			and ( tableEnemyWide == nil or #tableEnemyWide == 0 ) )
+		then
+			Observe( "BeforeAction", npcBot, itemClarity );
+			npcBot:Action_UseAbilityOnEntity( itemClarity, npcBot );
+			Observe( "Action", npcBot, "item_use", itemClarity, nil, "t023_clarity_calm_mana" );
+			print( "[MIDBOT item] clarity mana%=" .. manaPct );
+			return;
+		end
+	end
+
+	-- Фласка (T023): та же логика по здоровью — в спокойствии и не под её эффектом.
+	local nFlaskSlot = npcBot:FindItemSlot( "item_flask" );
+	if ( nFlaskSlot >= 0 and nFlaskSlot <= 5 and hpPct < 0.50
+		and not npcBot:HasModifier( "modifier_flask_healing" ) )
+	then
+		local itemFlask = npcBot:GetItemInSlot( nFlaskSlot );
+		local tableEnemyWide = npcBot:GetNearbyHeroes( 900, true, BOT_MODE_NONE );
+		if ( itemFlask ~= nil and itemFlask:IsFullyCastable()
+			and ( tableEnemyWide == nil or #tableEnemyWide == 0 ) )
+		then
+			Observe( "BeforeAction", npcBot, itemFlask );
+			npcBot:Action_UseAbilityOnEntity( itemFlask, npcBot );
+			Observe( "Action", npcBot, "item_use", itemFlask, nil, "t023_flask_calm_hp" );
+			print( "[MIDBOT item] flask hp%=" .. hpPct );
 			return;
 		end
 	end
@@ -720,6 +787,22 @@ function ConsiderRazeOnHero( npcBot )
 end
 
 ----------------------------------------------------------------------------------------------------
+-- T023: не тратим рейз на крипа, которого ДОБЬЮТ свои до удара (каст 0.55с).
+-- Репорт Олега 08.11: «крип уже мёртв, а он спустя 0.5 сек жмёт койл в труп».
+-- Оценка: летящие атакующие снаряды × ~22 урона. Нет API/ошибка — не пропускаем.
+----------------------------------------------------------------------------------------------------
+local CREEP_PROJECTILE_DAMAGE = 22;
+local function WillDieBeforeRaze( npcCreep )
+	local ok, projectiles = pcall( function() return npcCreep:GetIncomingTrackingProjectiles() end );
+	if ( not ok or type( projectiles ) ~= "table" ) then return false end;
+	local incoming = 0;
+	for _, proj in pairs( projectiles ) do
+		if ( proj.is_attack ) then incoming = incoming + CREEP_PROJECTILE_DAMAGE end;
+	end
+	return incoming >= npcCreep:GetHealth();
+end
+
+----------------------------------------------------------------------------------------------------
 -- Рейз по крипам. Приоритеты (гайд Олега, п.3-4):
 --   1. Добить ДАЛЬНЕГО крипа (мага) дальним рейзом — безопасно и выгодно
 --   2. Добить крипа под НАШЕЙ вышкой, если с руки не достать
@@ -785,7 +868,8 @@ function ConsiderRazeOnCreeps( npcBot )
 				-- Крип реально попадает в зону удара этого рейза
 				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
 				then
-					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep ) )
+					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep )
+						and not WillDieBeforeRaze( npcCreep ) ) -- T023: свои уже добивают
 					then
 						-- П.3: дальний крип (маг) — приоритет. Катапульты отдельно:
 						-- у них ~80% маг. сопротивления, рейз их почти не добивает

@@ -21,21 +21,36 @@ local componentFailures = 0; -- подряд неудачные попытки �
 ----------------------------------------------------------------------------------------------------
 -- T021: доставка курьером. Матч 9081721395: после wraith band (~6:30) закупка
 -- молчала 13 минут — предметы покупались в стэш (инвентарь полон), а команду
--- курьеру никто не отдавал. Паттерн взят из RMMAI util/ItemPurchaseSystem.lua:
+-- курьеру никто не отдавал. Паттерн из RMMAI util/ItemPurchaseSystem.lua:
 -- стэш непустой + курьер свободен -> COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS.
+-- T023: порядок local-объявлений критичен (Report -> CourierDiag ->
+-- ConsiderCourierDelivery) — в T022 CourierDiag стоял выше Report и звал
+-- глобальный (несуществующий) Report: матч 9082042282, 10× «error in error
+-- handling» и ноль строк диагностики.
 ----------------------------------------------------------------------------------------------------
 local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
 local nextCourierCheck = -math.huge;
-local nextCourierDiag = -math.huge; -- T022: раз в 15 сек печатаем, ПОЧЕМУ не отправили
+local nextCourierDiag = -math.huge; -- раз в 15 сек печатаем, ПОЧЕМУ не отправили
 
--- T022: диагностика молчания доставки (матч 9081927137: манго лежал в стэше,
--- слот 9, а строк "courier:" в логе ноль — значит, где-то ранний выход).
+local function Report( message )
+	if ( message ~= lastMessage ) then
+		print( "[MIDBOT purchase] " .. message );
+		lastMessage = message;
+	end
+end
+
+-- T022/T023: диагностика молчания доставки (матч 9081927137: манго лежал в
+-- стэше, слот 9, а строк "courier:" в логе ноль). Объявлен ПОСЛЕ Report и
+-- ДО ConsiderCourierDelivery — порядок local-объявлений критичен: в T022
+-- CourierDiag стоял выше Report и звал глобальный (несуществующий) Report,
+-- матч 9082042282: 10× «error in error handling» и ноль строк диагностики.
 local function CourierDiag( bot, reason )
 	local now = GameTime();
 	if ( now < nextCourierDiag ) then return end;
 	nextCourierDiag = now + 15.0;
 	Report( "courier_skip reason=" .. reason );
 end
+
 
 -- Слоты 9-14 у бота — стэш (0-5 инвентарь, 6-8 рюкзак). GetItemInSlot
 -- есть и в тестовой фикстуре, поэтому скан слотов безопаснее GetStashValue.
@@ -47,8 +62,10 @@ local function HasStashItems( bot )
 end
 
 local function ConsiderCourierDelivery( bot )
-	if ( COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS == nil ) then return end;
-	if ( type( GetNumCouriers ) ~= "function" or type( GetCourier ) ~= "function" ) then return end;
+	-- T023: CourierDiag определён ПОСЛЕ Report (внизу) — в T022 он стоял выше
+	-- и звал глобальный Report: матч 9082042282, 10× «error in error handling».
+	if ( COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS == nil ) then CourierDiag( bot, "no_action_constant" ); return end;
+	if ( type( GetNumCouriers ) ~= "function" or type( GetCourier ) ~= "function" ) then CourierDiag( bot, "no_courier_api" ); return end;
 	local now = GameTime();
 	if ( now < nextCourierCheck ) then return end;
 	nextCourierCheck = now + COURIER_CHECK_INTERVAL;
@@ -78,12 +95,6 @@ local function ConsiderCourierDelivery( bot )
 	CourierDiag( bot, "no_own_courier total=" .. nCouriers );
 end
 
-local function Report( message )
-	if ( message ~= lastMessage ) then
-		print( "[MIDBOT purchase] " .. message );
-		lastMessage = message;
-	end
-end
 
 local function CountSlots( unit, lastSlot, owned )
 	for slot = 0, lastSlot do
@@ -136,9 +147,18 @@ local function ExpandRecipe( name, owned, output, visiting, depth )
 	return true;
 end
 
+-- T023: обёртка — в матче 9082042282 было 10× «Script Runtime Error: error in
+-- error handling» без источника (CourierDiag звала Report до её определения).
+-- Теперь любая ошибка закупки печатается с текстом.
 function ItemPurchaseThink()
 	local bot = GetBot();
 	if ( bot == nil ) then return end;
+	local ok, err = xpcall( function() ItemPurchaseThinkInner( bot ) end,
+		function( e ) return tostring( e ) end );
+	if ( not ok ) then Report( "ERROR " .. err ); end
+end
+
+function ItemPurchaseThinkInner( bot )
 	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
 	-- сначала забираем их курьером, потом продолжаем покупки.
 	ConsiderCourierDelivery( bot );
