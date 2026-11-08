@@ -35,6 +35,21 @@ function GetEffectiveMana( npcBot )
 	return npcBot:GetMana() + GetBottleCharges( npcBot ) * BOTTLE_MANA_PER_CHARGE;
 end
 
+-- T024: «шив волны» под силовые руны (гайд Олега 08.11): за ~20 сек до спавна
+-- (2:00/4:00/6:00/... — DotaTime % 120 >= 100) выбиваем вражескую пачку
+-- максимально быстро, чтобы враг отступил под вышку и руна досталась свободно.
+function IsRuneShoveWindow()
+	local now = nil;
+	if ( type( DotaTime ) == "function" ) then
+		local ok, t = pcall( DotaTime ); if ( ok ) then now = t end;
+	end
+	if ( type( now ) ~= "number" and type( GameTime ) == "function" ) then
+		local ok, t = pcall( GameTime ); if ( ok ) then now = t end;
+	end
+	if ( type( now ) ~= "number" or now < 100 ) then return false end;
+	return ( now % 120 ) >= 100;
+end
+
 -- Дистанции рейзов от точки каста (центр области)
 local RAZE_DIST = { 200, 450, 700 };
 local RAZE_RADIUS = 250;             -- радиус области рейза
@@ -890,9 +905,13 @@ function ConsiderRazeOnCreeps( npcBot )
 	-- сливал последние 75 маны в крипов и оставался пустым для героя/руны
 	-- (репорт Олега: "100 маны = 1 койл, а ботл полный"). Теперь держим резерв
 	-- RAZE_MANA_RESERVE, КРОМЕ случаев: (а) есть заряды ботла — выпьем и
-	-- докастуем; (б) добивание под своей вышкой — там тратимся до дна.
+	-- докастуем; (б) добивание под своей вышкой — там тратимся до дна;
+	-- (в) T024 шив-окно под руну — волну выбиваем даже в минус по резерву,
+	-- чтобы освободить дорогу на руну (гайд Олега 08.11).
+	local bShove = IsRuneShoveWindow();
 	local nMana = npcBot:GetMana();
-	if ( nMana < RAZE_MANA_COST + RAZE_MANA_RESERVE and GetBottleCharges( npcBot ) == 0 )
+	if ( nMana < RAZE_MANA_COST + RAZE_MANA_RESERVE and GetBottleCharges( npcBot ) == 0
+		and not bShove )
 	then
 		-- tableAlliedTowers ниже ещё не собран — спрашиваем вышки напрямую
 		local tableOwn = npcBot:GetNearbyTowers( 900, false );
@@ -964,7 +983,7 @@ function ConsiderRazeOnCreeps( npcBot )
 	-- Пачка (фикс аудита GPT): фиксируем ОДИН центр — целимся в конкретного
 	-- крипа — и считаем, сколько крипов реально попадёт в ЭТУ область.
 	-- Раньше счётчик суммировал крипов из разных направлений.
-	if ( manaPct >= RAZE_MANA_PCT_HARASS )
+	if ( manaPct >= RAZE_MANA_PCT_HARASS or bShove )
 	then
 		for i = 1, 3
 		do
@@ -991,7 +1010,9 @@ function ConsiderRazeOnCreeps( npcBot )
 		end
 	end
 
-	-- Выдаём по приоритету
+	-- Выдаём по приоритету. T024: в шив-окне добивание и пачка поднимаются
+	-- до MODERATE — задача выбить волну максимально быстро под руну.
+	local desireShove = bShove and BOT_ACTION_DESIRE_MODERATE or BOT_ACTION_DESIRE_LOW;
 	if ( rangedSecure ~= nil )
 	then
 		return BOT_ACTION_DESIRE_MODERATE, rangedSecure.loc, rangedSecure.raze;
@@ -1000,13 +1021,13 @@ function ConsiderRazeOnCreeps( npcBot )
 	then
 		return BOT_ACTION_DESIRE_MODERATE, towerSecure.loc, towerSecure.raze;
 	end
-	if ( killSecure ~= nil and manaPct >= RAZE_MANA_PCT_HARASS )
+	if ( killSecure ~= nil and ( manaPct >= RAZE_MANA_PCT_HARASS or bShove ) )
 	then
-		return BOT_ACTION_DESIRE_LOW, killSecure.loc, killSecure.raze;
+		return desireShove, killSecure.loc, killSecure.raze;
 	end
 	if ( packBest ~= nil )
 	then
-		return BOT_ACTION_DESIRE_LOW, packBest.loc, packBest.raze;
+		return desireShove, packBest.loc, packBest.raze;
 	end
 
 	return BOT_ACTION_DESIRE_NONE, nil, nil;
