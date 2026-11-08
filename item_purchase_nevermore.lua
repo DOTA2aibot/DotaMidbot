@@ -23,12 +23,85 @@ do
 	if ok then ManaEconomy = mod end;
 end;
 
+----------------------------------------------------------------------------------------------------
+-- T021: доставка курьером. Матч 9081721395: после wraith band (~6:30) закупка
+-- молчала 13 минут — предметы покупались в стэш (инвентарь полон), а команду
+-- курьеру никто не отдавал. Паттерн из RMMAI util/ItemPurchaseSystem.lua:
+-- стэш непустой + курьер свободен -> COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS.
+-- T023: порядок local-объявлений критичен (Report -> CourierDiag ->
+-- ConsiderCourierDelivery) — в T022 CourierDiag стоял выше Report и звал
+-- глобальный (несуществующий) Report: матч 9082042282, 10× «error in error
+-- handling» и ноль строк диагностики.
+----------------------------------------------------------------------------------------------------
+local COURIER_CHECK_INTERVAL = 3.0; -- не дёргать API курьера каждый тик
+local nextCourierCheck = -math.huge;
+local nextCourierDiag = -math.huge; -- раз в 15 сек печатаем, ПОЧЕМУ не отправили
+
 local function Report( message )
 	if ( message ~= lastMessage ) then
 		print( "[MIDBOT purchase] " .. message );
 		lastMessage = message;
 	end
 end
+
+-- T022/T023: диагностика молчания доставки (матч 9081927137: манго лежал в
+-- стэше, слот 9, а строк "courier:" в логе ноль). Объявлен ПОСЛЕ Report и
+-- ДО ConsiderCourierDelivery — порядок local-объявлений критичен: в T022
+-- CourierDiag стоял выше Report и звал глобальный (несуществующий) Report,
+-- матч 9082042282: 10× «error in error handling» и ноль строк диагностики.
+local function CourierDiag( bot, reason )
+	local now = GameTime();
+	if ( now < nextCourierDiag ) then return end;
+	nextCourierDiag = now + 15.0;
+	Report( "courier_skip reason=" .. reason );
+end
+
+
+-- Слоты 9-14 у бота — стэш (0-5 инвентарь, 6-8 рюкзак). GetItemInSlot
+-- есть и в тестовой фикстуре, поэтому скан слотов безопаснее GetStashValue.
+local function HasStashItems( bot )
+	for slot = 9, 14 do
+		if ( bot:GetItemInSlot( slot ) ~= nil ) then return true end;
+	end
+	return false;
+end
+
+local function ConsiderCourierDelivery( bot )
+	-- T023: CourierDiag определён ПОСЛЕ Report (внизу) — в T022 он стоял выше
+	-- и звал глобальный Report: матч 9082042282, 10× «error in error handling».
+	if ( COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS == nil ) then CourierDiag( bot, "no_action_constant" ); return end;
+	if ( type( GetNumCouriers ) ~= "function" or type( GetCourier ) ~= "function" ) then CourierDiag( bot, "no_courier_api" ); return end;
+	local now = GameTime();
+	if ( now < nextCourierCheck ) then return end;
+	nextCourierCheck = now + COURIER_CHECK_INTERVAL;
+	if ( not HasStashItems( bot ) ) then return end;
+	local nCouriers = GetNumCouriers();
+	if ( nCouriers == 0 ) then CourierDiag( bot, "no_couriers" ); return end;
+	for index = 0, nCouriers - 1 do
+		local courier = GetCourier( index );
+		if ( courier ~= nil and courier:GetPlayerID() == bot:GetPlayerID() ) then
+			-- Курьер может быть занят другим героем: шлём только из состояния
+			-- покоя/базы. T023: GetCourierState может быть ГЛОБАЛЬНОЙ функцией
+			-- (интеграция GPT, матч 9082079610), а не методом — пробуем оба.
+			local state;
+			if ( type( courier.GetCourierState ) == "function" ) then state = courier:GetCourierState();
+			elseif ( type( GetCourierState ) == "function" ) then state = GetCourierState( courier );
+			else CourierDiag( bot, "no_state_method" ); return end;
+			if ( state == COURIER_STATE_IDLE or state == COURIER_STATE_AT_BASE ) then
+				local ok = pcall( function()
+					bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
+				end );
+				if ( ok ) then Report( "courier: take_and_transfer (stash not empty)" ); end
+				if ( not ok ) then CourierDiag( bot, "send_failed" ); end
+			else
+				CourierDiag( bot, "courier_busy state=" .. tostring( state ) );
+			end
+			return; -- свой курьер один, дальше чужие
+		end
+	end
+	CourierDiag( bot, "no_own_courier total=" .. nCouriers );
+end
+
 
 local function CountSlots( unit, lastSlot, owned )
 	for slot = 0, lastSlot do
@@ -81,9 +154,21 @@ local function ExpandRecipe( name, owned, output, visiting, depth )
 	return true;
 end
 
+-- T023: обёртка — в матче 9082042282 было 10× «Script Runtime Error: error in
+-- error handling» без источника (CourierDiag звала Report до её определения).
+-- Теперь любая ошибка закупки печатается с текстом.
 function ItemPurchaseThink()
 	local bot = GetBot();
 	if ( bot == nil ) then return end;
+	local ok, err = xpcall( function() ItemPurchaseThinkInner( bot ) end,
+		function( e ) return tostring( e ) end );
+	if ( not ok ) then Report( "ERROR " .. err ); end
+end
+
+function ItemPurchaseThinkInner( bot )
+	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
+	-- сначала забираем их курьером, потом продолжаем покупки.
+	ConsiderCourierDelivery( bot );
 	if ManaEconomy then
 		local ok, attempted = pcall( ManaEconomy.TryPurchase, bot );
 		if ok and attempted then return end;
