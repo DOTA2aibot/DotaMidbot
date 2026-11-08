@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
+GENERIC_RUNE_ENTRY = 'mode_rune_generic.lua'
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
             'valve_wards': ('valve_native', False),
             'valve_lane_economy': ('valve_native_with_midbot_rune', False),
@@ -67,6 +68,13 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/lane_economy' / RUNE_ENTRY
         below(source, root)
         files[RUNE_ENTRY] = source.read_bytes()
+    if profile == 'all_test':
+        # T025 (Олег 09.11): чистый тест рун — глушим rune mode у дефолтных
+        # ботов (союзников и врагов), чтобы они не воровали руны у нашего SF.
+        # У nevermore персональный файл приоритетнее generic — он не затронут.
+        source = root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY
+        below(source, root)
+        files[GENERIC_RUNE_ENTRY] = source.read_bytes()
     return files
 
 
@@ -98,7 +106,9 @@ valve_wards: same baseline + opt-in in-range mid ward placement test.
 valve_lane_economy: native lane movement/attacks, custom nearby-only river rune mode,
 limited mana purchases, mid ward placement enabled (Oleg request 08.11).
 all_test: the same controller/profile flags as valve_lane_economy, with the
-explicit integration name used for the v0.3.6 combined test.
+explicit integration name used for the v0.3.6 combined test. Also ships
+mode_rune_generic.lua: default Valve bots (allies and enemies) never take
+runes, so rune tests measure only our SF (Oleg request 09.11).
 Tactical modules are attached in the root ability file for non-probe profiles:
 Requiem/BKB/PT/mana/neutral decisions; ward execution still requires wards_enabled.
 Set laning/tactical/config.lua enabled=false to delegate to original callbacks.
@@ -154,7 +164,9 @@ def verify(path):
         if archive.read('bots/laning/profile.lua') != expected_profile:
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
-        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
+        expected_entries = {PROBE_ENTRY} if enabled else (
+            {RUNE_ENTRY, GENERIC_RUNE_ENTRY} if profile == 'all_test'
+            else ({RUNE_ENTRY} if profile == 'valve_lane_economy' else set()))
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         for name, expected in files.items():
