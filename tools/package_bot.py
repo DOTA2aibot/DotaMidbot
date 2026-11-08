@@ -74,7 +74,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.6-github', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.7-vision', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -85,7 +85,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.6-github / PROFILE: %s
+    readme = '''MIDBOT v0.3.7-vision / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.

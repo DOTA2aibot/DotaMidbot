@@ -1,5 +1,5 @@
 return {
-    version = "v0.3.6-github", run_prefix = "observer-v036", interval_s = 1,
+    version = "v0.3.7-vision", run_prefix = "observer-v037", interval_s = 1,
     radius = 1400, max_targets = 16, failure_interval_s = 10,
     attack_poll_s = 0.1, -- bounded read-only evidence polling; не считает все попадания
     -- Ни одного AA/move приказа: рекомендации отделены от реальных действий.

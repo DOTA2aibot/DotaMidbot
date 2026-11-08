@@ -6,9 +6,9 @@ local Actor = require( GetScriptDirectory() .. "/laning/integration/actor" );
 local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, не вызывать магазин каждый кадр
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
 local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> скипаем предмет, не встаём насмерть
--- Порядок по гайду Олега: танго -> варды -> ветки -> ботл -> дальше по сборке
+-- T026: жёлтый вард покупает отдельный vision supply; синие не покупаем.
 local tableItemsToBuy = {
-	"item_tango", "item_ward_observer", "item_ward_sentry", -- п.5 гайда: жёлтый+синий вард на старте
+	"item_tango",
 	"item_branches", "item_branches", "item_bottle", "item_flask",
 	"item_wraith_band", "item_magic_wand",
 	"item_power_treads", "item_dragon_lance", "item_black_king_bar", "item_desolator",
@@ -19,6 +19,11 @@ local nextAttemptTime = -math.huge;
 local lastMessage = nil;
 local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
 local ManaEconomy;
+local VisionSupply;
+do
+    local ok,mod=pcall(function() return require(GetScriptDirectory().."/laning/vision/supply") end);
+    if ok then VisionSupply=mod end;
+end;
 do
 	local ok, mod = pcall( function() return require( GetScriptDirectory() .. "/laning/economy/mana" ) end );
 	if ok then ManaEconomy = mod end;
@@ -171,6 +176,10 @@ function ItemPurchaseThinkInner( bot )
 	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
 	-- сначала забираем их курьером, потом продолжаем покупки.
 	ConsiderCourierDelivery( bot );
+    if VisionSupply then
+        local ok,attempted=pcall(VisionSupply.TryPurchase,bot);
+        if ok and attempted then return end;
+    end;
 	if ManaEconomy then
 		local ok, attempted = pcall( ManaEconomy.TryPurchase, bot );
 		if ok and attempted then return end;

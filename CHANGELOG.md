@@ -1,5 +1,11 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.7-vision — кандидат T026, 2026-11-08
+- Radiant mid: один детерминированный bank Observer с геометрическим покрытием руны, без прежнего обязательного cliff3; координаты/фактическая team visibility пишутся после постановки. Фото не выдаётся за точные world coordinates.
+- Убрана закупка sentry; отдельный Observer supply до15:00 на mid, один запас с учётом stash/backpack/own courier, lifetime360с и prefetch30с, unknown pending без дублей. Доставка прежним courier handler.
+- Добавлен безопасный ward-specific equip/restore из backpack, без общей inventory cleanup и без перезаписи BKB/PT/bottle/wand. Движение/AA Valve и изменения рун Олега не трогаются.
+- Исторический package referencev0.3.6 сохранён; проверки текущего ZIP отделены от старой byte freeze. Протокол и разбор последнего лога: [VISION_T026](docs/VISION_T026.md). Новый live test ещё требуется.
+
 ## v0.3.6-github — кандидат интеграции T025, 2026-11-08
 - Из main после PR51 воспроизводится установленная общая сборка: tactical-модули PR49 явно подключены к актуальному ability-файлу. Обычные атаки и движение линии остаются Valve.
 - Перенесены локальные Actor/courier guards, согласованный startup grace rune Decide/Think и безопасная постановка tactical ward во время MOVE_TO с запретом combat/rune/retreat/evasion. Пороги Олега из PR46 не перенастраиваются.

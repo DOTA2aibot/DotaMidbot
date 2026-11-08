@@ -1,6 +1,9 @@
 local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
+local Site=require(GetScriptDirectory().."/laning/vision/site");
+local Supply=require(GetScriptDirectory().."/laning/vision/supply");
+local Inventory=require(GetScriptDirectory().."/laning/vision/inventory");
 local M={};
 local function height(p) if not p then return nil end;local h=U.Global("GetHeightLevel",U.Vector(p));if U.Number(h) and h>=1 and h<=5 then return h end end;
 local function kind(name)
@@ -68,6 +71,16 @@ function M.Plan(bot)
             if not U.Number(r) or U.Distance(U.Pos(t),p)<=r+150 or U.Distance(U.Pos(t),q)<=r+150 then return false end;
         end end;return true;
     end;
+    if Site.Radiant(bot) then
+        local spot,why=Site.Get(bot);if not spot then return nil,why end;
+        if not item.observer then return nil,"fixed_observer_not_in_active_inventory" end;
+        local exists,unknown=Site.Existing(spot);if unknown then return nil,unknown end;
+        if exists then return nil,"fixed_observer_already_alive" end;
+        if not safe(spot.location) then return nil,"fixed_observer_out_of_range_or_unsafe" end;
+        return {item=item.item,kind="observer",mode=item.mode,prior=list,location=spot.location,
+            height=spot.height,rune=spot.rune,rune_location=spot.rune_location,lane=spot.lane,
+            expected_coverage=spot.expected_coverage,fixed=true};
+    end;
     if item.observer then
         local bank1=U.Point(U.Global("GetLocationAlongLane",LANE_MID,.45));
         local bank2=U.Point(U.Global("GetLocationAlongLane",LANE_MID,.55));
@@ -129,6 +142,16 @@ function M.Poll(bot,s)
             local primary=U.Call(p.item,"GetCurrentCharges");local secondary=U.Call(p.item,"GetSecondaryCharges");
             local spent=(U.Number(primary) and U.Number(p.primary) and primary<p.primary)
                 or (U.Number(secondary) and U.Number(p.secondary) and secondary<p.secondary);
+            local consumed=false;
+            if p.fixed and primary==nil and p.primary==1 and type(bot.GetItemInSlot)=="function"
+                and U.Call(w.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID") then
+                local present,known=false,true;
+                for slot=0,5 do local ok,item=pcall(function() return bot:GetItemInSlot(slot) end);
+                    if not ok then known=false end;if item==p.item then present=true end;
+                end;
+                consumed=known and not present;
+            end;
+            spent=spent or consumed;
             if spent then
                 local data={kind=w.kind,location=w.location,owner_matches=U.Call(w.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID"),height=height(w.location),evidence="new_ward_and_charge_spent"};
                 if p.kind=="observer" then
@@ -136,6 +159,8 @@ function M.Poll(bot,s)
                     data.mid_visible=U.Global("IsLocationVisible",U.Vector(p.lane[1]))==true and U.Global("IsLocationVisible",U.Vector(p.lane[2]))==true;
                     data.vision_radius=U.Call(w.handle,"GetCurrentVisionRange");data.coverage_attribution="team_visibility_not_exclusive_ward_credit";
                 end;
+                if consumed then data.evidence="new_owned_ward_and_item_consumed" end;
+                if p.fixed and data.owner_matches then Supply.Placed(bot,w.handle,p) end;
                 B.Emit(s,"ward_placement_observed",data);s.ward_pending=nil;return;
             end;
         end;
@@ -145,6 +170,7 @@ end;
 function M.Tick(bot,s)
     if not C.wards or s.ward_disabled or s.ward_pending or not B.Free(s) or U.Now()<(s.next_ward or -math.huge) then return false end;
     s.next_ward=U.Now()+1;
+    if Inventory.Tick(bot,s) then return true end;
     local p,reason=M.Plan(bot);
     if not p then if s.ward_skip~=reason then B.Emit(s,"ward_skip",{reason=reason});s.ward_skip=reason end;return false end;
     if p.kind~=p.mode then
