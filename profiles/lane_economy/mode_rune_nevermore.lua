@@ -9,3 +9,7 @@ end;
 function Think()
     if ok then pcall( Rune.Think, GetBot() ) end;
 end;
+function OnStart() end;
+function OnEnd()
+    if ok then pcall( Rune.Leave, GetBot(), "mode_ended" ) end;
+end;

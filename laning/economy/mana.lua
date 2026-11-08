@@ -7,7 +7,9 @@ local M, states = {}, setmetatable( {}, { __mode = "k" } );
 local function global( name, ... ) return O.Global( name, ... ) end;
 local function state( bot )
     local now = A.Time(); local s = states[bot];
-    if not s or ( now and s.time and now < s.time ) then s = { count = 0, spent = 0 }; states[bot] = s end;
+    if not s or ( now and s.time and now < s.time ) then
+        s = { count = 0, spent = 0, accepted_count = 0, accepted_gold = 0 }; states[bot] = s;
+    end;
     s.time = now; return s;
 end;
 local function lowmana( bot )
@@ -49,11 +51,15 @@ end;
 local function report( bot, s, reason, details )
     if not s.time or s.time < ( s.report_at or -math.huge ) then return end;
     s.report_at = s.time + C.mana_attempt_interval;
-    details = details or {}; details.reason = reason; details.bought_count = s.count; details.spent_gold = s.spent;
+    details = details or {}; details.reason = reason;
+    details.bought_count, details.spent_gold = s.accepted_count, s.accepted_gold;
+    details.budget_count, details.budget_gold = s.count, s.spent;
     O.Emit( O.State( bot ), "mana_purchase_decision", details );
 end;
 function M.SkipFlask( bot )
     if Profile.economy_enabled ~= true or not lowmana( bot ) then return false end;
+    local now = A.Time();
+    if not now or now < 0 or now > C.mana_window_end or A.Call( bot, "IsAlive" ) ~= true then return false end;
     local hp, max = A.Call( bot, "GetHealth" ), A.Call( bot, "GetMaxHealth" );
     return A.Number( hp ) and A.Number( max ) and max > 0 and hp / max >= 0.85;
 end;
@@ -65,7 +71,11 @@ function M.TryPurchase( bot )
     s.next_attempt = now + C.mana_attempt_interval;
     local inventory = M.Inventory( bot );
     if not inventory then report( bot, s, "inventory_or_courier_unknown" ); return false end;
-    if s.pending and inventory.owned[s.pending] then s.pending = nil end;
+    if s.pending and inventory.owned[s.pending.name] then s.pending = nil end;
+    -- SUCCESS уже учтён в бюджете. Спустя интервал и полную перепись можно
+    -- снова оценить нужду: предмет мог быть доставлен/съеден между опросами.
+    -- Это НЕ подтверждение доставки/применения. Unknown result без предмета не истекает.
+    if s.pending and s.pending.accepted and now >= s.pending.time + C.mana_purchase_interval then s.pending = nil end;
     if s.pending then report( bot, s, "paid_supply_delivery_unknown_no_rebuy" ); return false end;
     if not lowmana( bot ) then report( bot, s, "mana_sufficient_or_unknown" ); return false end;
     if inventory.supply then report( bot, s, "existing_mana_supply_use_before_buy" ); return false end;
@@ -90,16 +100,24 @@ function M.TryPurchase( bot )
     if gold < cost + reserve then report( bot, s, "save_for_bottle_or_insufficient_gold" ); return false end;
     if PURCHASE_ITEM_SUCCESS == nil then report( bot, s, "purchase_constant_unknown" ); return false end;
     -- Ставим временный guard ДО вызова: исключение после побочного эффекта не даёт rebuy.
-    s.pending = item;
+    local previous_next_buy = s.next_buy;
+    s.pending = { name = item, time = now, accepted = false };
+    s.count = s.count + 1; s.spent = s.spent + cost;
+    s.next_buy = now + C.mana_purchase_interval; -- включает unknown, а не только SUCCESS
     local ok, result = pcall( function() return bot:ActionImmediate_PurchaseItem( item ) end );
     if ok and result == PURCHASE_ITEM_SUCCESS then
-        s.count = s.count + 1; s.spent = s.spent + cost; s.next_buy = now + C.mana_purchase_interval;
-    elseif ok and result ~= nil then s.pending = nil end;
+        s.pending.accepted = true;
+        s.accepted_count = s.accepted_count + 1; s.accepted_gold = s.accepted_gold + cost;
+    elseif ok and A.Number( result ) and result % 1 == 0 then
+        -- Bot API возвращает integer purchase enum; остальные типы = unknown.
+        s.pending = nil; s.count = s.count - 1; s.spent = s.spent - cost; s.next_buy = previous_next_buy;
+    end;
     -- nil/exception = неизвестный исход; не заявлять успех и не покупать повторно.
     pcall( function() O.Emit( O.State( bot ), "mana_purchase_result", { item = item, result = result,
         accepted = ok and result == PURCHASE_ITEM_SUCCESS, outcome = "delivery_and_use_unverified",
         mana = A.Call( bot, "GetMana" ), gold_before = gold, cost = cost,
-        bought_count = s.count, spent_gold = s.spent } ) end );
+        bought_count = s.accepted_count, spent_gold = s.accepted_gold,
+        budget_count = s.count, budget_gold = s.spent } ) end );
     return true; -- одна попытка покупки за callback, даже при отказе
 end;
 return M;

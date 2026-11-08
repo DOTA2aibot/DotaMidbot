@@ -10,6 +10,7 @@ local function scenario( disabled )
     env.DotaTime = function() return s.time end; env.GameTime = env.DotaTime;
     env.BOT_MODE_NONE, env.BOT_MODE_LANING, env.BOT_MODE_ATTACK, env.BOT_MODE_RETREAT, env.BOT_MODE_RUNE = 0, 1, 2, 4, 7;
     env.BOT_ACTION_TYPE_ATTACK = 4;
+    env.BOT_ACTION_TYPE_PICK_UP_RUNE = 8;
     env.RUNE_POWERUP_1, env.RUNE_POWERUP_2, env.RUNE_STATUS_AVAILABLE, env.PURCHASE_ITEM_SUCCESS = 0, 1, 1, 0;
     env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 2000, y = 0 } end;
     env.GetRuneStatus = function() return s.status or 1 end;
@@ -36,6 +37,7 @@ local function scenario( disabled )
     function bot:GetCurrentActionType() return s.action or 0 end;
     function bot:IsUsingAbility() return s.casting or false end; function bot:IsChanneling() return false end;
     function bot:IsStunned() return false end; function bot:IsHexed() return false end;
+    function bot:IsRooted() return false end; function bot:NumQueuedActions() return 0 end;
     function bot:HasModifier() return s.regen or false end;
     function bot:GetLocation() return { x = 0, y = 0 } end;
     function bot:GetNearbyLaneCreeps() return s.creeps end;
@@ -47,14 +49,15 @@ local function scenario( disabled )
         if s.purchase_error then error( "unknown after submission" ) end;
         return s.result;
     end;
-    function bot:Action_PickUpRune( rune ) s.runes[#s.runes + 1] = rune end;
+    function bot:Action_PickUpRune( rune ) s.runes[#s.runes + 1] = rune; s.action = 8 end;
     for _, method in ipairs( { "Action_MoveToLocation", "Action_AttackUnit", "Action_ClearActions", "Action_UseAbility" } ) do
         bot[method] = function() error( "forbidden order " .. method ) end;
     end;
     env.GetBot = function() return bot end;
     function s:item( name, n ) return { GetName = function() return name end, GetCurrentCharges = function() return n or 0 end } end;
     function s:unit() return { IsAlive = function() return true end, CanBeSeen = function() return true end,
-        IsNull = function() return false end, IsHero = function() return true end } end;
+        IsNull = function() return false end, IsHero = function() return true end,
+        GetLocation = function() return { x = 100, y = 0 } end } end;
     function s:load( path ) local f = assert( loadfile( path ) ); setfenv( f, env ); return f() end;
     s.mana_policy = env.require( "bots/laning/economy/mana" );
     s.rune_policy = env.require( "bots/laning/economy/runes" );
@@ -98,8 +101,8 @@ test( "unknown courier or inventory fields fail closed", function()
     local s = scenario(); s.env.GetNumCouriers = nil; eq( s.mana_policy.TryPurchase( s.bot ), false );
     local t = scenario(); t.bot.GetItemInSlot = function() error( "API unavailable" ) end; eq( t.mana_policy.TryPurchase( t.bot ), false );
 end );
-test( "accepted purchase remains pending without delivery and never duplicates", function()
-    local s = scenario(); s.mana_policy.TryPurchase( s.bot ); s.time = 300;
+test( "accepted purchase remains pending before the next permitted interval", function()
+    local s = scenario(); s.mana_policy.TryPurchase( s.bot ); s.time = 150;
     eq( s.mana_policy.TryPurchase( s.bot ), false ); eq( #s.calls, 1 );
 end );
 test( "observed supply then consumption respects 90 second interval", function()
@@ -184,9 +187,9 @@ test( "rune entry helper failure disables rune instead of hanging a winning mode
     local s = scenario(); s.env.require = function() error( "missing" ) end;
     s:load( "profiles/lane_economy/mode_rune_nevermore.lua" ); eq( s.env.GetDesire(), 0 ); s.env.Think(); eq( #s.runes, 0 );
 end );
-test( "logger failure never repeats a mana purchase", function()
+test( "logger failure never repeats a mana purchase before the permitted interval", function()
     local s = scenario(); s.env.print = function() error( "sink unavailable" ) end;
-    eq( s.mana_policy.TryPurchase( s.bot ), true ); s.time = 300; eq( s.mana_policy.TryPurchase( s.bot ), false ); eq( #s.calls, 1 );
+    eq( s.mana_policy.TryPurchase( s.bot ), true ); s.time = 150; eq( s.mana_policy.TryPurchase( s.bot ), false ); eq( #s.calls, 1 );
 end );
 test( "observer exposes ability upgrade diagnostics without inferring rewards", function()
     local s = scenario(); local a = { GetLevel = function() return 0 end, IsHidden = function() return true end,
@@ -200,3 +203,4 @@ test( "observer exposes ability upgrade diagnostics without inferring rewards", 
     eq( r.hero.ability_slots[1].name, "actual_client_ability_name" ); eq( r.hero.ability_slots[1].slot, 3 );
 end );
 print( "ECONOMY PASSED " .. passed .. " cases" );
+return scenario;
