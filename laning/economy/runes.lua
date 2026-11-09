@@ -80,6 +80,9 @@ function M.Decide( bot )
             local act = A.Call( bot, "GetCurrentActionType" );
             if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and act ~= BOT_ACTION_TYPE_PICK_UP_RUNE
                 and A.Call( bot, "NumQueuedActions" ) == 0 then
+                -- T033 (матч 9082519811): завершение подбора ловится и ЗДЕСЬ —
+                -- без done_cycle бот снова бежал к только что взятой руне (t=131.6).
+                local dc = prior.done_cycle or {}; dc[prior.rune] = math.floor( now / 120 ); prior.done_cycle = dc;
                 return nil, "rune_attempt_finished"; -- подобрал (или точка пуста) — назад на линию
             end;
         else
@@ -204,11 +207,23 @@ function M.Decide( bot )
     -- T027: с пустой бутылкой выходим ещё раньше (tmod >= 100, ~20с на дальний
     -- подход) и достаём руны с любой позиции на миде.
     if desperate then blind_window = now >= 100 and ( tmod >= 100 or tmod <= 45 ) end;
+    -- T033 (Олег 09.11): железное правило — руну, которую ВИДИМ ближе
+    -- rune_free_grab_dist, берём ВСЕГДА: пороги второй водяной не должны
+    -- оставлять бота стоять рядом с руной и не брать её.
+    local free_grab = false;
+    local cycle_now = math.floor( now / 120 );
+    for _, rune in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
+        local floc = global( "GetRuneSpawnLocation", rune );
+        if floc and p and global( "IsLocationVisible", floc ) == true
+            and global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE
+            and A.Distance( p, floc ) <= C.rune_free_grab_dist
+            and not ( prior and prior.done_cycle and prior.done_cycle[rune] == cycle_now ) then free_grab = true end; -- решённая руна не пересматривается
+    end;
     -- T032 (Олег 09.11): ВТОРАЯ водяная руна (циклы 2:00/4:00) — только по нужде.
     -- Взяли одну и ресурсы близки к полным → фарм важнее, за второй не бежим.
-    -- Идём, когда просели по мане или хп. Если точку видно и там пусто — поход
-    -- уже блокирует taken-гейт ниже, время не теряется.
-    if not desperate and tmod <= 45 then
+    -- Идём, когда просели (мана <= 40% или хп <= 20%). Если точку видно и там
+    -- пусто — поход уже блокирует taken-гейт ниже, время не теряется.
+    if not desperate and not free_grab and tmod <= 45 then
         local cycle = math.floor( now / 120 );
         if ( cycle == 1 or cycle == 2 ) and prior and prior.done_cycle then
             local resolved = false;
@@ -300,7 +315,7 @@ end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
     local seen, decide_reason = s.pickup_seen, s.last_reason;
-    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil; s.first_pickup_at = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
+    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil; s.first_pickup_at = nil; s.backoff_count = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
     local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
@@ -332,13 +347,21 @@ function M.Approach( bot, s, distance, reason, reissue )
     elseif A.Number( d ) and d < C.rune_pickup_min and loc then
         -- T030 (матч 9082480212): стоим ТОЧНО на споте (d≈0) — движок молча
         -- отклоняет pickup (5 эпизодов: t=137, 236, 354, 476, 596). Отступаем
-        -- от точки к центру реки на rune_backoff_dist, следующий тик выдаст
-        -- pickup с рабочей дистанции.
+        -- от точки на rune_backoff_dist, следующий тик выдаст pickup с рабочей
+        -- дистанции.
+        -- T033 (матч 9082519811): на rune 1 отступ к центру дважды ставил бота
+        -- в точку, откуда движок отклонял pickup 4× подряд (d=200). Направление
+        -- отступа РОТИРУЕМ: центр реки → +90° → -90° — обходим односторонний
+        -- блок ландшафта/пассажабилити.
         kind = "backoff";
         called = pcall( function()
             local px, py = -loc.x, -loc.y;
             local n = math.sqrt( px * px + py * py ); if n < 1 then px, py, n = 1, 0, 1 end;
-            local bx, by = loc.x + px / n * C.rune_backoff_dist, loc.y + py / n * C.rune_backoff_dist;
+            px, py = px / n, py / n;
+            local k = ( s.backoff_count or 0 ) % 3;
+            if k == 1 then px, py = -py, px elseif k == 2 then px, py = py, -px end;
+            s.backoff_count = ( s.backoff_count or 0 ) + 1;
+            local bx, by = loc.x + px * C.rune_backoff_dist, loc.y + py * C.rune_backoff_dist;
             local okv, back = pcall( Vector, bx, by, loc.z or 0 );
             bot:Action_MoveToLocation( okv and back or { x = bx, y = by } );
         end );
@@ -375,7 +398,7 @@ function M.Think( bot )
             -- после rune_done 120.7 бот ещё дважды (t=137, 151) бежал к УЖЕ
             -- взятой нами руне. Повторный поход — только следующий цикл спавна.
             local dc = s.done_cycle or {}; dc[s.rune] = math.floor( now / 120 ); s.done_cycle = dc;
-            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline = false, nil, nil, nil, nil;
+            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count = false, nil, nil, nil, nil, nil;
             s.retry_after = now + C.rune_retry_s;
             pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
                 owner = "midbot_rune_only", outcome = "unknown" } ) end );
@@ -414,7 +437,7 @@ function M.Think( bot )
     end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
-    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries, s.first_pickup_at = true, plan.rune, now, nil, nil, 0, nil; -- исключение после побочного эффекта требует guard
+    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries, s.first_pickup_at, s.backoff_count = true, plan.rune, now, nil, nil, 0, nil, nil; -- исключение после побочного эффекта требует guard
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
     -- rune_order_timeout_s — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.

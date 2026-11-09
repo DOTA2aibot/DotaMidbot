@@ -213,7 +213,27 @@ test( "second water rune waits until resources drop", function()
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
     s.rune_policy.Think( s.bot ); s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- rune_done
     s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- ресурсы полные: за второй не бежим
-    s.mana = 150; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- просели по мане → идём
-    s.mana = 300; s.hp = 500; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- просели по хп → идём
+    s.mana = 100; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- мана 33% <= 40% → идём
+    s.mana = 300; s.hp = 150; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- хп 15% ниже общего гейта 35%: безопасность важнее
+end );
+test( "visible close rune is always taken even with full resources", function()
+    -- T033 (Олег 09.11): железное правило — видимую руну ближе 700 берём всегда;
+    -- порог второй водяной не должен оставлять бота стоять рядом с руной.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.mana = 300; -- полная мана (max 300), hp=1000/1000
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
+    s.rune_policy.Think( s.bot ); s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- rune_done
+    s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- фулл ресурсы: за второй не бежит
+    s.visible = true; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 1 видна, но далеко (2000)
+    s.env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 600, y = 0 } end;
+    assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- видна + в 600 = берём при любых ресурсах
+end );
+test( "backoff direction rotates after silent pickup rejects", function()
+    -- T033 (матч 9082519811): отступ к центру на rune 1 ставил бота в точку,
+    -- откуда движок отклонял pickup 4× — направление отступа ротируем.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.bot.GetLocation = function() return { x = 380, y = 0 } end; -- d=20 до руны 0
+    s.rune_policy.Think( s.bot ); eq( s.moves[1].x, 200 ); eq( s.moves[1].y, 0 ); -- к центру реки
+    s.time = 131; s.rune_policy.Think( s.bot ); eq( s.moves[2].x, 400 ); eq( s.moves[2].y, -200 ); -- поворот +90°
 end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
