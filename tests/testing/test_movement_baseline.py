@@ -13,8 +13,8 @@ class MovementBaseline(unittest.TestCase):
         files = package.collect('all_test', ROOT, 'baseline-check')
         self.assertEqual(REFERENCE['version'], 'v0.3.12-ward-recovery')
         for name, expected in REFERENCE['files_sha256'].items():
-            # v0316 explicitly changes ward policy/purchases; the historical reference stays intact.
-            if name.startswith('laning/vision/') or name in {'item_purchase_nevermore.lua', 'mode_ward_nevermore.lua', 'laning/tactical/wards.lua'}:
+            # v0316 changes wards; v0317 explicitly aligns Raze margins/turn limits. Reference is historical.
+            if name.startswith('laning/vision/') or name in {'item_purchase_nevermore.lua', 'mode_ward_nevermore.lua', 'laning/tactical/wards.lua', 'ability_item_usage_nevermore.lua'}:
                 continue
             with self.subTest(path=name):
                 self.assertEqual(hashlib.sha256(files[name]).hexdigest(), expected)

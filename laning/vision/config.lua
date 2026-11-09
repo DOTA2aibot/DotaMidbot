@@ -9,6 +9,7 @@ return {
     calibration_only=false,
     -- Filled only from the next human calibration; never infer either point from SF position.
     dire_fixed_location=nil, dire_calibration_source=nil, sentry_fixed_location=nil,
+    sentry_use_rune_midpoint=true, -- shared map landmark, validated as walkable river
     sentry_windows={{start=0,finish=30},{start=360,finish=390}}, sentry_duration_s=420,
     support_enabled=true, deward_enabled=true, support_desire=.80,
     support_max_s=8, support_max_approach=1000, support_mid_radius=2200,

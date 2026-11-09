@@ -542,8 +542,20 @@ end
 local RAZE_HIT_MARGIN = 40;     -- факт. центр должен быть внутри радиуса с запасом
 local RAZE_FACE_STEP = 48;      -- длина шага доворота (паттерн GPT face_distance)
 local RAZE_FACE_THROTTLE = 0.15;-- пауза между шагами доворота, сек
+local RAZE_FACE_BURST_WINDOW = .75; -- bounded series, not a persistent movement lease
+local RAZE_FACE_BURST_LIMIT = 2;
+local RAZE_FACE_BACKOFF = .6;
 local TOWER_DANGER_RANGE = 750; -- дальность вышки 700 + запас
 local nNextFaceTime = 0;
+local faceBurstStarted,faceBurstCount,faceBurstUntil=-math.huge,0,-math.huge;
+local nextTurnReport=-math.huge;
+local function TurnDecision(bot,reason,distance,index,now)
+    if now>=nextTurnReport then
+        nextTurnReport=now+1;
+        Observe("RazeTurnDecision",bot,{reason=reason,distance=distance,raze_index=index,current_action=SafeUnitCall(bot,"GetCurrentActionType"),
+            hit_margin=RAZE_HIT_MARGIN,burst_count=faceBurstCount});
+    end;
+end;
 
 function GetRazeIndexOf( razeAbility )
 	for i = 1, 3
@@ -569,9 +581,14 @@ function CastRaze( npcBot, razeAbility, vLoc )
 	local i = GetRazeIndexOf( razeAbility );
 	if ( i ~= nil )
 	then
+        local distance=Dist2D(vLoc,npcBot:GetLocation());
+        if math.abs(distance-RAZE_DIST[i])>RAZE_RADIUS-RAZE_HIT_MARGIN then
+            TurnDecision(npcBot,"outside_radial_hit_margin",distance,i,GameTime());return;
+        end;
 		local vImpact = GetCurrentRazeImpact( npcBot, i );
 		if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
 		then
+            faceBurstCount=0;faceBurstStarted=-math.huge;faceBurstUntil=-math.huge;
 			TrackedCast( npcBot, razeAbility, "existing_raze_geometry_verified" );
 			return;
 		end
@@ -585,6 +602,11 @@ function CastRaze( npcBot, razeAbility, vLoc )
 	-- Доворот: КОРОТКИЙ шаг в сторону цели, а не движение до неё
 	local now = GameTime();
 	if ( now < nNextFaceTime ) then return end;
+    if now<faceBurstUntil then TurnDecision(npcBot,"bounded_turn_backoff",nil,i,now);return end;
+    if now-faceBurstStarted>RAZE_FACE_BURST_WINDOW then faceBurstStarted=now;faceBurstCount=0 end;
+    if faceBurstCount>=RAZE_FACE_BURST_LIMIT then
+        faceBurstUntil=now+RAZE_FACE_BACKOFF;TurnDecision(npcBot,"bounded_turn_backoff",nil,i,now);return;
+    end;
 
 	local vBot = npcBot:GetLocation();
 	local dx = vLoc.x - vBot.x;
@@ -604,7 +626,8 @@ function CastRaze( npcBot, razeAbility, vLoc )
 	if ( IsLocationPassable( vStep ) )
 	then
 		npcBot:Action_MoveDirectly( vStep ); -- прямой микрошаг, без построения пути
-		Observe( "Action", npcBot, "existing_face_move", nil, vStep, "existing_raze_turn" );
+        faceBurstCount=faceBurstCount+1;
+        Observe( "Action", npcBot, "existing_face_move", razeAbility, vStep, "existing_raze_turn" );
 		nNextFaceTime = now + RAZE_FACE_THROTTLE;
 	end
 end
@@ -780,7 +803,7 @@ function ConsiderRazeOnHero( npcBot )
 					local vImpact = GetRazeImpactPoint( npcBot, vLoc, i );
 
 					-- Герой должен попасть в зону удара
-					if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS )
+                    if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
 					then
 						local nDamage = abilityRaze[i]:GetAbilityDamage();
 						local score = 10; -- база за попадание по герою
@@ -976,7 +999,7 @@ function ConsiderRazeOnCreeps( npcBot )
 				local vImpact = GetRazeImpactPoint( npcBot, vCreepLoc, i );
 
 				-- Крип реально попадает в зону удара этого рейза
-				if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS )
+                if ( nDist <= RAZE_DIST[3] + RAZE_RADIUS and Dist2D( vCreepLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
 				then
 					if ( npcCreep:GetHealth() <= EffectiveRazeDamage( nDamage, npcCreep )
 						and not WillDieBeforeRaze( npcBot, npcCreep ) ) -- T023: свои уже добивают
@@ -1032,7 +1055,7 @@ function ConsiderRazeOnCreeps( npcBot )
 							count = count + 1;
 						end
 					end
-					if ( count >= 3 and ( packBest == nil or count > packBest.count ) )
+                    if ( Dist2D(vAimLoc,vImpact)<=RAZE_RADIUS-RAZE_HIT_MARGIN and count >= 3 and ( packBest == nil or count > packBest.count ) )
 					then
 						packBest = { loc = vAimLoc, raze = abilityRaze[i], count = count };
 					end

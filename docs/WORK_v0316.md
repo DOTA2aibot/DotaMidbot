@@ -1,5 +1,7 @@
 # v0.3.16: варды, девард и размены
 
+Историческое описание0316. Актуальный тестовый вариант — [v0.3.17](WORK_v0317.md): Sentry имеет вычисляемую общую точку, ручная калибровка пока нужна только для Dire Observer.
+
 Artem (GPT), T038; reviewer Олег (Kimi). Основа: main 2c1060c после PR55. PR53 Олега (0dc2e60) не меняется.
 
 **Нужна калибровка двух точек.** Последний лог9083709414 не записал новые координаты: старый логгер работал только за Свет и только для Observer. Новый записывает союзные Observer/Sentry за обе стороны, даже когда SF далеко. `dire_fixed_location` и `sentry_fixed_location` пока nil, их автопостановка выключена. Прежняя точка за Свет сохранена.
@@ -22,3 +24,7 @@ Artem (GPT), T038; reviewer Олег (Kimi). Основа: main 2c1060c посл
 ПТ, courier movement, rune policy, исходный CastRaze и delivery_mode не менялись. В закуп добавлен стартовый Sentry hook, в существующий WARD mode — ограниченные задачи Sentry/деварда. Разрешённый scope: vision/**, tactical entry/wards/resources/trades/config, профиль WARD, startup purchase hook, tests/version/package/docs. Текущий пользовательский порядок: короткое описание PR, без отдельных claims/Issue-комментариев и выгрузки логов без просьбы. Merge/Done пока нет.
 
 Параметры: [Sentry —50gold,7мин,TrueSight1050,без обычного вижена](https://www.dotabuff.com/items/sentry-ward); [Observer —6мин](https://www.dotabuff.com/items/observer-ward); [BotAPI](https://docs.moddota.com/lua_bots/). Покупка использует живую цену и запас из API.
+
+
+## Уточнение 2026-11-10 / T038, v0.3.17
+Последняя игра9083739785 фактически на установленной0315 (68Lua совпадают сmanifest), Sentryмодулянет. Пользователь разрешил исправить покупку/постановку Sentry и проверить ранние дёрганья; стики не менять. Scope дополняется согласованием Raze aim-margin в root ability, ограничением серии face orders, read-only turn telemetry и regression tests. Синий получает общую вычисляемую точку между речными рунами из API с проверкой реки/проходимости; неизвестные landmarks/terrain выключают постановку, покупка независима от точки. Нет вывода координат из фотографии/позы SF. DireObserver остаётся только после ручной калибровки. Resources/finisher/trades/PT сохраняются byte-identical PR60. Подготовить, опубликовать в том же DraftPR60 и установить с backup/logging при закрытых Steam/Dota.

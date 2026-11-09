@@ -10,7 +10,7 @@ local function scenario()
     s.bot.GetGold=function() return s.gold end;s.buy={};
     s.bot.ActionImmediate_PurchaseItem=function(_,name) s.buy[#s.buy+1]=name;return s.buy_result end;s.buy_result=0;
     local p=s.env.require('bots/laning/profile');p.wards_enabled=true;p.ward_phase_enabled=true;p.runtime_enabled=false;
-    s.v=s.env.require('bots/laning/vision/config');s.v.calibration_only=false;
+    s.v=s.env.require('bots/laning/vision/config');s.v.calibration_only=false;s.v.sentry_use_rune_midpoint=false;
     function s:vmod(name) return self.env.require('bots/laning/vision/'..name) end;
     s.sentry=s:vmod('sentry');s.service=s:vmod('service');s.deward=s:vmod('deward');
     s.state=s.broker.State(s.bot);
@@ -263,5 +263,18 @@ test('disabling tactical wards prevents all new ward purchases and deward jobs',
     local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);s:enemyWard('sentry');s:scan();
     s.config.wards=false;eq(s.sentry.TryStartup(s.bot),false);eq(s.sentry.TryPurchase(s.bot),false);
     eq(s.sentry.Candidate(s.bot),nil);eq(s.deward.Candidate(s.bot,s.state),nil);eq(s.service.GetDesire(s.bot),0);eq(#s.orders,0);
+end);
+test('shared river midpoint works for either team without manual Sentry calibration',function()
+    local s=scenario();s.v.sentry_use_rune_midpoint=true;s:item('item_ward_sentry',0);
+    local a=s.sentry.Point();assert(a);eq(a.x,0);eq(a.y,0);
+    s.bot.team=3;local b=s.sentry.Point();eq(a.x,b.x);eq(a.y,b.y);assert(s.sentry.Candidate(s.bot));
+end);
+test('unknown landmarks or non-river midpoint disable placement but not starting purchase',function()
+    for _,why in ipairs({'landmarks','terrain','blocked'}) do local s=scenario();s.v.sentry_use_rune_midpoint=true;
+        if why=='landmarks' then s.env.GetRuneSpawnLocation=function() return nil end
+        elseif why=='terrain' then s.env.GetHeightLevel=function() return 3 end
+        else s.env.IsLocationPassable=function() return false end end;
+        eq(s.sentry.Point(),nil);eq(s.sentry.Candidate(s.bot),nil);eq(s.sentry.TryStartup(s.bot),true);eq(s.buy[1],'item_ward_sentry');
+    end;
 end);
 print('VISION_TRADES PASSED '..n..' cases (new game/calibration still required)');

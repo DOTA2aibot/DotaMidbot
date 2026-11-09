@@ -6,7 +6,7 @@ local T=require(GetScriptDirectory().."/laning/tactical/config");
 local Site=require(GetScriptDirectory().."/laning/vision/site");
 local I=require(GetScriptDirectory().."/laning/vision/ward_items");
 local Idle=require(GetScriptDirectory().."/laning/vision/idle");
-local M={};
+local M={};local derivedPoint;
 local function state(bot)
     local s=B.State(bot);if not s then return end;
     s.sentry=s.sentry or {completed={}};return s.sentry,s;
@@ -15,7 +15,18 @@ function M.Enabled(bot)
     return T.enabled==true and T.wards==true and C.support_enabled and Site.Participant(bot) and P.wards_enabled==true and P.ward_phase_enabled==true
         and P.runtime_enabled~=true and C.calibration_only~=true;
 end;
-function M.Point() return U.Point(C.sentry_fixed_location) end;
+function M.Point()
+    local fixed=U.Point(C.sentry_fixed_location);if fixed then return fixed end;
+    if not C.sentry_use_rune_midpoint or RUNE_POWERUP_1==nil or RUNE_POWERUP_2==nil then return nil,"sentry_coordinate_unavailable" end;
+    if derivedPoint then return derivedPoint end;
+    local a=U.Point(U.Global("GetRuneSpawnLocation",RUNE_POWERUP_1));
+    local b=U.Point(U.Global("GetRuneSpawnLocation",RUNE_POWERUP_2));
+    if not a or not b or U.Distance(a,b)<100 then return nil,"rune_landmarks_unavailable" end;
+    local p={x=(a.x+b.x)/2,y=(a.y+b.y)/2,z=0};
+    if U.Global("GetHeightLevel",U.Vector(p))~=1 or U.Global("IsLocationPassable",U.Vector(p))~=true then return nil,"midpoint_not_walkable_river" end;
+    local ground=U.Global("GetGroundHeight",U.Vector(p));if U.Number(ground) then p.z=ground end;
+    derivedPoint=p;return p;
+end;
 local function nextCheck(now) return math.floor(now/60)*60+45+(now%60>=45 and 60 or 0) end;
 local function primary(now,prefetch)
     for i,w in ipairs(C.sentry_windows) do
@@ -34,7 +45,7 @@ function M.StartupAttempt(bot,result)
     local s,b=state(bot);if not s then return end;
     if not U.Number(result) or (PURCHASE_ITEM_SUCCESS~=nil and result==PURCHASE_ITEM_SUCCESS) then s.pending=U.Now()
     else s.buy_after=nextCheck(U.Now()) end;
-    B.Emit(b,"sentry_startup_purchase",{result=result,outcome="unverified"});
+    B.Emit(b,"sentry_startup_purchase",{result=result,location=M.Point(),coordinate_source=C.sentry_fixed_location and "fixed" or "river_rune_midpoint",outcome="unverified"});
 end;
 function M.TryStartup(bot)
     if not M.Enabled(bot) then return false end;
@@ -55,7 +66,12 @@ function M.Check(bot)
     if not M.Enabled(bot) then return end;
     local now=U.Now();local s,b=state(bot);if not now or not s then return end;
     if now>=C.recovery_end_s then s.recovery=nil;return end;
-    local p=M.Point();if not p then return end;
+    local p,pointReason=M.Point();local pointKey=p and (p.x..":"..p.y) or pointReason;
+    if s.pointKey~=pointKey then
+        s.pointKey=pointKey;B.Emit(b,"sentry_site_state",{known=p~=nil,location=p,reason=pointReason,
+            source=C.sentry_fixed_location and "fixed" or "river_rune_midpoint"});
+    end;
+    if not p then return end;
     local stock=I.Stock(bot,"sentry");if stock and stock.total>0 then s.pending=nil end;
     if now<45 then return end;
     local minute=math.floor(now/60);if now<minute*60+45 or s.checked==minute then return end;s.checked=minute;
@@ -88,18 +104,24 @@ function M.TryPurchase(bot)
 end;
 function M.Candidate(bot)
     M.Check(bot);if not M.Enabled(bot) then return end;
-    local s=state(bot);local now=U.Now();local p=M.Point();if not s or not now or not p then return end;
-    local w=window(now,s,false);if not w then return end;
-    if s.deferred_window==w.key then return end;
-    local wards=I.Allied("sentry",p,C.dedup_radius);if not wards or (#wards>0 and not (w.primary and w.start>0)) then return end;
-    if not Idle.Check(bot,p) then return end;
+    local s,b=state(bot);local now=U.Now();local p=M.Point();if not s or not now or not p then return end;
+    local function skip(reason)
+        if s.skipReason~=reason then s.skipReason=reason;B.Emit(b,"sentry_plan_skip",{reason=reason}) end;
+    end;
+    local w=window(now,s,false);if not w then return skip("outside_or_completed_window") end;
+    if s.deferred_window==w.key then return skip("deferred_to_next_window") end;
+    local wards=I.Allied("sentry",p,C.dedup_radius);
+    if not wards then return skip("allied_ward_api_unknown") end;
+    if #wards>0 and not (w.primary and w.start>0) then return skip("sentry_already_present") end;
+    local idle,why=Idle.Check(bot,p);if not idle then return skip(why) end;
     local height=U.Global("GetHeightLevel",U.Vector(p));
-    if not U.Number(height) or height>1 or U.Global("IsLocationPassable",U.Vector(p))~=true then return end;
+    if not U.Number(height) or height>1 or U.Global("IsLocationPassable",U.Vector(p))~=true then return skip("invalid_river_point") end;
     local item=I.Find(bot,"sentry");local stored=false;
     if not item then item=I.Find(bot,"sentry",6,8);stored=item~=nil end;
     local range=U.Call(item,"GetCastRange");
     if not item or (not stored and not U.Ready(item)) or not U.Number(range) or range<=25
-        or U.Distance(U.Pos(bot),p)>range-25+C.support_max_approach then return end;
+        or U.Distance(U.Pos(bot),p)>range-25+C.support_max_approach then return skip("item_unready_or_approach_out_of_range") end;
+    s.skipReason=nil;
     return {kind="sentry",location=p,window=w,item=item,range=range,prior=wards,started=now,deadline=math.min(now+C.support_max_s,w.finish)};
 end;
 function M.Defer(bot,job)

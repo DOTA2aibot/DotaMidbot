@@ -3,7 +3,7 @@ return {
     operation = "lane_probe", -- observe | lane_probe | probe_attack | probe_raze | execute
     stage = "attacks", -- attacks -> raze -> combos; каталог options при этом не перенумеровывается
     option_allowlist = nil, -- для отдельного combo probe можно ограничить, например { [6] = true }
-    build = "v0.3.16-vision-trades-T020-lane-economy", run_id = "v034-probe-01",
+    build = "v0.3.17-sentry-test-T020-lane-economy", run_id = "v034-probe-01",
     scan_radius = 1500, collect_interval_s = 0.05, log_interval_s = 1,
     full_records = false, max_damage_queries = 96,
     max_probe_orders = 1, attack_use_proficiency = true,

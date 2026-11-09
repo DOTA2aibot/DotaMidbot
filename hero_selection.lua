@@ -69,11 +69,11 @@ function GetBotNames()
 	if ( profile() )
 	then
 		return {
-			"MIDBOT v0.3.16-vision-trades",
+			"MIDBOT v0.3.17-sentry-test",
 		};
 	end
 	return {
-		"MIDBOT v0.3.16-vision-trades",
+		"MIDBOT v0.3.17-sentry-test",
 		"MIDBOT teammate 2",
 		"MIDBOT teammate 3",
 		"MIDBOT teammate 4",
