@@ -315,7 +315,7 @@ end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
     local seen, decide_reason = s.pickup_seen, s.last_reason;
-    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil; s.first_pickup_at = nil; s.backoff_count = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
+    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.failed_pickups = nil; s.last_kind = nil; s.first_pickup_at = nil; s.backoff_count = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
     local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
@@ -331,7 +331,7 @@ end;
 -- T028 (матч 9082444290): движок молча отклоняет Action_PickUpRune ДО СПАВНА
 -- руны и часто издалека (8 перевыдач за 8с — бот стоял IDLE). Теперь до точки
 -- ИДЁМ через Action_MoveToLocation, а PickUp отдаём только в rune_pickup_range.
-function M.Approach( bot, s, distance, reason, reissue )
+function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     local d = distance;
     if not A.Number( d ) then
         local okd, dd = pcall( function()
@@ -344,7 +344,8 @@ function M.Approach( bot, s, distance, reason, reissue )
     local loc = global( "GetRuneSpawnLocation", s.rune );
     if A.Number( d ) and d > C.rune_pickup_range and loc then
         kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end );
-    elseif A.Number( d ) and d < C.rune_pickup_min and loc then
+    elseif A.Number( d ) and loc and ( d < C.rune_pickup_min
+        or ( force_backoff and d <= C.rune_rotate_backoff_max_dist ) ) then
         -- T030 (матч 9082480212): стоим ТОЧНО на споте (d≈0) — движок молча
         -- отклоняет pickup (5 эпизодов: t=137, 236, 354, 476, 596). Отступаем
         -- от точки на rune_backoff_dist, следующий тик выдаст pickup с рабочей
@@ -353,6 +354,10 @@ function M.Approach( bot, s, distance, reason, reissue )
         -- в точку, откуда движок отклонял pickup 4× подряд (d=200). Направление
         -- отступа РОТИРУЕМ: центр реки → +90° → -90° — обходим односторонний
         -- блок ландшафта/пассажабилити.
+        -- T034 (матч 9082558663): force_backoff — отказавший близкий pickup
+        -- сменяется ротированным backoff ДО следующей попытки pickup, иначе
+        -- бот вставал ровно на rune_backoff_dist и ротация не срабатывала
+        -- (backoff выдавался только при d < rune_pickup_min).
         kind = "backoff";
         called = pcall( function()
             local px, py = -loc.x, -loc.y;
@@ -376,6 +381,30 @@ function M.Approach( bot, s, distance, reason, reissue )
         outcome = "unknown", owner = "midbot_rune_only" } ) end );
     return d, kind;
 end;
+-- T034 (матчи 9082519811/9082558663): диагностика немого отказа pickup на
+-- южной руне. Бот стоит НА точке (d≈0), статус AVAILABLE, точка видна, а
+-- движок pickup молча отклоняет — на северной тот же код работает. Снимаем
+-- карту ВСЕХ индексов рун (0..11, pcall на каждый): если водяная руна живёт
+-- под отдельным индексом (WATER_*) или спавн-координата индекса расходится с
+-- реальным положением, это станет видно по статусам и дистанциям. Вызывается
+-- один раз за попытку — при первом отказавшем близком pickup.
+local function IndexScan( bot, s )
+    pcall( function()
+        local p = A.Position( bot ); local parts = {};
+        for idx = 0, 11 do
+            local okl, iloc = pcall( function() return global( "GetRuneSpawnLocation", idx ) end );
+            if okl and iloc then
+                local oks, ist = pcall( function() return global( "GetRuneStatus", idx ) end );
+                local okd, dd = pcall( function() return p and A.Distance( p, iloc ) or nil end );
+                parts[#parts + 1] = tostring( idx ) .. ":" .. tostring( oks and ist or "?" )
+                    .. ":" .. tostring( okd and A.Number( dd ) and math.floor( dd ) or "?" );
+            end;
+        end;
+        O.Emit( O.State( bot ), "rune_index_scan", { rune = s.rune,
+            failed_pickups = s.failed_pickups, indices = table.concat( parts, "," ),
+            owner = "midbot_rune_only", outcome = "unknown" } );
+    end );
+end;
 function M.Think( bot )
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
     -- T026 (матч 9082418779): пока попытка наша — НЕ отменяем её из-за
@@ -398,7 +427,7 @@ function M.Think( bot )
             -- после rune_done 120.7 бот ещё дважды (t=137, 151) бежал к УЖЕ
             -- взятой нами руне. Повторный поход — только следующий цикл спавна.
             local dc = s.done_cycle or {}; dc[s.rune] = math.floor( now / 120 ); s.done_cycle = dc;
-            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count = false, nil, nil, nil, nil, nil;
+            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count, s.failed_pickups, s.last_kind = false, nil, nil, nil, nil, nil, nil, nil;
             s.retry_after = now + C.rune_retry_s;
             pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
                 owner = "midbot_rune_only", outcome = "unknown" } ) end );
@@ -417,17 +446,25 @@ function M.Think( bot )
             -- Лимит проверяем ДО перевыдачи: rune_close_reject_tries близких
             -- перевыдач без старта движка → закрываем попытку. До спавна
             -- (tmod >= 100) ожидание на точке — НОРМА, не считаем.
-            if ( s.close_tries or 0 ) >= C.rune_close_reject_tries then
+            -- T034 (матч 9082558663): счётчик failed_pickups НЕ сбрасывается
+            -- backoff'ом — отступ теперь часть стратегии повтора, а не сброс.
+            if ( s.failed_pickups or 0 ) >= C.rune_close_reject_tries then
                 M.Leave( bot, "pickup_rejected_at_point_blank" ); return;
             end;
-            local d, kind = M.Approach( bot, s, nil, nil, true );
+            -- T034: после отказавшего близкого pickup сначала РОТИРОВАННЫЙ
+            -- backoff (другой угол подхода), и только потом новый pickup —
+            -- в матче 4 pickup подряд уходили в одну и ту же позицию d=200.
+            local force_backoff = ( s.failed_pickups or 0 ) >= 1 and s.last_kind == "pickup";
+            local d, kind = M.Approach( bot, s, nil, nil, true, force_backoff );
+            s.last_kind = kind;
             if kind == "pickup" then
                 s.next_order = now + C.rune_pickup_reissue_s;
                 if not s.first_pickup_at then s.first_pickup_at = now end;
             else s.next_order = now + 1 end;
             if kind == "pickup" and A.Number( d ) and d <= 250 and ( now % 120 ) < 100 then
-                s.close_tries = ( s.close_tries or 0 ) + 1;
-            else s.close_tries = 0 end;
+                s.failed_pickups = ( s.failed_pickups or 0 ) + 1;
+                if s.failed_pickups == 1 then IndexScan( bot, s ) end;
+            end;
         end;
         return;
     end;
@@ -437,7 +474,7 @@ function M.Think( bot )
     end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
-    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries, s.first_pickup_at, s.backoff_count = true, plan.rune, now, nil, nil, 0, nil, nil; -- исключение после побочного эффекта требует guard
+    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.failed_pickups, s.first_pickup_at, s.backoff_count, s.last_kind = true, plan.rune, now, nil, nil, 0, nil, nil, nil; -- исключение после побочного эффекта требует guard
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
     -- rune_order_timeout_s — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.
@@ -453,6 +490,7 @@ function M.Think( bot )
     if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
     local _, kind0 = M.Approach( bot, s, plan.distance, reason );
+    s.last_kind = kind0;
     if kind0 == "pickup" then s.first_pickup_at = now end;
 end;
 return M;

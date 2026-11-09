@@ -127,7 +127,8 @@ test( "engine not starting the pickup re-issues the order instead of cancelling"
     s.action = 2; s.time = 131; eq( s.rune_policy.GetDesire( s.bot ), .85 );
     s.time = 134; eq( s.rune_policy.GetDesire( s.bot ), .85 ); s.rune_policy.Think( s.bot );
     eq( s.cancelled, nil ); eq( #s.runes, 2 ); eq( s.action, 8 );
-    s.time = 142; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- timeout: first_pickup 130 + окно 12с (T031)
+    s.time = 142; eq( s.rune_policy.GetDesire( s.bot ), .85 ); -- T034: окно 15с — ещё держим
+    s.time = 145.1; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- timeout: first_pickup 130 + окно 15с (T034)
 end );
 test( "finished pickup releases the bot without clearing and blocks instant reorder", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
@@ -160,17 +161,27 @@ test( "point blank position backoffs instead of a silently rejected pickup", fun
     -- ТОЧНО на споте (5 эпизодов: t=137/236/354/476/596, d=0). Ближе
     -- rune_pickup_min отступаем от точки, pickup — уже с рабочей дистанции;
     -- 4 близких отказа после спавна по-прежнему закрывают попытку (T029).
+    -- T034 (матч 9082558663): после отказавшего близкого pickup выдаём
+    -- РОТИРОВАННЫЙ backoff, а не тот же pickup — в матче бот вставал ровно на
+    -- rune_backoff_dist и слал 4 pickup в одну позицию до таймаута, ротация
+    -- T033 не срабатывала (backoff выдавался только при d < rune_pickup_min).
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
     s.bot.GetLocation = function() return { x = 380, y = 0 } end; -- d=20 до руны 0
     s.rune_policy.Think( s.bot );
     eq( #s.runes, 0 ); eq( #s.moves, 1 ); eq( s.moves[1].x, 200 ); -- отступ к центру реки
     s.bot.GetLocation = function() return { x = 200, y = 0 } end; -- отступил: d=200
     s.bot.Action_PickUpRune = function( _, rune ) s.runes[#s.runes + 1] = rune end; -- движок НЕ начинает
-    s.time = 131; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup с 200
+    s.time = 131; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup с 200, отказ №1
     -- T031: pickup перевыдаётся раз в 2.5с, не чаще — движку нужно время дойти
-    s.time = 132; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- интервал не вышел
-    for _, t in ipairs( { 134, 137, 140 } ) do s.time = t; s.rune_policy.Think( s.bot ); end; eq( #s.runes, 4 );
-    s.time = 142.6; s.rune_policy.Think( s.bot ); -- 4 близких отказа без старта → Leave (интервал 2.5с вышел)
+    s.time = 132; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( #s.moves, 1 ); -- интервал не вышел
+    s.time = 133.5; s.rune_policy.Think( s.bot ); -- T034: ротированный backoff вместо того же pickup
+    eq( #s.runes, 1 ); eq( #s.moves, 2 ); eq( s.moves[2].x, 400 ); eq( s.moves[2].y, -200 ); -- угол +90°
+    s.time = 134.5; s.rune_policy.Think( s.bot ); eq( #s.runes, 2 ); -- pickup с нового угла, отказ №2
+    s.time = 137; s.rune_policy.Think( s.bot ); eq( #s.moves, 3 ); eq( s.moves[3].y, 200 ); -- угол -90°
+    s.time = 138; s.rune_policy.Think( s.bot ); eq( #s.runes, 3 ); -- отказ №3
+    s.time = 140.5; s.rune_policy.Think( s.bot ); eq( #s.moves, 4 ); eq( s.moves[4].x, 200 ); eq( s.moves[4].y, 0 ); -- снова центр
+    s.time = 141.5; s.rune_policy.Think( s.bot ); eq( #s.runes, 4 ); -- отказ №4
+    s.time = 144; s.rune_policy.Think( s.bot ); -- 4 отказа → Leave (до дедлайна first_pickup 131+15)
     eq( s.cancelled, nil ); eq( #s.runes, 4 ); eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- retry
 end );
 test( "deadline covers the wait for the rune spawn", function()
