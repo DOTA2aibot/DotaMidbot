@@ -2,7 +2,7 @@ local count=0;
 local function eq(a,b) assert(a==b,tostring(a).." ~= "..tostring(b)) end;
 local function test(name,fn) fn();count=count+1;print("PASS WARD_PHASE "..name) end;
 local function scenario()
-    local s=SCENARIO();s.time=-30;s.env.TEAM_RADIANT=2;s.env.BOT_MODE_WARD=20;
+    local s=SCENARIO();s.time=0;s.env.TEAM_RADIANT=2;s.env.BOT_MODE_WARD=20;
     s.bot.x=-197;s.bot.y=-400;
     s.env.GetHeightLevel=function() return 2 end;
     s.env.IsLocationPassable=function() return true end;
@@ -11,6 +11,7 @@ local function scenario()
     local profile=s.env.require("bots/laning/profile");profile.wards_enabled=true;
     profile.ward_phase_enabled=true;profile.runtime_enabled=false;
     function s:vision(name) return self.env.require("bots/laning/vision/"..name) end;
+    s:vision("config").calibration_only=false;
     s:item("item_ward_observer",0);s.phase=s:vision("phase");
     s.state=s.broker.State(s.bot);
     function s:start()
@@ -24,17 +25,14 @@ test("exact human XY uses ground Z, no grid search or invented rune coverage",fu
     eq(p.expected_coverage,"user_coordinate_visibility_unverified");assert(p.rune_distance>0);
     local t=scenario();t.env.GetHeightLevel=nil;eq(t.phase.GetDesire(t.bot),0);
 end);
-test("schedule opens before creeps, at5:30 and11:30, and ends after15",function()
+test("only windows0-15,300-315,600-615 open, no catch-up outside",function()
     local s=scenario();local c=s:vision("schedule");
-    eq(c.Slot(-91),nil);eq(c.Slot(-90),0);eq(c.Slot(329.99),0);eq(c.Slot(330),1);
-    eq(c.Slot(689.99),1);eq(c.Slot(690),2);eq(c.Slot(900.01),nil);
+    for _,t in ipairs({-90,-.01,15.01,299.99,315.01,599.99,615.01,900}) do eq(c.Slot(t),nil) end;
+    eq(c.Slot(0),0);eq(c.Slot(15),0);eq(c.Slot(300),1);eq(c.Slot(315),1);eq(c.Slot(600),2);eq(c.Slot(615),2);
+    eq(c.Request(239.9),nil);eq(c.Request(240).slot,1);eq(c.Request(540).slot,2);
 end);
-test("rune guard protects approaching spawn and active rune mode",function()
-    for _,time in ipairs({100,119,120,139.9,340,359,360,379.9,700,719}) do
-        local s=scenario();s.time=time;eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
-    end;
-    for _,time in ipairs({330,690}) do local s=scenario();s.time=time;assert(s.phase.GetDesire(s.bot)>0) end;
-    local t=scenario();t.mode=7;eq(t.phase.GetDesire(t.bot),0);
+test("active rune mode preempts even inside mandatory ward window",function()
+    for _,time in ipairs({0,300,600}) do local s=scenario();s.time=time;assert(s.phase.GetDesire(s.bot)>0);s.mode=7;eq(s.phase.GetDesire(s.bot),0) end;
 end);
 test("candidate and mode desire issue no orders",function()
     local s=scenario();for i=1,5 do assert(s.phase.GetDesire(s.bot)>0) end;eq(#s.orders,0);
@@ -48,23 +46,22 @@ test("mode owns approach across ticks then places once and confirms before relea
     eq(s.phase.Holds(s.bot,s.state),false);eq(s.state.vision_phase,nil);eq(s.state.vision_done_slot,0);
     eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,2);
 end);
-test("confirmed slot cannot reenter until next window even if ward removed",function()
-    local s=scenario();s.state.vision_done_slot=0;s.time=329;eq(s.phase.GetDesire(s.bot),0);
-    s.time=330;assert(s.phase.GetDesire(s.bot)>0);s.state.vision_done_slot=1;s.time=689;eq(s.phase.GetDesire(s.bot),0);
-    s.time=690;assert(s.phase.GetDesire(s.bot)>0);
+test("confirmed slot cannot repeat and next window opens only at due time",function()
+    local s=scenario();s.state.vision_done_slot=0;s.time=5;eq(s.phase.GetDesire(s.bot),0);
+    s.time=299;eq(s.phase.GetDesire(s.bot),0);s.time=300;assert(s.phase.GetDesire(s.bot)>0);
+    s.state.vision_done_slot=1;s.time=310;eq(s.phase.GetDesire(s.bot),0);s.time=600;assert(s.phase.GetDesire(s.bot)>0);
 end);
 test("living allied observer prevents approach and duplicates",function()
     local s=scenario();s.wards={s.unit("npc_dota_observer_wards",2,-197,-1003)};
     eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
 end);
-test("nearby creep farm and deny preempt warding without a move",function()
-    for _,allied in ipairs({false,true}) do local s=scenario();local creep=s.unit("npc_dota_creep_lane",allied and 2 or 3,-197,-700);creep.hp=400;
-        s.bot.GetNearbyLaneCreeps=function(_,_,enemy) if enemy~=allied then return {creep} end;return {} end;
-        eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
-    end;
+test("ordinary creep farm deny and native AA yield during mandatory window",function()
+    local s=scenario();s.creeps={s.unit("npc_dota_creep_lane",3,-197,-700)};s.action=3;
+    assert(s.phase.GetDesire(s.bot)>0);s:start();s.phase.Think(s.bot);eq(#s.orders,1);assert(s.state.vision_phase);
+    s:advance(.1);eq(s.phase.Holds(s.bot,s.state),true);
 end);
-test("enemy opportunity retreat native attack cast and unknown query prevent entry",function()
-    for _,why in ipairs({"enemy","retreat","attack","casting","unknown","damage","health","queued"}) do
+test("direct enemy threat retreat cast and unknown query prevent entry",function()
+    for _,why in ipairs({"enemy","retreat","casting","unknown","damage","health","queued"}) do
         local s=scenario();
         if why=="enemy" then s.heroes={s.unit("npc_dota_hero_lina",3,-197,-700)}
         elseif why=="retreat" then s.mode=4 elseif why=="attack" then s.action=3
@@ -73,8 +70,8 @@ test("enemy opportunity retreat native attack cast and unknown query prevent ent
         eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
     end;
 end);
-test("new enemy or wave releases owned phase immediately without clearing combat",function()
-    for _,why in ipairs({"enemy","creep","rune","retreat","dead","muted","health","disabled"}) do local s=scenario();s:start();s.phase.Think(s.bot);
+test("new direct danger releases owned phase without clearing another action",function()
+    for _,why in ipairs({"enemy","rune","retreat","dead","muted","health","disabled"}) do local s=scenario();s:start();s.phase.Think(s.bot);
         if why=="enemy" then s.heroes={s.unit("npc_dota_hero_lina",3,-197,-700)}
         elseif why=="creep" then s.creeps={s.unit("npc_dota_creep_lane",3,-197,-700)}
         elseif why=="rune" then s.mode=7 elseif why=="retreat" then s.mode=4
@@ -87,7 +84,7 @@ end);
 test("time limit and stalled path are bounded, retry cannot cause microstep loop",function()
     for _,dt in ipairs({2.1,8.1}) do local s=scenario();s:start();s.phase.Think(s.bot);s:advance(dt);s.phase.Think(s.bot);
         eq(s.state.vision_phase,nil);eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,1);
-        s:advance(15.1);assert(s.phase.GetDesire(s.bot)>0);
+        s:advance(15.1);eq(s.phase.GetDesire(s.bot),0);s.time=300;assert(s.phase.GetDesire(s.bot)>0);
     end;
 end);
 test("no passable casting position releases phase without a move",function()
@@ -95,7 +92,7 @@ test("no passable casting position releases phase without a move",function()
     eq(s.state.vision_phase,nil);eq(#s.orders,0);
 end);
 test("approach beyond maximum is rejected",function()
-    local s=scenario();s.bot.y=600;eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
+    local s=scenario();s.bot.y=1000;eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
 end);
 test("ward pending is held across a cast and readback, not resubmitted",function()
     local s=scenario();s.bot.y=-800;

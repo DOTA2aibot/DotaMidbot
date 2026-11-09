@@ -1,15 +1,15 @@
--- Due time opens an opportunity; it never forces an order during combat/farm.
+-- Priority ward windows. No catch-up trip outside the configured interval.
 local C=require(GetScriptDirectory().."/laning/vision/config");
 local M={};
-function M.Slot(now)
-    if type(now)~="number" or now~=now or now<C.pregame_start_s or now>C.lane_end_s then return nil end;
-    local slot=0;
-    for i,t in ipairs(C.refresh_times) do if now>=t then slot=i end end;
-    return slot;
+function M.Window(now)
+    if type(now)~="number" or now~=now then return nil end;
+    for i,w in ipairs(C.windows) do if now>=w.start and now<=w.finish then return {slot=i-1,start=w.start,finish=w.finish} end end;
 end;
-function M.RuneWindow(now)
-    if type(now)~="number" or now<120-C.phase_rune_guard_s then return false end;
-    local phase=now%120;
-    return phase>=120-C.phase_rune_guard_s or phase<C.phase_rune_guard_s;
+function M.Slot(now) local w=M.Window(now);return w and w.slot end;
+function M.Request(now)
+    if type(now)~="number" or now~=now then return nil end;
+    for i,w in ipairs(C.windows) do
+        if now>=w.start-C.prefetch_s and now<=w.finish then return {slot=i-1,start=w.start,finish=w.finish} end;
+    end;
 end;
 return M;

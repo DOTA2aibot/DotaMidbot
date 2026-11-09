@@ -8,6 +8,7 @@ local PT=require(GetScriptDirectory().."/laning/tactical/treads");
 local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
 local Phase=require(GetScriptDirectory().."/laning/vision/phase");
+local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
 local M={};
 local function fail(s,where,err)
     B.Emit(s,"helper_error",{where=where,error=tostring(err):sub(1,180)});
@@ -15,7 +16,7 @@ local function fail(s,where,err)
 end;
 local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_until or -math.huge) end;
 local function tick(bot,s)
-    B.Poll(bot,s);Ward.Poll(bot,s);
+    B.Poll(bot,s);Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
     if Threat.Tick(bot,s) then Phase.Leave(bot,"emergency_bkb");return true end;
     if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;

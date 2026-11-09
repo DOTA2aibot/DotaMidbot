@@ -4,6 +4,7 @@ local Site=require(GetScriptDirectory().."/laning/vision/site");
 local C=require(GetScriptDirectory().."/laning/vision/config");
 local Tactical=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
+local Supply=require(GetScriptDirectory().."/laning/vision/supply");
 local Phase=require(GetScriptDirectory().."/laning/vision/phase");
 local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local M={};
@@ -50,10 +51,11 @@ function M.Tick(bot,s)
     end;
     if not Site.Context(bot) or U.Now()<(s.next_vision_swap or -math.huge) then return false end;
     if Phase.Enabled(bot) and (Schedule.Slot(U.Now())==nil or s.vision_done_slot==Schedule.Slot(U.Now())
-        or Schedule.RuneWindow(U.Now())) then return false end;
+        ) then return false end;
     for slot=0,5 do if observer(U.Call(bot,"GetItemInSlot",slot)) then return false end end;
     local spot=Site.Get(bot);if not spot then return false end;
-    local exists,unknown=Site.Existing(spot);if exists or unknown then return false end;
+    local exists,unknown=Site.Existing(spot);
+    if unknown or (exists and not Supply.CanReplace(bot,exists,Schedule.Slot(U.Now()))) then return false end;
     local source,item;
     for slot=6,8 do local candidate=U.Call(bot,"GetItemInSlot",slot);if observer(candidate) then source,item=slot,candidate;break end end;
     if not item then return false end;

@@ -14,7 +14,7 @@ local function scenario()
     s.bot.ActionImmediate_SwapItems=function(_,from,to) s.items[from],s.items[to]=s.items[to],s.items[from] end;
     s.state=s.broker.State(s.bot);
     local profile=s.env.require("bots/laning/profile");profile.wards_enabled=true;profile.runtime_enabled=false;
-    s.env.require("bots/laning/vision/config").fixed_location={x=-200,y=0};
+    s.env.require("bots/laning/vision/config").fixed_location={x=-200,y=0};s.env.require("bots/laning/vision/config").calibration_only=false;
     function s:vision(name) return self.env.require("bots/laning/vision/"..name) end;
     return s;
 end;

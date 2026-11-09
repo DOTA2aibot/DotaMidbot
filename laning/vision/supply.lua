@@ -2,6 +2,8 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/vision/config");
 local Site=require(GetScriptDirectory().."/laning/vision/site");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
+local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
+local Profile=require(GetScriptDirectory().."/laning/profile");
 local M,states={},setmetatable({}, {__mode="k"});
 local function state(bot)
     local now=U.Now();local s=states[bot];if not now then return nil end;
@@ -17,8 +19,15 @@ function M.StartupAttempt(bot,result)
 end;
 function M.Placed(bot,ward,spot)
     local s=state(bot);if not s then return end;
-    s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;
+    s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;s.last_slot=spot.vision_slot or Schedule.Slot(U.Now());
     emit(bot,s,"vision_lifetime",{location=spot.location,expires_at=s.expires,duration_s=C.duration_s,evidence="placement_confirmed"});
+end;
+-- Only the next scheduled slot may deliberately overlap our confirmed previous ward.
+function M.CanReplace(bot,ward,slot)
+    local s=state(bot);
+    return Profile.ward_phase_enabled==true and s and ward and ward.handle==s.ward
+        and s.last_slot~=nil and slot~=nil and slot>s.last_slot
+        and U.Call(ward.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID");
 end;
 local function supply(bot)
     local count=0;
@@ -45,6 +54,7 @@ local function supply(bot)
 end;
 M.Stock=supply;
 function M.TryPurchase(bot)
+    if C.calibration_only==true then return false end;
     local ctx,why=Site.Context(bot);
     if not ctx or ctx.now < -90 then
         if Site.Radiant(bot) then local s=state(bot);local reason=why or "before_pregame_window";
@@ -52,7 +62,10 @@ function M.TryPurchase(bot)
         end;
         return false;
     end;
-    local s=state(bot);if ctx.now<(s.nextCheck or -math.huge) then return false end;s.nextCheck=ctx.now+1;
+    local s=state(bot);
+    local request=Profile.ward_phase_enabled==true and Schedule.Request(ctx.now) or nil;
+    if Profile.ward_phase_enabled==true and (not request or B.State(bot).vision_done_slot==request.slot) then return false end;
+    if ctx.now<(s.nextCheck or -math.huge) then return false end;s.nextCheck=ctx.now+1;
     s.contextReason=nil;
     local spot,reason=Site.Get(bot);if not spot then
         if reason~=s.reason then emit(bot,s,"vision_supply_skip",{reason=reason});s.reason=reason end;return false;
@@ -60,7 +73,11 @@ function M.TryPurchase(bot)
     local count=supply(bot);if count==nil then return false end;
     if count>0 then s.pending=nil;return false end;
     local ward,unknown=Site.Existing(spot);if unknown then return false end;
-    if ward and (ward.handle~=s.ward or not s.expires or s.expires-ctx.now>C.refresh_lead_s) then return false end;
+    if ward then
+        if Profile.ward_phase_enabled==true then
+            if not M.CanReplace(bot,ward,request.slot) then return false end;
+        elseif ward.handle~=s.ward or not s.expires or s.expires-ctx.now>C.refresh_lead_s then return false end;
+    end;
     if s.pending then
         if ctx.now-s.pending>C.pending_timeout_s and not s.pendingReported then
             emit(bot,s,"vision_supply_unknown",{reason="purchase_not_observed_no_duplicate",since=s.pending});s.pendingReported=true;
@@ -75,7 +92,7 @@ function M.TryPurchase(bot)
     -- Unknown/exception can happen after a side effect; keep the pending guard.
     if ok and U.Number(result) and result~=PURCHASE_ITEM_SUCCESS then s.pending=nil end;
     emit(bot,s,"vision_supply_purchase",{item="item_ward_observer",api_returned=ok,result=result,
-        reason=ward and "expiry_soon" or "missing_fixed_observer",outcome="delivery_unverified"});
+        reason=request and "scheduled_window_supply" or (ward and "expiry_soon" or "missing_fixed_observer"),slot=request and request.slot,outcome="delivery_unverified"});
     return true;
 end;
 return M;

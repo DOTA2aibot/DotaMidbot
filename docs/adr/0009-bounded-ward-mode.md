@@ -24,3 +24,15 @@ LOS и FPS требуют отдельного client run. Mocks не подтв
 Профили valve_play/lane_probe не получают ward entry/flag. Ward-профили получают
 его явно; у Dire фаза Radiant не включается, прежняя безопасная in-range ветка
 тактических вардов сохраняется. Это не обещание nil→C++ fallback.
+
+## Уточнение 2026-11-09 — калибровка и приоритетные окна
+
+По прямому новому поручению Artem окна0–15/300–315/600–615 заменяют прежние due330/690.
+Внутри окна ordinaryfarm/deny/AA уступают; directdanger/retreat/cast/начатаяRune выше.
+Это явное изменение прежнего farm-first. Desire0.80 ниже committedRune0.85; rune policy
+не меняется. Вне оконнетcatch-up; пропусклогируетсяпосле3сreadbackgrace. По5минциклу
+разрешён плановыйoverlapтолько предыдущегособственногоconfirmedward; максимум1/слот.
+Следующий run **calibration_only=true**, SF ward execution и refill отключены: человек
+ставитObserverкакнафото, readonlymodule пишетреальнуюentityXYZ/owner. НиусловнаяXY,
+нифотографиянесчитаютсяподтверждённойworldpoint;автоматическиподставлять wardcoords
+другогоигроканельзя. После проверкиhumanowner/time точка закрепляетсяявнойправкой.
