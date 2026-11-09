@@ -204,6 +204,27 @@ function M.Decide( bot )
     -- T027: с пустой бутылкой выходим ещё раньше (tmod >= 100, ~20с на дальний
     -- подход) и достаём руны с любой позиции на миде.
     if desperate then blind_window = now >= 100 and ( tmod >= 100 or tmod <= 45 ) end;
+    -- T032 (Олег 09.11): ВТОРАЯ водяная руна (циклы 2:00/4:00) — только по нужде.
+    -- Взяли одну и ресурсы близки к полным → фарм важнее, за второй не бежим.
+    -- Идём, когда просели по мане или хп. Если точку видно и там пусто — поход
+    -- уже блокирует taken-гейт ниже, время не теряется.
+    if not desperate and tmod <= 45 then
+        local cycle = math.floor( now / 120 );
+        if ( cycle == 1 or cycle == 2 ) and prior and prior.done_cycle then
+            local resolved = false;
+            for _, r in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
+                if prior.done_cycle[r] == cycle then resolved = true end;
+            end;
+            if resolved then
+                local hp2, mhp2 = A.Call( bot, "GetHealth" ), A.Call( bot, "GetMaxHealth" );
+                local mn2, mmn2 = A.Call( bot, "GetMana" ), A.Call( bot, "GetMaxMana" );
+                if A.Number( hp2 ) and A.Number( mhp2 ) and mhp2 > 0 and hp2 / mhp2 >= C.rune_second_water_hp
+                    and A.Number( mn2 ) and A.Number( mmn2 ) and mmn2 > 0 and mn2 / mmn2 >= C.rune_second_water_mana then
+                    return nil, "second_water_rune_resources_fine";
+                end;
+            end;
+        end;
+    end;
     local max_distance = desperate and C.rune_distance_desperate or C.rune_distance;
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( towers ) ~= "table" then return nil, "tower_data_unknown" end;

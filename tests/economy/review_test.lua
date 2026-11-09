@@ -204,4 +204,16 @@ test( "resolved rune is not retried until the next spawn cycle", function()
     s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 0 решена в этом цикле, rune 1 too_far
     s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- новый цикл: rune 0 снова в игре
 end );
+test( "second water rune waits until resources drop", function()
+    -- T032 (Олег 09.11): взяли одну водяную — за второй не бежим при полных
+    -- ресурсах; идём, когда просели по мане или хп. Явно пустую точку уже
+    -- блокирует taken-гейт — время на проверку вживую не теряется.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.mana = 300; -- полная мана (max 300), hp=1000/1000
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
+    s.rune_policy.Think( s.bot ); s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- rune_done
+    s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- ресурсы полные: за второй не бежим
+    s.mana = 150; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- просели по мане → идём
+    s.mana = 300; s.hp = 500; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- просели по хп → идём
+end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
