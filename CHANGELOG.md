@@ -1,5 +1,10 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.15-ward-recovery-pt — T036/T037, 2026-11-09
+- Полностью удалён эксперимент courier ROAM: source/config/profile/tests/flag. Перемещения, nativeROAM и ground-onlyITEM соответствуют выбранной v0.3.12; vision/rune/закуп не переписаны. 33 файла закреплены исходными312хешами.
+- Обычный cast больше не ждёт переключения ПТ. PT maintenance после ability callback; STR как целевой атрибут отключён, безPTнетspelllease. Сохранены rawmap, bounded recovery маны и Stick/Wand. INT перед каждымcast не гарантируется, попадание важнее.
+- xx:45 проверка союзного варда подтверждена read-only из дальней точки безlocalvision/facing/move. [Описание/проверка](docs/RECOVERY_PT_v0315.md), [последний лог](docs/probes/9083503375/REPORT.md). Новый clientrun требуется.
+
 ## v0.3.14-control-rollback — кандидат после run9083407516, 2026-11-09
 - Убран personal ROAM entry изall_test, delivery_lane_guard=false и нетroot samplinghook; nativeROAM возвращается чистойустановкой. Guard выдал22атаки/12возвратов и10входов доPT, возможныйисточникдёрганья. Courierdetours не заявленыисправленными.
 - ИсправленаPTrawmap STR0/INT1/AGI2, отличнаяотheroATTRIBUTE STR0/AGI1/INT2. Старый«AGI»держалINT. Исправленаfixture, добавленживойrawstateвobserver. EngineGetAttackDamageнеувеличиваетсявручнуюна10.

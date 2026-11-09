@@ -15,7 +15,8 @@ class ShopPackage(unittest.TestCase):
             self.assertEqual(b'ally_ward_free_shop = true' in files['laning/profile.lua'],profile=='all_test')
             self.assertIn('item_purchase_nevermore.lua',files)
             self.assertNotIn('mode_roam_nevermore.lua',files)
-            self.assertNotIn(b'delivery_lane_guard = true',files['laning/profile.lua'])
+            self.assertNotIn(b'delivery_lane_guard',files['laning/profile.lua'])
+            self.assertFalse(any('delivery_guard' in n for n in files))
             self.assertEqual('mode_item_nevermore.lua' in files,profile=='all_test')
             self.assertEqual(b'stationary_delivery_enabled = true' in files['laning/profile.lua'],profile=='all_test')
     def test_test_archive_preserves_personal_sf_and_tango(self):
@@ -34,5 +35,6 @@ class ShopPackage(unittest.TestCase):
             result=p.install(archive,game,check_running=False)
             self.assertFalse((old/'mode_roam_nevermore.lua').exists())
             self.assertTrue((Path(result['previous_bots_backup'])/'mode_roam_nevermore.lua').exists())
-            self.assertIn(b'delivery_lane_guard = false', (old/'laning/profile.lua').read_bytes())
+            self.assertNotIn(b'delivery_lane_guard', (old/'laning/profile.lua').read_bytes())
+            self.assertFalse(any('delivery_guard' in n for n in p.collect('all_test',ROOT,'test-rollback')))
 if __name__=='__main__':unittest.main()

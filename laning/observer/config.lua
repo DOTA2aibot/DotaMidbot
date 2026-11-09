@@ -1,5 +1,5 @@
 return {
-    version = "v0.3.14-control-rollback", run_prefix = "observer-v0314", interval_s = 1,
+    version = "v0.3.15-ward-recovery-pt", run_prefix = "observer-v0315", interval_s = 1,
     radius = 1400, max_targets = 16, failure_interval_s = 10,
     attack_poll_s = 0.1, -- bounded read-only evidence polling; не считает все попадания
     -- Ни одного AA/move приказа: рекомендации отделены от реальных действий.

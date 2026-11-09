@@ -28,7 +28,6 @@ local function tick(bot,s)
     if not B.Free(s) then return true end;
     if Resources.Emergency(bot,s) then return true end;
     if Finisher.Tick(bot,s) then return true end;
-    if PT.Tick(bot,s) then return true end;
     if Items.Tick(bot,s) then return true end;
     return not B.Free(s);
 end;
@@ -130,7 +129,12 @@ function M.BindLegacy(env)
                 end;
             elseif not valid then fail(s,"neutrals",plan) end;
         end;
-        return old.AbilityUsageThink();
+        local result=old.AbilityUsageThink();
+        -- PT is leftover work: casts/turning/wards already had the order budget.
+        if enabled(s) and B.Free(s) and not s.ward_pending and not Phase.Holds(bot,s) then
+            local maintained,ptError=pcall(PT.Tick,bot,s);if not maintained then fail(s,"pt_maintenance",ptError) end;
+        end;
+        return result;
     end;
     env.ItemUsageThink=function()
         if not C.enabled then return old.ItemUsageThink() end;

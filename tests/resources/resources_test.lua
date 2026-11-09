@@ -60,24 +60,24 @@ test("full cast mana preserves the wand",function()
 end);
 test("spell ticket exists before first toggle and idle ticks cannot undo it",function()
     local s=scenario();s.mana=200;local pt=s:boots(1);local a=s.abilities.nevermore_shadowraze1;
-    eq(s.pt.Before(s.bot,s.state,a),false);assert(s.state.pt_spell);eq(pt.stat,0);
-    for i=1,4 do s:advance(.02);eq(s.pt.Tick(s.bot,s.state),false);eq(pt.stat,0);eq(s.pt.Before(s.bot,s.state,a),false) end;
-    eq(#s.orders,1);s:advance(.03);eq(s.pt.Before(s.bot,s.state,a),false);eq(pt.stat,2);
-    s:advance(.11);eq(s.pt.Before(s.bot,s.state,a),true);eq(#s.orders,2);
+    eq(s.pt.PrepareMana(s.bot,s.state,a),false);assert(s.state.pt_spell);eq(pt.stat,0);
+    for i=1,4 do s:advance(.02);eq(s.pt.Tick(s.bot,s.state),false);eq(pt.stat,0);eq(s.pt.PrepareMana(s.bot,s.state,a),false) end;
+    eq(#s.orders,1);s:advance(.03);eq(s.pt.PrepareMana(s.bot,s.state,a),false);eq(pt.stat,2);
+    s:advance(.11);eq(s.pt.PrepareMana(s.bot,s.state,a),true);eq(#s.orders,2);
 end);
 test("INT is held until cast readback then restored once to AGI",function()
-    local s=scenario();local pt=s:boots(2);local a=s.abilities.nevermore_shadowraze1;s.pt.Before(s.bot,s.state,a);
+    local s=scenario();local pt=s:boots(2);local a=s.abilities.nevermore_shadowraze1;s.pt.PrepareMana(s.bot,s.state,a);
     for i=1,20 do s:advance(.03);s.pt.Tick(s.bot,s.state) end;eq(#s.orders,0);eq(pt.stat,2);
     s.pt.NoteCast(s.state,a);a.cd=10;s:advance(.11);s.pt.Tick(s.bot,s.state);eq(pt.stat,1);eq(#s.orders,1);
     for i=1,30 do s:advance(.03);s.pt.Tick(s.bot,s.state) end;eq(#s.orders,1);
 end);
 test("missing toggle readback issues once then times out instead of spamming",function()
-    local s=scenario();s:boots(1);s.pt_stuck=true;local a=s.abilities.nevermore_shadowraze1;s.pt.Before(s.bot,s.state,a);
-    for i=1,30 do s:advance(.01);s.pt.Before(s.bot,s.state,a);s.pt.Tick(s.bot,s.state) end;eq(#s.orders,1);
-    s:advance(.8);eq(s.pt.Before(s.bot,s.state,a),true);eq(#s.orders,1);
+    local s=scenario();s:boots(1);s.pt_stuck=true;local a=s.abilities.nevermore_shadowraze1;s.pt.PrepareMana(s.bot,s.state,a);
+    for i=1,30 do s:advance(.01);s.pt.PrepareMana(s.bot,s.state,a);s.pt.Tick(s.bot,s.state) end;eq(#s.orders,1);
+    s:advance(.8);eq(s.pt.PrepareMana(s.bot,s.state,a),true);eq(#s.orders,1);
 end);
 test("low HP does not redirect a prepared finishing spell to STR",function()
-    local s=scenario();s.hp=100;s.recent=.1;local pt=s:boots(0);s.pt.Before(s.bot,s.state,s.abilities.nevermore_shadowraze1);eq(pt.stat,2);
+    local s=scenario();s.hp=100;s.recent=.1;local pt=s:boots(0);s.pt.PrepareMana(s.bot,s.state,s.abilities.nevermore_shadowraze1);eq(pt.stat,2);
     s:advance(.11);s.pt.Tick(s.bot,s.state);eq(pt.stat,2);
 end);
 test("low-mana finisher tries INT and uses actual observed mana",function()
@@ -92,8 +92,8 @@ test("unsuccessful INT mana preparation cannot restart every frame",function()
 end);
 test("bottle and fountain regeneration use AGI",function()
     local s=scenario();local pt=s:boots(2);s:item("item_bottle",0,{charges=3});s.mana=20;
-    eq(s:mod("items").Tick(s.bot,s.state),true);eq(pt.stat,1);eq(#s.orders,1);
-    s:advance(.11);eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[2].ability,"item_bottle");
+    eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_bottle");eq(pt.stat,2);
+    s:advance(.11);s.pt.Tick(s.bot,s.state);eq(pt.stat,1);
     local t=scenario();t.hp=100;t.recent=.1;t.bot.modifiers.modifier_fountain_aura_buff=true;local b=t:boots(2);t.pt.Tick(t.bot,t.state);eq(b.stat,1);
 end);
 test("cast channel queue and stale empty resource plan submit no orders",function()
@@ -126,8 +126,8 @@ test("native farm stays on actual AGI with full engine attack damage",function()
 end);
 test("spell prep reaches actual raw INT1 and release restores raw AGI2",function()
     local s=scenario();local b=s:boots(1);local a=s.abilities.nevermore_shadowraze1;
-    s.pt.Before(s.bot,s.state,a);s:advance(.11);s.pt.Before(s.bot,s.state,a);eq(b:GetPowerTreadsStat(),1);
-    s:advance(.11);assert(s.pt.Before(s.bot,s.state,a));s.pt.NoteCast(s.state,a);a.cd=10;s:advance(.11);s.pt.Tick(s.bot,s.state);eq(b:GetPowerTreadsStat(),2);
+    s.pt.PrepareMana(s.bot,s.state,a);s:advance(.11);s.pt.PrepareMana(s.bot,s.state,a);eq(b:GetPowerTreadsStat(),1);
+    s:advance(.11);assert(s.pt.PrepareMana(s.bot,s.state,a));s.pt.NoteCast(s.state,a);a.cd=10;s:advance(.11);s.pt.Tick(s.bot,s.state);eq(b:GetPowerTreadsStat(),2);
 end);
 test("observer reads raw PT state and fresh engine damage without adding10 again",function()
     local s=scenario();local b=s:boots(1);s.bot.GetAttackDamage=function() return b.stat==1 and 110 or 100 end;
@@ -137,5 +137,54 @@ test("observer reads raw PT state and fresh engine damage without adding10 again
     for _,it in ipairs(data.hero.items) do if it.name=="item_power_treads" then eq(it.treads_raw_state,2);found=true end end;assert(found);
     b.stat=2;data=core.Capture(s.bot,core.State(s.bot));eq(data.hero.attack_damage,100);
     for _,it in ipairs(data.hero.items) do if it.name=="item_power_treads" then eq(it.treads_raw_state,1) end end;eq(#s.orders,0);
+end);
+test("absent PT cannot reserve a Raze or delay a different candidate",function()
+    local s=scenario();local a=s.abilities.nevermore_shadowraze1;local b=s.abilities.nevermore_shadowraze2;
+    eq(s.pt.Before(s.bot,s.state,a),true);eq(s.state.pt_spell,nil);
+    s:advance(.033);eq(s.pt.Before(s.bot,s.state,b),true);eq(s.state.pt_spell,nil);eq(#s.orders,0);
+end);
+
+test("PT removal clears only its preparation and does not issue movement or item orders",function()
+    local s=scenario();s:boots(1);s.pt.PrepareMana(s.bot,s.state,s.abilities.nevermore_shadowraze1);assert(s.state.pt_spell);
+    s.items[1]=nil;s.state.ward_pending={sentinel=true};local n=#s.orders;s:advance(.033);
+    eq(s.pt.Tick(s.bot,s.state),false);eq(s.state.pt_spell,nil);eq(s.state.pt_plan,nil);
+    assert(s.state.ward_pending.sentinel);eq(#s.orders,n);
+end);
+
+test("no PT fast path skips idle regeneration and health decisions but keeps cast safety",function()
+    local s=scenario();local checks=0;
+    s.bot.HasModifier=function() checks=checks+1;return false end;
+    s.bot.GetHealth=function() checks=checks+1;return 1000 end;
+    eq(s.pt.Tick(s.bot,s.state),false);eq(checks,0);
+    s.channel=true;eq(s.pt.Before(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(#s.orders,0);
+end);
+test("ordinary cast never waits for PT even with failed readback or another preparation",function()
+    for _,stat in ipairs({0,1,2}) do
+        local s=scenario();local b=s:boots(stat);s.pt_stuck=true;
+        s.pt.PrepareMana(s.bot,s.state,s.abilities.nevermore_shadowraze1);
+        s:advance(.033);local n=#s.orders;
+        eq(s.pt.Before(s.bot,s.state,s.abilities.nevermore_shadowraze2),true);eq(#s.orders,n);
+    end;
+end);
+
+test("idle hint may prepare INT but a chosen cast cancels remaining optimisation",function()
+    local s=scenario();s.mana=300;local b=s:boots(1);local a=s.abilities.nevermore_shadowraze1;
+    eq(s.pt.Before(s.bot,s.state,a),true);eq(#s.orders,0);
+    eq(s.pt.Tick(s.bot,s.state),true);s:advance(.033);
+    eq(s.pt.Before(s.bot,s.state,a),true);local n=#s.orders;
+    s.pt.NoteCast(s.state,a);a.cd=10;s:advance(.033);s.pt.Tick(s.bot,s.state);
+    eq(s.state.pt_hint,nil);assert(#s.orders<=n+1);
+end);
+
+test("low HP is not an instruction to select STR",function()
+    local s=scenario();s.hp=10;s.recent=.01;local b=s:boots(1);
+    for i=1,20 do s.pt.Tick(s.bot,s.state);s:advance(.1) end;eq(#s.orders,0);eq(b:GetPowerTreadsStat(),2);
+end);
+test("actual CastRaze submits the spell first in every PT state",function()
+    for _,stat in ipairs({0,1,2}) do
+        local s=scenario();s.mana=300;local b=s:boots(stat);s:bind();
+        s.env.CastRaze(s.bot,s.abilities.nevermore_shadowraze1,s.env.Vector(200,0,0));
+        eq(#s.orders,1);eq(s.orders[1].ability,"nevermore_shadowraze1");eq(b.stat,stat);
+    end;
 end);
 print("RESOURCES PASSED "..count.." cases (live PT/restore/client ownership still require a match)");

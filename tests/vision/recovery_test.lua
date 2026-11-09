@@ -102,4 +102,14 @@ test("missed-window report retains actual safety reason after window closes",fun
     local s=scenario();s:item("item_ward_observer",0);s.time=300;s.hp=100;eq(s.phase.GetDesire(s.bot),0);
     s.time=333.1;s.phase.GetDesire(s.bot);local log=table.concat(s.logs,"\n");assert(log:find('"last_reason":"health"',1,true));
 end);
+test("remote unseen allied ward check needs neither local sight nor facing nor movement",function()
+    for _,exists in ipairs({true,false}) do
+        local s=scenario();s.bot.x=-7000;s.bot.y=-7000;s.location_visible=false;
+        local w=s.unit("npc_dota_observer_wards",2,-216.73818969727,-990.77404785156);w.visible=false;
+        s.wards=exists and {w} or {};s:item("item_ward_observer",0);
+        local facingReads=0;s.bot.GetFacing=function() facingReads=facingReads+1;return 180 end;
+        s:check(45);eq(facingReads,0);eq(#s.orders,0);eq(#s.buys,0);eq(s.bot.x,-7000);eq(s.bot.y,-7000);
+        if exists then eq(s.state.vision_recovery,nil) else eq(s.state.vision_recovery.start,60) end;
+    end;
+end);
 print("WARD_RECOVERY PASSED "..n.." cases (synthetic API, not a live-match guarantee)");

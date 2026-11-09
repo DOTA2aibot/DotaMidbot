@@ -34,7 +34,7 @@ function M.Tick(bot,s)
     local resources=Resources.Read(bot,s);if not resources then return false end;
     -- PT gain is not guessed from a fixed stat conversion: switch once, then reread actual mana.
     if PT.CanPrepareMana(bot) then
-        local ready,issued=PT.Before(bot,s,plan.ability);
+        local ready,issued=PT.PrepareMana(bot,s,plan.ability);
         if not ready then return true end;
         resources=Resources.Read(bot,s);
         if resources and resources.item and resources.known and resources.potential_mana>=plan.cost then

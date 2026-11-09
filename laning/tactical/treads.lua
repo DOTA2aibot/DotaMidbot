@@ -4,16 +4,9 @@ local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local M={};
 local function attribute(name) return C.treads_raw_states and C.treads_raw_states[name] end;
-local function danger(bot,s)
-    local hp=U.HP(bot);if not hp then return false end;
-    local recent=U.Call(bot,"WasRecentlyDamagedByAnyHero",2)==true;
-    if hp<=C.treads_low_hp and recent then s.strength=true end;
-    if hp>=C.treads_recover_hp or not recent then s.strength=false end;
-    return s.strength==true;
-end;
-local function switch(bot,s,wanted,reason,key)
+local function switch(bot,s,wanted,reason,key,item)
     if not C.treads or not U.CanUse(bot) or not U.Number(wanted) then return false,false end;
-    local item=U.Item(bot,"item_power_treads");if not U.Ready(item) then return true,false end;
+    item=item or U.Item(bot,"item_power_treads");if not U.Ready(item) then return true,false end;
     local stat=U.Call(item,"GetPowerTreadsStat");if not U.Number(stat) then return true,false end;
     if stat==wanted then s.pt_plan=nil;return true,false end;
     if U.Now()<(s.pt_pause_until or -math.huge) then return true,false end;
@@ -31,9 +24,21 @@ local function switch(bot,s,wanted,reason,key)
     if done then plan.attempts=plan.attempts+1;plan.waiting=true;s.pt_next_toggle=U.Now()+C.treads_toggle_interval end;
     return false,done;
 end;
+-- Ordinary casts NEVER wait for PT. A hint is usable only after abilities had their turn.
 function M.Before(bot,s,ability)
     if not C.treads then return true end;
     if not U.CanUse(bot) then return false end;
+    if not U.Item(bot,"item_power_treads") then s.pt_spell=nil;s.pt_plan=nil;s.pt_hint=nil;return true,false end;
+    s.pt_hint={ability=ability,at=U.Now(),cd=U.Call(ability,"GetCooldownTimeRemaining")};
+    return true,false;
+end;
+-- Explicit resource recovery only: the spell cannot currently be paid for.
+function M.PrepareMana(bot,s,ability)
+    if not C.treads then return true end;
+    if not U.CanUse(bot) then return false end;
+    local item=U.Item(bot,"item_power_treads");
+    -- No PT means no preparation lease: never hold the next Raze for absent boots.
+    if not item then s.pt_spell=nil;s.pt_plan=nil;return true,false end;
     -- Reserve BEFORE the first toggle. Idle AGI/STR must not undo this transition.
     local q=s.pt_spell;
     if not q or q.ability~=ability then
@@ -41,23 +46,29 @@ function M.Before(bot,s,ability)
         q={ability=ability,selected_at=U.Now(),cd=U.Call(ability,"GetCooldownTimeRemaining")};s.pt_spell=q;
     end;
     local wanted=attribute("INTELLECT");if wanted==nil then return true end;
-    local ready,issued=switch(bot,s,wanted,"before_spell_stat",ability);
+    local ready,issued=switch(bot,s,wanted,"before_spell_stat",ability,item);
     if ready then q.ready=true end;return ready,issued;
 end;
 function M.NoteCast(s,a)
-    if s.pt_spell and s.pt_spell.ability==a then s.pt_spell.submitted_at=U.Now() end;
+    local hint=s.pt_hint;
+    if hint and hint.ability==a then
+        s.pt_spell={ability=a,selected_at=hint.at,cd=hint.cd,submitted_at=U.Now()};
+    elseif s.pt_spell and s.pt_spell.ability==a then s.pt_spell.submitted_at=U.Now() end;
+    s.pt_hint=nil;s.pt_plan=nil;
 end;
 function M.ForRegen(bot,s)
-    if not C.treads or attribute("AGILITY")==nil then return true,false end;
-    return switch(bot,s,attribute("AGILITY"),"before_regeneration","regen");
+    -- Bottle must not wait for attribute optimisation either. Idle maintenance uses AGI.
+    return true,false;
 end;
 function M.CanPrepareMana(bot)
     local item=U.Item(bot,"item_power_treads");local stat=U.Call(item,"GetPowerTreadsStat");
     return C.treads and U.Ready(item) and U.Number(stat) and stat~=attribute("INTELLECT");
 end;
-function M.Release(s) s.pt_spell=nil;s.pt_restore=true end;
+function M.Release(s) s.pt_spell=nil;s.pt_hint=nil;s.pt_restore=true end;
 function M.Tick(bot,s)
     if not C.treads then return false end;
+    local item=U.Item(bot,"item_power_treads");
+    if not item then s.pt_spell=nil;s.pt_plan=nil;s.pt_hint=nil;return false end;
     local q=s.pt_spell;
     if q then
         local phase=U.Call(q.ability,"IsInAbilityPhase");local cd=U.Call(q.ability,"GetCooldownTimeRemaining");
@@ -66,11 +77,11 @@ function M.Tick(bot,s)
         elseif U.Now()-q.selected_at>C.treads_intent_s then M.Release(s)
         else return false end;
     end;
-    local regen=U.Call(bot,"HasModifier","modifier_bottle_regeneration")==true
-        or U.Call(bot,"HasModifier","modifier_fountain_aura_buff")==true;
-    local low=not regen and danger(bot,s);
-    local wanted=low and attribute("STRENGTH") or attribute("AGILITY");
-    local ready,issued=switch(bot,s,wanted,regen and "regeneration_agility" or (low and "low_hp_survival" or "farm_agility"),"idle");
+    local hint=s.pt_hint;
+    local prepare=hint and U.Now()-hint.at<=C.treads_hint_s and U.Ready(hint.ability)
+        and (U.Cost(hint.ability) or 0)>0;
+    local wanted=attribute(prepare and "INTELLECT" or "AGILITY");
+    local ready,issued=switch(bot,s,wanted,prepare and "idle_spell_hint" or "farm_agility",prepare and hint.ability or "idle",item);
     if ready then s.pt_restore=nil end;return issued;
 end;
 return M;

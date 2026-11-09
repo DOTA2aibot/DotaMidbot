@@ -9,11 +9,10 @@ return {
     mana_min_missing = 50, safe_enemy_radius = 1000, safe_damage_gap = 3,
     item_retry_s = 2, item_confirmation_s = 1, bkb_threat_horizon = 1.2,
     bkb_low_hp = .55, bkb_burst_hp_fraction = .20,
-    treads_low_hp = .35, treads_recover_hp = .45,
     -- GetPowerTreadsStat raw states differ from hero ATTRIBUTE_* enums (run9083407516).
     treads_raw_states = {STRENGTH=0, INTELLECT=1, AGILITY=2},
     treads_timeout = 1, treads_max_toggles = 2,
-    treads_toggle_interval = .10, treads_intent_s = 1.5,
+    treads_toggle_interval = .10, treads_intent_s = 1.5, treads_hint_s = .15,
     wand_emergency_hp = .15, finisher_retry_s = 3,
     neutral_reserve_razes = 2, neutral_radius = 950, neutral_face_step = 48, neutral_face_interval = .12,
     ward_min_hp = .70, ward_enemy_radius = 1100, ward_interval_s = 20,
