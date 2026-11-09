@@ -50,12 +50,12 @@ function M.Tick(bot,s)
         return false;
     end;
     if not Site.Context(bot) or U.Now()<(s.next_vision_swap or -math.huge) then return false end;
-    local request=Phase.Enabled(bot) and Schedule.Request(U.Now()) or nil;
-    if Phase.Enabled(bot) and (not request or s.vision_done_slot==request.slot) then return false end;
+    local request=Phase.Enabled(bot) and Schedule.Request(U.Now(),s) or nil;
+    if Phase.Enabled(bot) and (not request or Schedule.Completed(s,request)) then return false end;
     for slot=0,5 do if observer(U.Call(bot,"GetItemInSlot",slot)) then return false end end;
     local spot=Site.Get(bot);if not spot then return false end;
     local exists,unknown=Site.Existing(spot);
-    if unknown or (exists and not Supply.CanReplace(bot,exists,request and request.slot or Schedule.Slot(U.Now()))) then return false end;
+    if unknown or (exists and not Supply.CanReplace(bot,exists,request or Schedule.Window(U.Now(),s))) then return false end;
     local source,item;
     for slot=6,8 do local candidate=U.Call(bot,"GetItemInSlot",slot);if observer(candidate) then source,item=slot,candidate;break end end;
     if not item then return false end;

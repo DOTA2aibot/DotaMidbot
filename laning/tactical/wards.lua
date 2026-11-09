@@ -79,7 +79,7 @@ function M.Plan(bot,phase)
         local spot,why=Site.Get(bot);if not spot then return nil,why end;
         if not item.observer then return nil,"fixed_observer_not_in_active_inventory" end;
         local exists,unknown=Site.Existing(spot);if unknown then return nil,unknown end;
-        if exists and not (phase and Supply.CanReplace(bot,exists,phase.slot)) then return nil,"fixed_observer_already_alive" end;
+        if exists and not (phase and Supply.CanReplace(bot,exists,phase.window)) then return nil,"fixed_observer_already_alive" end;
         if not safe(spot.location) then return nil,"fixed_observer_out_of_range_or_unsafe" end;
         return {item=item.item,kind="observer",mode=item.mode,prior=list,location=spot.location,
             height=spot.height,rune=spot.rune,rune_location=spot.rune_location,lane=spot.lane,
@@ -142,7 +142,8 @@ function M.Poll(bot,s)
     local list=allies();
     for _,w in ipairs(list or {}) do
         local old=false;for _,v in ipairs(p.prior) do if v.handle==w.handle then old=true end end;
-        if not old and w.kind==p.kind and U.Distance(w.location,p.location)<=128 then
+        if not old and w.kind==p.kind and U.Distance(w.location,p.location)<=128
+            and (not p.fixed or U.Call(w.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID")) then
             local primary=U.Call(p.item,"GetCurrentCharges");local secondary=U.Call(p.item,"GetSecondaryCharges");
             local spent=(U.Number(primary) and U.Number(p.primary) and primary<p.primary)
                 or (U.Number(secondary) and U.Number(p.secondary) and secondary<p.secondary);
@@ -165,7 +166,7 @@ function M.Poll(bot,s)
                 end;
                 if consumed then data.evidence="new_owned_ward_and_item_consumed" end;
                 if p.fixed and data.owner_matches then
-                    Supply.Placed(bot,w.handle,p);s.vision_confirmed_at=U.Now();s.vision_done_slot=p.vision_slot or Schedule.Slot(U.Now());
+                    Supply.Placed(bot,w.handle,p);s.vision_confirmed_at=U.Now();Schedule.Confirmed(s,p.vision_window or Schedule.Window(U.Now(),s),U.Now());
                 end;
                 B.Emit(s,"ward_placement_observed",data);s.ward_pending=nil;return;
             end;
@@ -193,6 +194,7 @@ function M.Tick(bot,s)
         return B.Fire(bot,s,"ward_mode_toggle",p.item,"select_"..p.kind,function() return bot:Action_UseAbility(p.item) end,false);
     end;
     p.vision_slot=s.vision_phase and s.vision_phase.slot;
+    p.vision_window=s.vision_phase and s.vision_phase.window;
     p.primary=U.Call(p.item,"GetCurrentCharges");p.secondary=U.Call(p.item,"GetSecondaryCharges");
     B.Emit(s,"ward_plan",{kind=p.kind,location=p.location,height=p.height,rune=p.rune,coverage=p.expected_coverage});
     local done=B.Fire(bot,s,"ward",p.item,"validated_"..p.kind.."_point",function() return bot:Action_UseAbilityOnLocation(p.item,U.Vector(p.location)) end,false);

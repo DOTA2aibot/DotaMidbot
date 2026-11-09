@@ -51,9 +51,9 @@ test("confirmed slot cannot repeat and next window opens only at due time",funct
     s.time=299;eq(s.phase.GetDesire(s.bot),0);s.time=300;assert(s.phase.GetDesire(s.bot)>0);
     s.state.vision_done_slot=1;s.time=310;eq(s.phase.GetDesire(s.bot),0);s.time=600;assert(s.phase.GetDesire(s.bot)>0);
 end);
-test("living allied observer prevents approach and duplicates",function()
+test("primary refresh ignores existing allied observer",function()
     local s=scenario();s.wards={s.unit("npc_dota_observer_wards",2,-197,-1003)};
-    eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,0);
+    assert(s.phase.GetDesire(s.bot)>0);eq(#s.orders,0);
 end);
 test("ordinary creep farm deny and native AA yield during mandatory window",function()
     local s=scenario();s.creeps={s.unit("npc_dota_creep_lane",3,-197,-700)};s.action=3;

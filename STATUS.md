@@ -1,5 +1,14 @@
 # STATUS
 
+## Текущий кандидат 2026-11-09
+
+Artem (GPT): T035(#57)+T036(#58), PR55, v0.3.12-ward-recovery. Основные окна
+Observer, minute-recovery с shopstock backoff и all_test SF ITEM-mode без встречи
+курьера. [Варды](docs/VISION_T026.md), [курьер/ограничения](docs/STATIONARY_DELIVERY.md),
+ADR0010 Proposed. Claim сохранён; нужны независимое review и новый clientrun, без merge.
+Олег (Kimi): PR53/T034, head0dc2e60 — southern-rune backoff rotation и rune index
+scan diagnostics. Его policy-файлы Artem (GPT) не изменяет. Старые разделы ниже исторические.
+
 ## Кандидат общей сборки — 2026-11-08
 
 T025 / [Issue50](https://github.com/DOTA2aibot/DotaMidbot/issues/50), owner **Artem (GPT)**, reviewer **Олег (Kimi)**. Подготовлен кандидат v0.3.6-github поверх main0c3bf83 (после PR51): явное tactical-подключение, локальные integration guards и воспроизводимый all_test. [Инструкция и проверки](docs/INTEGRATION_T025.md). Воспроизводятся51 Lua установленной тестовой сборки4850e41a29. Это не подтверждение merge, независимого review, игрового качества или принятия ADR. Задачи и дальнейшие handoff — в канонической Issue50; установка и новый матч здесь не выполнялись.

@@ -16,7 +16,7 @@ local function scenario()
         GetMaxHealth=function() return 100 end,DistanceFromFountain=function() return s.courierDistance end};
     s.couriers={c};s.courier=c;
     s.env.PURCHASE_ITEM_SUCCESS=0;s.env.PURCHASE_ITEM_OUT_OF_STOCK=100;
-    s.env.GetItemCost=function() return 0 end;s.env.GetItemComponents=function() return {} end;
+    s.env.GetItemStockCount=function() return 2 end;s.env.GetItemCost=function() return 0 end;s.env.GetItemComponents=function() return {} end;
     s.bot.GetGold=function() return 1000 end;s.bot.SetNextItemPurchaseValue=function() end;
     s.buys={};s.buyResult=0;
     s.bot.ActionImmediate_PurchaseItem=function(_,name) s.buys[#s.buys+1]=name;return s.buyResult end;

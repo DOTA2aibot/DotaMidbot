@@ -7,12 +7,15 @@ local Profile=require(GetScriptDirectory().."/laning/profile");
 local Site=require(GetScriptDirectory().."/laning/vision/site");
 local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local Supply=require(GetScriptDirectory().."/laning/vision/supply");
+local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local M={};
 function M.Enabled(bot)
     return C.calibration_only~=true and Profile.ward_phase_enabled==true and Profile.runtime_enabled~=true
         and Profile.wards_enabled==true and Tactical.enabled and Tactical.wards and Site.Radiant(bot);
 end;
 local function skip(s,reason)
+    local w=Schedule.Window(U.Now(),s);
+    if w and reason~="schedule_complete" then s.vision_window_reason=s.vision_window_reason or {};s.vision_window_reason[Schedule.Key(w)]=reason end;
     if s.vision_phase_skip~=reason then B.Emit(s,"ward_phase_skip",{reason=reason});s.vision_phase_skip=reason end;
     return nil,reason;
 end;
@@ -61,24 +64,25 @@ function M.Leave(bot,reason)
     local s=B.State(bot);local p=s and s.vision_phase;if not p then return end;
     B.Emit(s,"ward_phase_end",{reason=reason or "mode_ended",elapsed=U.Now()-p.started,slot=p.slot,
         placement_confirmed=s.vision_confirmed_at and s.vision_confirmed_at>=p.started or false});
+    if p.window and reason~="placement_confirmed" then s.vision_window_reason=s.vision_window_reason or {};s.vision_window_reason[Schedule.Key(p.window)]=reason end;
     s.vision_phase=nil;s.vision_phase_retry=U.Now()+C.phase_retry_s;
     -- No ClearActions: do not delete an emergency item, rune, attack or another cast.
 end;
 local function candidate(bot,s)
     if not M.Enabled(bot) or BOT_MODE_WARD==nil then return skip(s,"profile_or_mode_disabled") end;
-    local now=U.Now();local window=Schedule.Window(now);local slot=window and window.slot;
-    if slot==nil or s.vision_done_slot==slot then return skip(s,"schedule_complete") end;
+    local now=U.Now();local window=Schedule.Window(now,s);local slot=window and window.slot;
+    if slot==nil or Schedule.Completed(s,window) then return skip(s,"schedule_complete") end;
     if now<(s.vision_phase_retry or -math.huge) then return nil,"retry_wait" end;
     if s.ward_pending or s.ward_disabled then return skip(s,"ward_unconfirmed_or_disabled") end;
     local spot,why=Site.Get(bot);if not spot then return skip(s,why) end;
     local exists,unknown=Site.Existing(spot);
-    if unknown or (exists and not Supply.CanReplace(bot,exists,slot)) then return skip(s,unknown or "observer_alive") end;
+    if unknown or (exists and not Supply.CanReplace(bot,exists,window)) then return skip(s,unknown or "observer_alive") end;
     local whyUnsafe=safety(bot,s,spot,false);if whyUnsafe then return skip(s,whyUnsafe) end;
     local item,range=ready(bot);if not item then return skip(s,"active_observer_not_ready") end;
     local distance=U.Distance(U.Pos(bot),spot.location);
     if distance>range-25+C.phase_max_approach then return skip(s,"approach_too_far") end;
     s.vision_phase_skip=nil;
-    return {spot=spot,item=item,range=range,slot=slot,started=now,deadline=math.min(now+C.phase_max_s,window.finish+Tactical.ward_timeout_s),window_finish=window.finish,
+    return {spot=spot,item=item,range=range,slot=slot,window=window,started=now,deadline=math.min(now+C.phase_max_s,window.finish+Tactical.ward_timeout_s),window_finish=window.finish,
         distance=distance,progress_at=now};
 end;
 function M.Holds(bot,s)
@@ -88,7 +92,7 @@ function M.Holds(bot,s)
     elseif U.Call(bot,"GetActiveMode")~=BOT_MODE_WARD then reason="mode_preempted"
     elseif s.vision_confirmed_at and s.vision_confirmed_at>=p.started then reason="placement_confirmed"
     elseif p.awaiting_ward and not s.ward_pending then reason="placement_unconfirmed"
-    elseif not s.ward_pending and Schedule.Slot(U.Now())~=p.slot then reason="window_closed"
+    elseif not s.ward_pending and Schedule.Slot(U.Now(),s)~=p.slot then reason="window_closed"
     elseif U.Now()>=p.deadline then reason="timeout"
     else reason=safety(bot,s,p.spot,true) end;
     if reason then M.Leave(bot,reason);return false end;
@@ -97,18 +101,18 @@ end;
 function M.Poll(bot,s)
     if not M.Enabled(bot) or not s then return end;
     s.vision_window_reports=s.vision_window_reports or {};
-    for i,w in ipairs(C.windows) do
-        local slot=i-1;
-        if U.Now()>w.finish+Tactical.ward_timeout_s and not s.vision_window_reports[slot] then
-            s.vision_window_reports[slot]=true;
-            local done=s.vision_done_slot==slot;
-            B.Emit(s,done and "ward_window_complete" or "ward_window_missed",{slot=slot,start=w.start,finish=w.finish,
-                last_reason=s.vision_phase_skip or "not_selected_or_busy",confirmed=done});
+    for _,w in ipairs(Schedule.Windows(s)) do
+        local key=Schedule.Key(w);
+        if U.Now()>w.finish+Tactical.ward_timeout_s and not s.vision_window_reports[key] then
+            s.vision_window_reports[key]=true;
+            local done=Schedule.Completed(s,w);
+            B.Emit(s,done and "ward_window_complete" or "ward_window_missed",{slot=w.slot,window_kind=w.kind,start=w.start,finish=w.finish,
+                last_reason=s.vision_window_reason and s.vision_window_reason[key] or "not_selected_or_busy",confirmed=done});
         end;
     end;
 end;
 function M.GetDesire(bot)
-    local s=B.State(bot);if not s then return 0 end;M.Poll(bot,s);
+    local s=B.State(bot);if not s then return 0 end;Recovery.Poll(bot,s);M.Poll(bot,s);
     if s.vision_phase then return M.Holds(bot,s) and C.phase_desire or 0 end;
     local p=candidate(bot,s);return p and C.phase_desire or 0;
 end;
@@ -124,7 +128,7 @@ function M.Think(bot)
     local p=s.vision_phase;
     if s.ward_pending then return end;
     local exists,unknown=Site.Existing(p.spot);
-    if unknown or (exists and not Supply.CanReplace(bot,exists,p.slot)) then M.Leave(bot,unknown or "observer_already_present");return end;
+    if unknown or (exists and not Supply.CanReplace(bot,exists,p.window)) then M.Leave(bot,unknown or "observer_already_present");return end;
     local item,range=ready(bot);
     if not item or item~=p.item then M.Leave(bot,"item_changed_or_not_ready");return end;
     local distance=U.Distance(U.Pos(bot),p.spot.location);

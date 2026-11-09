@@ -7,7 +7,7 @@ local function scenario()
     function s:vision(name) return self.env.require("bots/laning/vision/"..name) end;
     s.state=s.broker.State(s.bot);s.env.GetHeightLevel=function() return 3 end;
     s.env.GetNumCouriers=function() return 0 end;s.env.PURCHASE_ITEM_SUCCESS=0;
-    s.env.GetItemCost=function() return 0 end;s.bot.GetGold=function() return 1000 end;
+    s.env.GetItemStockCount=function() return 2 end;s.env.GetItemCost=function() return 0 end;s.bot.GetGold=function() return 1000 end;
     s.buys={};s.bot.ActionImmediate_PurchaseItem=function(_,name) s.buys[#s.buys+1]=name;return 0 end;
     return s;
 end;
@@ -51,10 +51,11 @@ test("scheduled refresh prefetches own next ward and allows only confirmed prior
     assert(s.state.ward_pending);s:advance();s:mod("wards").Poll(s.bot,s.state);eq(s.state.vision_done_slot,1);
     phase.Holds(s.bot,s.state);eq(phase.GetDesire(s.bot),0);eq(#s.orders,1);
 end);
-test("unconfirmed or another player's ward cannot be deliberately duplicated",function()
+test("primary refresh may overlap another player's ward, recovery may not",function()
     local s=scenario();s:vision("config").calibration_only=false;local w=s.unit("npc_dota_observer_wards",2,-197,-1003);
-    s.wards={w};s.time=300;s:item("item_ward_observer",0);eq(s:vision("phase").GetDesire(s.bot),0);
-    eq(s:vision("supply").CanReplace(s.bot,{handle=w},1),false);
+    s.wards={w};s.time=300;s:item("item_ward_observer",0);assert(s:vision("phase").GetDesire(s.bot)>0);
+    eq(s:vision("supply").CanReplace(s.bot,{handle=w},1),true);
+    eq(s:vision("supply").CanReplace(s.bot,{handle=w},{slot=106,kind="recovery",start=360,finish=390}),false);
 end);
 test("missed window is explicit one-time evidence and never triggers a late catch-up trip",function()
     local s=scenario();s:vision("config").calibration_only=false;s:item("item_ward_observer",0);s.time=33.1;

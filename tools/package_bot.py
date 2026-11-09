@@ -19,6 +19,7 @@ PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
 ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
 WARD_ENTRY = 'mode_ward_nevermore.lua'
+ITEM_ENTRY = 'mode_item_nevermore.lua'
 WARD_PROFILES = ('valve_wards', 'valve_lane_economy', 'all_test')
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
             'valve_wards': ('valve_native', False),
@@ -36,7 +37,7 @@ def profile_source(profile, revision='uncommitted'):
             f'wards_enabled = {str(profile in ("valve_wards", "valve_lane_economy", "all_test")).lower()}, '
             f'economy_enabled = {str(profile in ("valve_lane_economy", "all_test")).lower()}, '
             + (f'ward_phase_enabled = true, ' if profile in WARD_PROFILES else '') +
-            ('ally_ward_free_shop = true, ' if profile == 'all_test' else '') +
+            ('ally_ward_free_shop = true, stationary_delivery_enabled = true, ' if profile == 'all_test' else '') +
             f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
@@ -76,6 +77,7 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
         below(source, root)
         files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
+        files[ITEM_ENTRY] = (root / 'profiles/all_test' / ITEM_ENTRY).read_bytes()
     if profile in WARD_PROFILES:
         files[WARD_ENTRY] = (root / 'profiles/vision' / WARD_ENTRY).read_bytes()
     return files
@@ -85,7 +87,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.11-ward-supply', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.12-ward-recovery', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -96,7 +98,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.11-ward-supply / PROFILE: %s
+    readme = '''MIDBOT v0.3.12-ward-recovery / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
@@ -121,6 +123,11 @@ Observer supply starts at3:30/8:30, windows0:00-0:30/5:00-5:30/10:00-10:30.
 A new match must verify courier delivery BEFORE the windows and placement readback.
 Native lane movement/attacks resume when this mode ends. Rune policy is unchanged.
 The configured location and its rune coverage still need a client test.
+all_test replaces the whole personal SF ITEM mode: ground pickup within160 units only,
+no courier rendezvous and no distant ground-item chase. Item usage/purchases remain separate.
+Ward recovery checks atxx:45 stop after a confirmed10min+ placement or at12:00.
+Primary5/10min refresh ignores old coverage; recovery only replaces missing coverage.
+Unavailable shop stock defers to nextxx:45; stash/courier items are never ordered twice.
 all_test additionally replaces the scripted team's non-SF shopping with simple
 ward-free plans. Select this package only for the controlled SF team; select
 Valve/default scripts for the enemy team. Native shopping fallback is not provided.
@@ -179,6 +186,8 @@ def verify(path):
         expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
         if profile in WARD_PROFILES:
             expected_entries.add(WARD_ENTRY)
+        if profile == 'all_test':
+            expected_entries.add(ITEM_ENTRY)
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}

@@ -22,12 +22,11 @@ function M.Placed(bot,ward,spot)
     s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;s.last_slot=spot.vision_slot or Schedule.Slot(U.Now());s.target_slot=nil;s.target_start=nil;
     emit(bot,s,"vision_lifetime",{location=spot.location,expires_at=s.expires,duration_s=C.duration_s,evidence="placement_confirmed"});
 end;
--- Only the next scheduled slot may deliberately overlap our confirmed previous ward.
-function M.CanReplace(bot,ward,slot)
-    local s=state(bot);
-    return Profile.ward_phase_enabled==true and s and ward and ward.handle==s.ward
-        and s.last_slot~=nil and slot~=nil and slot>s.last_slot
-        and U.Call(ward.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID");
+-- Primary refresh intentionally ignores every old ward; recovery never duplicates coverage.
+function M.CanReplace(bot,ward,window)
+    if type(window)=="number" then local w=C.windows[window+1];window=w and {slot=window,kind="primary",start=w.start,finish=w.finish} end;
+    return Profile.ward_phase_enabled==true and ward and window and window.kind=="primary"
+        and not Schedule.Completed(B.State(bot),window) or false;
 end;
 function M.StockDetails(bot)
     local d={active=0,active_castable=0,backpack=0,stash=0,courier=0,total=0};
@@ -63,7 +62,7 @@ end;
 function M.Observe(bot)
     if not phaseProfile(bot) then return end;
     local s=state(bot);if not s or U.Now()<(s.nextObserve or -math.huge) then return end;s.nextObserve=U.Now()+1;
-    local d=M.StockDetails(bot);local request=Schedule.Request(U.Now());
+    local d=M.StockDetails(bot);local request=Schedule.Request(U.Now(),B.State(bot));
     local slot=request and request.slot or s.target_slot;
     local deadline=request and request.start or s.target_start;
     local key=d and table.concat({d.active,d.active_castable,d.backpack,d.stash,d.courier,tostring(slot)},":") or "unknown";
@@ -77,8 +76,8 @@ function M.Observe(bot)
     s.previousActive=d.active;
 end;
 function M.DeliveryNeeded(bot)
-    if not phaseProfile(bot) or U.Call(bot,"IsAlive")~=true or U.Now()>C.windows[#C.windows].finish then return nil end;
-    local s=state(bot);local request=Schedule.Request(U.Now());
+    if not phaseProfile(bot) or U.Call(bot,"IsAlive")~=true or Schedule.Stopped(U.Now(),B.State(bot)) then return nil end;
+    local s=state(bot);local request=Schedule.Request(U.Now(),B.State(bot));
     if not request and s and s.target_slot~=nil then request={slot=s.target_slot,start=s.target_start} end;
     if not request then return nil end;
     local d=M.StockDetails(bot);
@@ -109,29 +108,38 @@ function M.DeliveryAttempt(bot,mode,ok,accepted,courier)
     emit(bot,s,"vision_courier_attempt",{slot=request.slot,window_start=request.window_start,courier_state=mode,
         api_returned=ok,api_rejected=accepted==false,distance_from_base=U.Call(courier,"DistanceFromFountain"),outcome="delivery_unverified"});
 end;
+function M.PurchaseStatus(bot)
+    local s=state(bot);if not s then return {available=false,reason="clock_unknown"} end;
+    if s.shopAt==U.Now() then return s.shopStatus end;
+    local stock=U.Global("GetItemStockCount","item_ward_observer");
+    local cost=U.Global("GetItemCost","item_ward_observer");local gold=U.Call(bot,"GetGold");
+    local out={stock=stock,cost=cost,gold=gold,available=false};
+    if not U.Number(stock) or stock<0 then out.reason="shop_stock_unknown"
+    elseif stock<1 then out.reason="shop_out_of_stock"
+    elseif not U.Number(cost) or cost<0 or not U.Number(gold) then out.reason="shop_cost_or_gold_unknown"
+    elseif gold<cost then out.reason="shop_not_affordable"
+    else out.available=true;out.reason="available" end;
+    s.shopAt=U.Now();s.shopStatus=out;return out;
+end;
 function M.TryPurchase(bot)
     if C.calibration_only==true then return false end;
-    local ctx,why=Site.Context(bot);
-    if not ctx or ctx.now < -90 then
-        if Site.Radiant(bot) then local s=state(bot);local reason=why or "before_pregame_window";
-            if s and s.contextReason~=reason then emit(bot,s,"vision_supply_skip",{reason=reason});s.contextReason=reason end;
-        end;
-        return false;
-    end;
-    local s=state(bot);
-    local request=Profile.ward_phase_enabled==true and Schedule.Request(ctx.now) or nil;
-    if Profile.ward_phase_enabled==true and (not request or B.State(bot).vision_done_slot==request.slot) then return false end;
-    if ctx.now<(s.nextCheck or -math.huge) then return false end;s.nextCheck=ctx.now+1;
-    s.contextReason=nil;
-    local spot,reason=Site.Get(bot);if not spot then
-        if reason~=s.reason then emit(bot,s,"vision_supply_skip",{reason=reason});s.reason=reason end;return false;
+    local phase=phaseProfile(bot);local ctx,why;
+    if phase then
+        local now=U.Now();if now and now>=-90 and not Schedule.Stopped(now,B.State(bot)) then ctx={now=now} end;
+    else ctx,why=Site.Context(bot) end;
+    if not ctx or ctx.now < -90 then return false end;
+    local broker=B.State(bot);local s=state(bot);
+    local request=phase and Schedule.Request(ctx.now,broker) or nil;
+    if phase and (not request or Schedule.Completed(broker,request)) then return false end;
+    if ctx.now<(s.nextCheck or -math.huge) then return false end;s.nextCheck=phase and math.min(ctx.now+1,Schedule.NextCheck(ctx.now)) or ctx.now+1;
+    local spot,reason;if phase then spot,reason=Site.Geometry() else spot,reason=Site.Get(bot) end;if not spot then
+        if reason~=s.reason then emit(bot,s,"vision_supply_skip",{reason=reason or "site_unknown"});s.reason=reason end;return false;
     end;
     local count=supply(bot);if count==nil then return false end;
     if count>0 then s.pending=nil;return false end;
     local ward,unknown=Site.Existing(spot);if unknown then return false end;
     if ward then
-        if Profile.ward_phase_enabled==true then
-            if not M.CanReplace(bot,ward,request.slot) then return false end;
+        if phase then if not M.CanReplace(bot,ward,request) then return false end;
         elseif ward.handle~=s.ward or not s.expires or s.expires-ctx.now>C.refresh_lead_s then return false end;
     end;
     if s.pending then
@@ -141,15 +149,25 @@ function M.TryPurchase(bot)
     end;
     if ctx.now<(s.nextBuy or -math.huge) then return false end;
     if PURCHASE_ITEM_SUCCESS==nil or type(GetItemCost)~="function" then return false end;
-    local cost=U.Global("GetItemCost","item_ward_observer");local gold=U.Call(bot,"GetGold");
-    if not U.Number(cost) or cost<0 or not U.Number(gold) or gold<cost then return false end;
-    s.nextBuy=ctx.now+C.purchase_retry_s;s.pending=ctx.now;s.pendingReported=false;
+    if phase then
+        local status=M.PurchaseStatus(bot);
+        if not status.available then
+            s.nextBuy=Schedule.NextCheck(ctx.now);
+            emit(bot,s,"vision_supply_wait",{reason=status.reason,stock=status.stock,slot=request.slot,next_check=s.nextBuy});
+            if broker.vision_recovery_purchase then broker.vision_recovery_purchase.authorized=false end;
+            return false;
+        end;
+    else
+        local cost=U.Global("GetItemCost","item_ward_observer");local gold=U.Call(bot,"GetGold");
+        if not U.Number(cost) or cost<0 or not U.Number(gold) or gold<cost then return false end;
+    end;
+    s.nextBuy=phase and Schedule.NextCheck(ctx.now) or ctx.now+C.purchase_retry_s;s.pending=ctx.now;s.pendingReported=false;
     if request then s.target_slot=request.slot;s.target_start=request.start end;
+    if phase and broker.vision_recovery_purchase then broker.vision_recovery_purchase.authorized=false end;
     local ok,result=pcall(function() return bot:ActionImmediate_PurchaseItem("item_ward_observer") end);
-    -- Unknown/exception can happen after a side effect; keep the pending guard.
     if ok and U.Number(result) and result~=PURCHASE_ITEM_SUCCESS then s.pending=nil end;
     emit(bot,s,"vision_supply_purchase",{item="item_ward_observer",api_returned=ok,result=result,
-        reason=request and "scheduled_window_supply" or (ward and "expiry_soon" or "missing_fixed_observer"),slot=request and request.slot,outcome="delivery_unverified"});
+        reason=request and (request.kind.."_window_supply") or (ward and "expiry_soon" or "missing_fixed_observer"),slot=request and request.slot,outcome="delivery_unverified"});
     return true;
 end;
 return M;

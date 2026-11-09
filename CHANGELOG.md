@@ -1,5 +1,12 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.12-ward-recovery — кандидат T035/T036, 2026-11-09
+- Primary0–30/300–330/600–630 обновляет Observer даже поверх старого союзного покрытия; одна подтверждённая постановка на окно. PinnedXYZ прежние.
+- Read-only checkxx:45: missingcoverage+carriedObserver открывает nextminute00–30; missingitem разрешает покупку/доставку при knownstock. Пустая/unknown лавка, недостаток gold и knownfailure ждут следующейxx:45; stash/courier/pending не дублируются.
+- Цикл завершается после ownconfirmed placement>=10:00, иначе строго12:00. При смерти закупка может готовиться, герой не получает приказы. Missreason сохраняется.
+- Только all_test: личный SF ITEM-mode заменён ground-only pickup<=160ед, без hero-to-courier цели и дальних походов за предметами. Весь этот native mode заменяется явно; usage/purchase и lane/attack/retreat не переписаны. ADR0010 Proposed. Read-only courier_trajectory раз в секунду при доставке.
+- PR53 Олега(Kimi)0dc2e60 осмотрен отдельно; rune-файлы в этой ветке не менялись. Объединённая тестовая сборка требует отдельного clientrun; merge/Done не заявлены.
+
 ## v0.3.11-ward-supply — кандидат T026, 2026-11-09
 - Сначала отдельным docs-only commit ee70d447 опубликован полный лог9082536157 для Олега (Kimi), до новых игровых исправлений: console.log.gz, readable rune/tactical events, metadata/hash. Сетевые идентификаторы скрыты, игровые данные сохранены.
 - Лог подтвердил собственные постановки SF в0:04 и10:14 точно в pinnedXY, но на5:00 Observer оставался вstashslot9: покупка была уже в4:00. ОшибокLua/helper0; LH63/deny31/K3/D0 к12:15.

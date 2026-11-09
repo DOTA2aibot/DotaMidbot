@@ -19,3 +19,5 @@ ADR (Architecture Decision Record) хранит контекст, выбранн
 ADR нужен для игрового маршрута интеграции, контракта producer/consumer, транспорта, training algorithm/framework, важных зависимостей и хранения данных. Локальная функция без изменения интерфейса обычно не требует отдельного ADR.
 
 Не считать ответ AI одобрением людей. Если мнения разошлись, сохраняются baseline и текущий интерфейс; следующий шаг — конкретный проверяемый spike, а не два несовместимых варианта в main.
+
+- [ADR0010: личный SF ITEM-mode без courier rendezvous](0010-personal-item-delivery-mode.md) — Proposed, T036/Issue58/PR55, тестовый all_test.
