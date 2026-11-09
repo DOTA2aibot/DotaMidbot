@@ -1,0 +1,593 @@
+{
+  "south_events": [
+    {
+      "time": 134.267,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1767.3375656083,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2878
+    },
+    {
+      "time": 135.4,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1421.9658521093,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2886
+    },
+    {
+      "time": 136.533,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1076.3216897402,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2893
+    },
+    {
+      "time": 137.667,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 730.65586660838,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2900
+    },
+    {
+      "time": 140.233,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "backoff",
+      "d": 0,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2930
+    },
+    {
+      "time": 141.367,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2940
+    },
+    {
+      "time": 143.967,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2952
+    },
+    {
+      "time": 146.5,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2969
+    },
+    {
+      "time": 149.067,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 2985
+    },
+    {
+      "time": 149.7,
+      "kind": "rune_cancel",
+      "rune": null,
+      "order": null,
+      "d": null,
+      "status": null,
+      "reason": "rune_pickup_timeout",
+      "last_decide": "rune_order_committed",
+      "source_line": 2987
+    },
+    {
+      "time": 160.0,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1800.0478593801,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3135
+    },
+    {
+      "time": 161.033,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1485.0815916608,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3143
+    },
+    {
+      "time": 162.033,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1180.0975926811,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3151
+    },
+    {
+      "time": 163.133,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 844.59557738857,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3157
+    },
+    {
+      "time": 220.9,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1980.4241744223,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3606
+    },
+    {
+      "time": 222.0,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1713.8525060347,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3619
+    },
+    {
+      "time": 223.1,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1379.8612903358,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3628
+    },
+    {
+      "time": 224.133,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1064.7873750423,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3634
+    },
+    {
+      "time": 225.133,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 759.78732765761,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3641
+    },
+    {
+      "time": 227.667,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "backoff",
+      "d": 0,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3656
+    },
+    {
+      "time": 228.7,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3665
+    },
+    {
+      "time": 231.2,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3686
+    },
+    {
+      "time": 233.833,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3705
+    },
+    {
+      "time": 236.4,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 199.99999973729,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 3727
+    },
+    {
+      "time": 237.167,
+      "kind": "rune_cancel",
+      "rune": null,
+      "order": null,
+      "d": null,
+      "status": null,
+      "reason": "rune_pickup_timeout",
+      "last_decide": "rune_order_committed",
+      "source_line": 3735
+    },
+    {
+      "time": 290.367,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1969.1667510516,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 4159
+    },
+    {
+      "time": 291.433,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1650.8212738622,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 4166
+    },
+    {
+      "time": 292.6,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 1294.9817228404,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 4173
+    },
+    {
+      "time": 293.633,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "move",
+      "d": 979.81761927975,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 4181
+    },
+    {
+      "time": 294.633,
+      "kind": "rune_order",
+      "rune": 1,
+      "order": "pickup",
+      "d": 674.81807304092,
+      "status": 1,
+      "reason": null,
+      "last_decide": null,
+      "source_line": 4186
+    }
+  ],
+  "coexisting_own_submissions": [
+    {
+      "time": 152.76667785645,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:16",
+        "attribution": "submission_only",
+        "location": {
+          "x": 239.88180541992,
+          "y": -697.31115722656
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3011
+    },
+    {
+      "time": 152.93333435059,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:17",
+        "attribution": "submission_only",
+        "location": {
+          "x": 197.18392944336,
+          "y": -675.6689453125
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3014
+    },
+    {
+      "time": 153.1000213623,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:18",
+        "attribution": "submission_only",
+        "location": {
+          "x": 159.57083129883,
+          "y": -650.66607666016
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3020
+    },
+    {
+      "time": 153.26667785645,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:19",
+        "attribution": "submission_only",
+        "location": {
+          "x": 120.86771392822,
+          "y": -631.00476074219
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3022
+    },
+    {
+      "time": 153.43333435059,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:20",
+        "attribution": "submission_only",
+        "location": {
+          "x": 91.817520141602,
+          "y": -599.40759277344
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3023
+    },
+    {
+      "time": 153.6000213623,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:21",
+        "attribution": "submission_only",
+        "location": {
+          "x": 66.564971923828,
+          "y": -562.96051025391
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3027
+    },
+    {
+      "time": 153.69999694824,
+      "data": {
+        "ability": "nevermore_shadowraze2",
+        "action": "cast",
+        "action_id": "observer-v0311:0:2:0:action:22",
+        "attribution": "submission_only",
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_geometry_verified"
+      },
+      "source_line": 3028
+    },
+    {
+      "time": 154.30000305176,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:23",
+        "attribution": "submission_only",
+        "location": {
+          "x": 68.478240966797,
+          "y": -532.48004150391
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3035
+    },
+    {
+      "time": 154.4666595459,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:24",
+        "attribution": "submission_only",
+        "location": {
+          "x": 23.15718460083,
+          "y": -524.01544189453
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3037
+    },
+    {
+      "time": 154.63334655762,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:25",
+        "attribution": "submission_only",
+        "location": {
+          "x": 29.122486114502,
+          "y": -476.38757324219
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3041
+    },
+    {
+      "time": 154.80000305176,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:26",
+        "attribution": "submission_only",
+        "location": {
+          "x": -8.187949180603,
+          "y": -479.10217285156
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3045
+    },
+    {
+      "time": 155.30000305176,
+      "data": {
+        "ability": "nevermore_shadowraze3",
+        "action": "cast",
+        "action_id": "observer-v0311:0:2:0:action:27",
+        "attribution": "submission_only",
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_geometry_verified"
+      },
+      "source_line": 3061
+    },
+    {
+      "time": 155.36668395996,
+      "data": {
+        "ability": "nevermore_shadowraze3",
+        "action": "cast",
+        "action_id": "observer-v0311:0:2:0:action:28",
+        "attribution": "submission_only",
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_geometry_verified"
+      },
+      "source_line": 3063
+    },
+    {
+      "time": 242.83335876465,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:34",
+        "attribution": "submission_only",
+        "location": {
+          "x": -397.78402709961,
+          "y": -698.02465820313
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 3784
+    },
+    {
+      "time": 242.93333435059,
+      "data": {
+        "ability": "nevermore_shadowraze2",
+        "action": "cast",
+        "action_id": "observer-v0311:0:2:0:action:35",
+        "attribution": "submission_only",
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_geometry_verified"
+      },
+      "source_line": 3786
+    },
+    {
+      "time": 285.79998779297,
+      "data": {
+        "action": "existing_face_move",
+        "action_id": "observer-v0311:0:2:0:action:36",
+        "attribution": "submission_only",
+        "location": {
+          "x": -42.738712310791,
+          "y": -113.17324829102
+        },
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_turn"
+      },
+      "source_line": 4114
+    },
+    {
+      "time": 285.93334960938,
+      "data": {
+        "ability": "nevermore_shadowraze3",
+        "action": "cast",
+        "action_id": "observer-v0311:0:2:0:action:37",
+        "attribution": "submission_only",
+        "outcome": "unknown",
+        "owner": "midbot_ability",
+        "reason": "existing_raze_geometry_verified"
+      },
+      "source_line": 4117
+    }
+  ]
+}

@@ -2,11 +2,17 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Q=require(GetScriptDirectory().."/laning/tactical/requiem");
+local Resources=require(GetScriptDirectory().."/laning/tactical/resources");
+local Finisher=require(GetScriptDirectory().."/laning/tactical/finisher");
 local Items=require(GetScriptDirectory().."/laning/tactical/items");
 local Threat=require(GetScriptDirectory().."/laning/tactical/threats");
 local PT=require(GetScriptDirectory().."/laning/tactical/treads");
 local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
+local Phase=require(GetScriptDirectory().."/laning/vision/phase");
+local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
+local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
+local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local M={};
 local function fail(s,where,err)
     B.Emit(s,"helper_error",{where=where,error=tostring(err):sub(1,180)});
@@ -14,17 +20,19 @@ local function fail(s,where,err)
 end;
 local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_until or -math.huge) end;
 local function tick(bot,s)
-    B.Poll(bot,s);Ward.Poll(bot,s);
+    B.Poll(bot,s);Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
-    if Threat.Tick(bot,s) then return true end;
-    if Q.Tick(bot,s) then return true end;
+    if Threat.Tick(bot,s) then Phase.Leave(bot,"emergency_bkb");return true end;
+    if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;
+    if Phase.Holds(bot,s) then return true end;
     if not B.Free(s) then return true end;
-    if PT.Tick(bot,s) then return true end;
+    if Resources.Emergency(bot,s) then return true end;
+    if Finisher.Tick(bot,s) then return true end;
     if Items.Tick(bot,s) then return true end;
     return not B.Free(s);
 end;
 local function prepare(bot,s,ability)
-    if not enabled(s) or not B.Free(s) then return false end;
+    if not enabled(s) or not B.Free(s) or Phase.Holds(bot,s) then return false end;
     local ok,ready=pcall(PT.Before,bot,s,ability);
     if not ok then fail(s,"prepare",ready);return false end;
     return ready and B.Free(s);
@@ -97,11 +105,17 @@ function M.BindLegacy(env)
         if not C.enabled then return old.AbilityUsageThink() end;
         local bot=env.GetBot();local s=B.State(bot);
         if not U.Actor(bot) then return end;
+        local sampled,sampleError=pcall(Delivery.Observe,bot,s);if not sampled then fail(s,"courier_observer",sampleError) end;
+        local checked,err=pcall(Recovery.Poll,bot,s);if not checked then fail(s,"ward_recovery",err) end;
         -- Keep observation of death, but do not issue dead-hero orders.
         if U.Call(bot,"IsAlive")~=true then pcall(observer.Tick,bot);return end;
         if not s then return old.AbilityUsageThink() end;
         local success,handled=pcall(tick,bot,s);if not success then fail(s,"tick",handled) end;
-        if handled==true or not B.Free(s) then return end;
+        if handled==true or not B.Free(s) then
+            -- A ward lease must not pause the read-only observer.
+            if s.vision_phase then pcall(observer.Tick,bot) end;
+            return;
+        end;
         if enabled(s) then
             local valid,plan=pcall(Neutral.Consider,bot);
             if valid and plan then
@@ -115,7 +129,12 @@ function M.BindLegacy(env)
                 end;
             elseif not valid then fail(s,"neutrals",plan) end;
         end;
-        return old.AbilityUsageThink();
+        local result=old.AbilityUsageThink();
+        -- PT is leftover work: casts/turning/wards already had the order budget.
+        if enabled(s) and B.Free(s) and not s.ward_pending and not Phase.Holds(bot,s) then
+            local maintained,ptError=pcall(PT.Tick,bot,s);if not maintained then fail(s,"pt_maintenance",ptError) end;
+        end;
+        return result;
     end;
     env.ItemUsageThink=function()
         if not C.enabled then return old.ItemUsageThink() end;

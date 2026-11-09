@@ -1,0 +1,79 @@
+{
+  "schema": "midbot-observer-report-1",
+  "records": 3264,
+  "malformed_records": 0,
+  "telemetry_available": true,
+  "runs": [
+    {
+      "file": "midbot-wardrecovery-0dc2e60-cfab2cf-test.9082994995.log",
+      "run_id": "observer-v0311:0:1:-89.900001525879",
+      "profile": "all_test",
+      "controller": "valve_native_with_midbot_rune",
+      "snapshots": 861,
+      "first_sample_time": -89.900001525879,
+      "last_sample_time": 804.2333984375,
+      "sample_gaps_over_2s": 1,
+      "samples_after_10_minutes": 171,
+      "counters": {
+        "last_hits": {
+          "first": 0,
+          "last": 51,
+          "observed_positive_increments": 51,
+          "counter_resets": 0
+        },
+        "denies": {
+          "first": 0,
+          "last": 24,
+          "observed_positive_increments": 24,
+          "counter_resets": 0
+        },
+        "deaths": {
+          "first": 0,
+          "last": 1,
+          "observed_positive_increments": 1,
+          "counter_resets": 0
+        },
+        "kills": {
+          "first": 0,
+          "last": 5,
+          "observed_positive_increments": 5,
+          "counter_resets": 0
+        }
+      },
+      "events": {
+        "rune_priority": 174,
+        "snapshot": 861,
+        "shadow_decision": 861,
+        "ward_suggestion": 861,
+        "mana_purchase_decision": 118,
+        "action_submitted": 102,
+        "cast_consumption_observed": 29,
+        "attack_release_observed": 126,
+        "cast_outcome_unknown": 24,
+        "rune_order": 80,
+        "mana_purchase_result": 3,
+        "rune_index_scan": 5,
+        "rune_done": 5,
+        "rune_cancel": 7,
+        "attack_record_changed": 8
+      },
+      "submitted_actions": {
+        "existing_face_move": 49,
+        "cast": 53
+      },
+      "last_level": 10,
+      "last_gold": 430,
+      "last_souls": 14,
+      "cast_hit_rate": null,
+      "per_action_kills": null,
+      "reward_labels": null,
+      "attribution": "interval_counters_and_submissions_only"
+    }
+  ],
+  "limits": [
+    "Shadow decisions are suggestions, not actions.",
+    "Counters do not identify the action that caused a last-hit or kill.",
+    "Samples after 10:00 prove observation continuity, not successful gameplay.",
+    "Hit rate, native command ownership and performance overhead remain unmeasured."
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "match_id": "9083503375",
+  "tested_version": "v0.3.14-control-rollback",
+  "source_revision": "test53-0dc2e60-55-3c7c1e0-controlrollback",
+  "pr53": "0dc2e604f6a6f6f0178cf5abb0d41a714564d21c",
+  "pr55": "3c7c1e01c1c0db460b0325525f50f3a20d3731d3",
+  "original_bytes": 16589538,
+  "original_sha256": "55aa70d27ff0b274db30df8e00dec06591714814080cad886d8ac5da08eca617",
+  "line_count": 22359,
+  "sanitized_sha256": "1b5d335c9d91751011a822cdaf80cd7209be1732954eb1821d20d968cf089298",
+  "gzip_sha256": "625133f44d479c7c2afccf9564d0f5d338f5dbff9301cdfe509cb64b335dab64",
+  "gzip_bytes": 581066,
+  "redactions": {
+    "steam_id": 15,
+    "ipv4": 13,
+    "local_user_path": 0,
+    "lobby_server_id": 2,
+    "auth_value": 0
+  },
+  "no_gameplay_lines_filtered": true,
+  "lua_errors": 0,
+  "malformed_tactical": 0,
+  "malformed_observer": 0,
+  "installed_matches_manifest_before_update": true,
+  "new0315_game_tested": false,
+  "limits": [
+    "Existing turn commands are not proof of a particular miss.",
+    "Snapshot interval cannot prove a missed Wand opportunity or guaranteed kill.",
+    "This is the previous0314 match;0315 changes need a new run."
+  ]
+}

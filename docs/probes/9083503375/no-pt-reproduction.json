@@ -1,0 +1,11 @@
+{
+  "old": {
+    "first_ready": true,
+    "second_ready_after_33ms": false,
+    "spell_ticket_without_boots": true,
+    "orders": 0,
+    "source": "v0.3.14 treads.lua, no PT, Raze1 then Raze2 after33ms"
+  },
+  "new_contract": "Ordinary Before is nonblocking at every PT state and does not issue an item action.",
+  "regression": "tests/resources/resources_test.lua"
+}

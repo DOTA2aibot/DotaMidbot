@@ -1,0 +1,42 @@
+{
+  "match_id": "9083407516",
+  "tested_version": "v0.3.13-resources-delivery",
+  "source_revision": "test53-0dc2e60-55-8f47ea1-resources-delivery",
+  "tested_pr53": "0dc2e604f6a6f6f0178cf5abb0d41a714564d21c",
+  "tested_pr55_code": "8f47ea1594379a39ede5ec7c6ff415ca7f58b997",
+  "fingerprint": "07662ef810",
+  "installed_lua_count": 71,
+  "installed_matches_manifest": true,
+  "observer_version_note": "Observer version and source_revision match the v0.3.13 installed manifest.",
+  "source_file": "midbot-resources-0dc2e60-8f47ea1-test.9083407516.log",
+  "original_bytes": 17229967,
+  "original_sha256": "8df9c0d18dc512d7eb4605833f5f52724233beb1b832ea0dd9cabc6449ee6c4d",
+  "source_line_count": 11717,
+  "published_sanitized_bytes": 17230001,
+  "published_sanitized_sha256": "4b871ec9661141d98e80e8119601027b15ef974f2cceb061bcfbc504b82dc331",
+  "gzip_bytes": 569618,
+  "gzip_sha256": "86782bf80d95f815950a32d68323b1d6475bad1211919079066941999d798283",
+  "redactions": {
+    "steam_id": 15,
+    "ipv4": 13,
+    "local_user_path": 0,
+    "lobby_server_id": 2,
+    "auth_value": 0
+  },
+  "no_gameplay_lines_filtered": true,
+  "malformed_observer": 0,
+  "malformed_tactical": 0,
+  "lua_error_matches": 0,
+  "helper_error_records": 0,
+  "snapshot_evidence_records": 102,
+  "limits": [
+    "User observation and log facts are separate.",
+    "Command submission/action termination is not proof of rune pickup.",
+    "No game commands or log text are executed by this report."
+  ],
+  "observer_version_fields": [
+    "v0.3.13-resources-delivery"
+  ],
+  "log_artifacts_only": true,
+  "recorded_run_code": "v0.3.13 only; code fix v0.3.14 is a separate candidate, not this match"
+}
