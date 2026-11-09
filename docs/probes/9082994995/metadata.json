@@ -1,0 +1,43 @@
+{
+  "match_id": "9082994995",
+  "tested_version": "v0.3.12-ward-recovery",
+  "source_revision": "test53-0dc2e60-55-cfab2cf-wardrecovery",
+  "tested_pr53": "0dc2e604f6a6f6f0178cf5abb0d41a714564d21c",
+  "tested_pr55_code": "cfab2cfc0d23c016808dbe335d6089e7ead9ddc0",
+  "fingerprint": "3d48e48e04",
+  "installed_lua_count": 66,
+  "installed_matches_manifest": true,
+  "observer_stale_version_field": [
+    "v0.3.11-ward-supply"
+  ],
+  "observer_version_note": "Observer config was not bumped in v0.3.12; source_revision, hero_selection name and verified manifest identify this build. Not an older installation.",
+  "source_file": "midbot-wardrecovery-0dc2e60-cfab2cf-test.9082994995.log",
+  "original_bytes": 10966843,
+  "original_sha256": "0ea4ca2bd31234cc6435ccf33bf59818c6c684730068a6b83d2af61442dc1afa",
+  "source_line_count": 6983,
+  "published_sanitized_bytes": 10966871,
+  "published_sanitized_sha256": "76d492ddff800bcde527442997bcd0be19d54617bc4c98d2bc90b370ef1821a3",
+  "gzip_bytes": 375136,
+  "gzip_sha256": "0c20452ceaf19374ab3ec5bced57ad1ce6b02dc0a83760de91e34317066ce3e4",
+  "redactions": {
+    "steam_id": 13,
+    "ipv4": 13,
+    "local_user_path": 0,
+    "lobby_server_id": 2,
+    "auth_value": 0
+  },
+  "no_gameplay_lines_filtered": true,
+  "malformed_observer": 0,
+  "malformed_tactical": 0,
+  "lua_error_matches": 0,
+  "helper_error_records": 0,
+  "snapshot_evidence_records": 150,
+  "gameplay_changed": false,
+  "installed_build_changed": false,
+  "documentation_only": true,
+  "limits": [
+    "User observation and log facts are separate.",
+    "Command submission/action termination is not proof of rune pickup.",
+    "No game commands or log text are executed by this report."
+  ]
+}
