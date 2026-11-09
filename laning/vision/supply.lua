@@ -13,13 +13,13 @@ local function emit(bot,s,kind,data) B.Emit(B.State(bot),kind,data) end;
 function M.StartupAttempt(bot,result)
     local s=state(bot);if not s then return end;
     if not U.Number(result) or (PURCHASE_ITEM_SUCCESS~=nil and result==PURCHASE_ITEM_SUCCESS) then
-        s.pending=U.Now();s.pendingReported=false;
+        s.pending=U.Now();s.pendingReported=false;s.target_slot=0;s.target_start=0;
     else s.nextBuy=U.Now()+C.purchase_retry_s end;
     emit(bot,s,"vision_startup_purchase",{result=result,outcome="delivery_unverified"});
 end;
 function M.Placed(bot,ward,spot)
     local s=state(bot);if not s then return end;
-    s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;s.last_slot=spot.vision_slot or Schedule.Slot(U.Now());
+    s.ward=ward;s.expires=U.Now()+C.duration_s;s.pending=nil;s.last_slot=spot.vision_slot or Schedule.Slot(U.Now());s.target_slot=nil;s.target_start=nil;
     emit(bot,s,"vision_lifetime",{location=spot.location,expires_at=s.expires,duration_s=C.duration_s,evidence="placement_confirmed"});
 end;
 -- Only the next scheduled slot may deliberately overlap our confirmed previous ward.
@@ -29,30 +29,86 @@ function M.CanReplace(bot,ward,slot)
         and s.last_slot~=nil and slot~=nil and slot>s.last_slot
         and U.Call(ward.handle,"GetPlayerID")==U.Call(bot,"GetPlayerID");
 end;
-local function supply(bot)
-    local count=0;
-    local function slots(unit,last)
+function M.StockDetails(bot)
+    local d={active=0,active_castable=0,backpack=0,stash=0,courier=0,total=0};
+    local function slots(unit,last,courier)
         if type(unit.GetItemInSlot)~="function" then return false end;
         for slot=0,last do
-            local item=U.Call(unit,"GetItemInSlot",slot);local name=U.Call(item,"GetName");
-            if item~=nil and type(name)~="string" then return false end;
+            local ok,item=pcall(unit.GetItemInSlot,unit,slot);if not ok then return false end;
+            local name=U.Call(item,"GetName");if item~=nil and type(name)~="string" then return false end;
             if name=="item_ward_observer" or name=="item_ward_dispenser" then
                 local n=U.Call(item,"GetCurrentCharges");if not U.Number(n) or n<0 then return false end;
-                count=count+n;
+                local where=courier and "courier" or (slot<=5 and "active" or (slot<=8 and "backpack" or "stash"));
+                d[where]=d[where]+n;d.total=d.total+n;
+                if where=="active" and U.Ready(item) then d.active_castable=d.active_castable+n end;
             end;
         end;return true;
     end;
-    if not slots(bot,14) then return nil end;
+    if not slots(bot,14,false) then return nil end;
     local n=U.Global("GetNumCouriers");local id=U.Call(bot,"GetPlayerID");
     if not U.Number(n) or n<0 or not U.Number(id) then return nil end;
     for i=0,n-1 do
         local courier=U.Global("GetCourier",i);local owner=U.Call(courier,"GetPlayerID");
         if owner==nil then return nil end;
-        if owner==id and not slots(courier,8) then return nil end;
+        if owner==id and not slots(courier,8,true) then return nil end;
     end;
-    return count;
+    return d;
 end;
+local function supply(bot) local d=M.StockDetails(bot);return d and d.total end;
 M.Stock=supply;
+local function phaseProfile(bot)
+    return Site.Radiant(bot) and C.calibration_only~=true and Profile.ward_phase_enabled==true
+        and Profile.wards_enabled==true and Profile.runtime_enabled~=true;
+end;
+function M.Observe(bot)
+    if not phaseProfile(bot) then return end;
+    local s=state(bot);if not s or U.Now()<(s.nextObserve or -math.huge) then return end;s.nextObserve=U.Now()+1;
+    local d=M.StockDetails(bot);local request=Schedule.Request(U.Now());
+    local slot=request and request.slot or s.target_slot;
+    local deadline=request and request.start or s.target_start;
+    local key=d and table.concat({d.active,d.active_castable,d.backpack,d.stash,d.courier,tostring(slot)},":") or "unknown";
+    if key==s.stockKey then return end;s.stockKey=key;
+    if not d then emit(bot,s,"vision_supply_state",{known=false,slot=slot});return end;
+    local data={known=true,slot=slot,window_start=deadline,active=d.active,active_castable=d.active_castable,
+        backpack=d.backpack,stash=d.stash,courier=d.courier,total=d.total,
+        before_window=deadline and U.Now()<deadline or false,evidence="own_inventory_and_courier_readback"};
+    emit(bot,s,"vision_supply_state",data);
+    if d.active>0 and s.previousActive==0 and slot~=nil then emit(bot,s,"vision_delivery_observed",data) end;
+    s.previousActive=d.active;
+end;
+function M.DeliveryNeeded(bot)
+    if not phaseProfile(bot) or U.Call(bot,"IsAlive")~=true or U.Now()>C.windows[#C.windows].finish then return nil end;
+    local s=state(bot);local request=Schedule.Request(U.Now());
+    if not request and s and s.target_slot~=nil then request={slot=s.target_slot,start=s.target_start} end;
+    if not request then return nil end;
+    local d=M.StockDetails(bot);
+    if not d or d.stash<=0 or d.active+d.backpack+d.courier>0 then return nil end;
+    return {slot=request.slot,window_start=request.start,reason="scheduled_observer_in_stash"};
+end;
+function M.ReturningCourierRequest(bot,courier,mode)
+    if COURIER_STATE_RETURNING_TO_BASE==nil or mode~=COURIER_STATE_RETURNING_TO_BASE
+        or U.Call(courier,"GetPlayerID")~=U.Call(bot,"GetPlayerID") then return nil end;
+    local request=M.DeliveryNeeded(bot);if not request then return nil end;
+    local s=state(bot);if U.Now()<(s.nextWardCourier or -math.huge) then return nil end;
+    local hp,max=U.Call(courier,"GetHealth"),U.Call(courier,"GetMaxHealth");
+    local distance=U.Call(courier,"DistanceFromFountain");
+    local reason;
+    if U.Call(courier,"IsAlive")~=true then reason="courier_not_alive"
+    elseif not U.Number(hp) or not U.Number(max) or max<=0 or not U.Number(distance) or distance<0 then reason="courier_health_or_base_distance_unknown"
+    elseif hp/max<C.courier_min_hp then reason="courier_low_health"
+    elseif distance>C.courier_near_base then reason="returning_courier_not_near_base" end;
+    if reason then
+        if s.courierWaitReason~=reason then emit(bot,s,"vision_courier_wait",{reason=reason,slot=request.slot,courier_state=mode,distance_from_base=distance});s.courierWaitReason=reason end;
+        return nil;
+    end;
+    s.courierWaitReason=nil;return request;
+end;
+function M.DeliveryAttempt(bot,mode,ok,accepted,courier)
+    local request=M.DeliveryNeeded(bot);if not request then return end;
+    local s=state(bot);s.nextWardCourier=U.Now()+C.courier_retry_s;
+    emit(bot,s,"vision_courier_attempt",{slot=request.slot,window_start=request.window_start,courier_state=mode,
+        api_returned=ok,api_rejected=accepted==false,distance_from_base=U.Call(courier,"DistanceFromFountain"),outcome="delivery_unverified"});
+end;
 function M.TryPurchase(bot)
     if C.calibration_only==true then return false end;
     local ctx,why=Site.Context(bot);
@@ -88,6 +144,7 @@ function M.TryPurchase(bot)
     local cost=U.Global("GetItemCost","item_ward_observer");local gold=U.Call(bot,"GetGold");
     if not U.Number(cost) or cost<0 or not U.Number(gold) or gold<cost then return false end;
     s.nextBuy=ctx.now+C.purchase_retry_s;s.pending=ctx.now;s.pendingReported=false;
+    if request then s.target_slot=request.slot;s.target_start=request.start end;
     local ok,result=pcall(function() return bot:ActionImmediate_PurchaseItem("item_ward_observer") end);
     -- Unknown/exception can happen after a side effect; keep the pending guard.
     if ok and U.Number(result) and result~=PURCHASE_ITEM_SUCCESS then s.pending=nil end;

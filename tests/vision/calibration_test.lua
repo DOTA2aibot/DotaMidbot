@@ -44,8 +44,8 @@ test("scheduled refresh prefetches own next ward and allows only confirmed prior
     local supply=s:vision("supply");local w=s.unit("npc_dota_observer_wards",2,-197,-1003);w.id=7;s.wards={w};
     supply.Placed(s.bot,w,{location={x=-197,y=-1003},vision_slot=0});s.state.vision_done_slot=0;
     eq(supply.CanReplace(s.bot,{handle=w},0),false);eq(supply.CanReplace(s.bot,{handle=w},1),true);
-    s.time=239;eq(supply.TryPurchase(s.bot),false);s.time=240;eq(supply.TryPurchase(s.bot),true);eq(#s.buys,1);
-    s.time=241;eq(supply.TryPurchase(s.bot),false);eq(#s.buys,1);
+    s.time=209;eq(supply.TryPurchase(s.bot),false);s.time=210;eq(supply.TryPurchase(s.bot),true);eq(#s.buys,1);
+    s.time=211;eq(supply.TryPurchase(s.bot),false);eq(#s.buys,1);
     s:item("item_ward_observer",0);s.bot.x=-197;s.bot.y=-900;s.time=300;s.mode=20;
     local phase=s:vision("phase");phase.Start(s.bot);assert(s.state.vision_phase);phase.Think(s.bot);
     assert(s.state.ward_pending);s:advance();s:mod("wards").Poll(s.bot,s.state);eq(s.state.vision_done_slot,1);
@@ -57,7 +57,7 @@ test("unconfirmed or another player's ward cannot be deliberately duplicated",fu
     eq(s:vision("supply").CanReplace(s.bot,{handle=w},1),false);
 end);
 test("missed window is explicit one-time evidence and never triggers a late catch-up trip",function()
-    local s=scenario();s:vision("config").calibration_only=false;s:item("item_ward_observer",0);s.time=18.1;
+    local s=scenario();s:vision("config").calibration_only=false;s:item("item_ward_observer",0);s.time=33.1;
     local phase=s:vision("phase");eq(phase.GetDesire(s.bot),0);local count=#s.logs;s:advance();phase.Poll(s.bot,s.state);eq(#s.logs,count);
     assert(table.concat(s.logs,"\n"):find('ward_window_missed',1,true));eq(#s.orders,0);
 end);

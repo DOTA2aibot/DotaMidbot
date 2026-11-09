@@ -25,11 +25,11 @@ test("pinned human entity XY uses ground Z, no grid search or invented SF succes
     eq(p.expected_coverage,"human_calibrated_point_sf_placement_unverified");assert(p.rune_distance>0);
     local t=scenario();t.env.GetHeightLevel=nil;eq(t.phase.GetDesire(t.bot),0);
 end);
-test("only windows0-15,300-315,600-615 open, no catch-up outside",function()
+test("only windows0-30,300-330,600-630 open and prefetch starts210/510",function()
     local s=scenario();local c=s:vision("schedule");
-    for _,t in ipairs({-90,-.01,15.01,299.99,315.01,599.99,615.01,900}) do eq(c.Slot(t),nil) end;
-    eq(c.Slot(0),0);eq(c.Slot(15),0);eq(c.Slot(300),1);eq(c.Slot(315),1);eq(c.Slot(600),2);eq(c.Slot(615),2);
-    eq(c.Request(239.9),nil);eq(c.Request(240).slot,1);eq(c.Request(540).slot,2);
+    for _,t in ipairs({-90,-.01,30.01,299.99,330.01,599.99,630.01,900}) do eq(c.Slot(t),nil) end;
+    eq(c.Slot(0),0);eq(c.Slot(30),0);eq(c.Slot(300),1);eq(c.Slot(330),1);eq(c.Slot(600),2);eq(c.Slot(630),2);
+    eq(c.Request(209.9),nil);eq(c.Request(210).slot,1);eq(c.Request(510).slot,2);
 end);
 test("active rune mode preempts even inside mandatory ward window",function()
     for _,time in ipairs({0,300,600}) do local s=scenario();s.time=time;assert(s.phase.GetDesire(s.bot)>0);s.mode=7;eq(s.phase.GetDesire(s.bot),0) end;
@@ -84,7 +84,7 @@ end);
 test("time limit and stalled path are bounded, retry cannot cause microstep loop",function()
     for _,dt in ipairs({2.1,8.1}) do local s=scenario();s:start();s.phase.Think(s.bot);s:advance(dt);s.phase.Think(s.bot);
         eq(s.state.vision_phase,nil);eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,1);
-        s:advance(15.1);eq(s.phase.GetDesire(s.bot),0);s.time=300;assert(s.phase.GetDesire(s.bot)>0);
+        s.time=31;eq(s.phase.GetDesire(s.bot),0);s.time=300;assert(s.phase.GetDesire(s.bot)>0);
     end;
 end);
 test("no passable casting position releases phase without a move",function()

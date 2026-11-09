@@ -7,8 +7,9 @@ return {
         evidence="live_human_observer_entity",source_line=1214},
     -- Automatic placement is enabled at the human-selected coordinate.
     calibration_only=false,
-    windows={{start=0,finish=15},{start=300,finish=315},{start=600,finish=615}},
-    prefetch_s=60, diagnostic_interval_s=5,
+    windows={{start=0,finish=30},{start=300,finish=330},{start=600,finish=630}},
+    prefetch_s=90, diagnostic_interval_s=5,
+    courier_retry_s=10, courier_near_base=1200, courier_min_hp=.8,
     phase_max_s=8, phase_max_approach=1400, phase_retry_s=3,
     phase_move_interval_s=.6, phase_stall_s=2, phase_min_progress=24,
     phase_enemy_radius=1100, phase_creep_radius=1100,

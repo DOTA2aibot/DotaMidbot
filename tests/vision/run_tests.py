@@ -8,5 +8,6 @@ lua.globals().CURRENT_OWNER_SOURCE=str(ROOT/'ability_item_usage_nevermore.lua').
 lua.execute((ROOT/'tests/vision/vision_test.lua').read_text(encoding='utf-8'))
 lua.execute((ROOT/'tests/vision/phase_test.lua').read_text(encoding='utf-8'))
 lua.execute((ROOT/'tests/vision/calibration_test.lua').read_text(encoding='utf-8'))
+lua.execute((ROOT/'tests/vision/supply_delivery_test.lua').read_text(encoding='utf-8'))
 for p in ROOT.rglob('*.lua'):lua.execute('assert(loadstring(...))',p.read_text(encoding='utf-8'))
 print('VISION Lua5.1 compile passed')

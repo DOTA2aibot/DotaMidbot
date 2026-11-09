@@ -94,12 +94,17 @@ local function ConsiderCourierDelivery( bot )
             if type(GetCourierState)=="function" then stateOK,state=pcall(GetCourierState,courier)
             elseif type(courier.GetCourierState)=="function" then stateOK,state=pcall(courier.GetCourierState,courier) end;
             if not stateOK or state==nil then CourierDiag(bot,"state_unavailable");return end;
-            if (COURIER_STATE_IDLE~=nil and state==COURIER_STATE_IDLE)
+            local wardRequest;
+            if VisionSupply then local ok,request=pcall(VisionSupply.ReturningCourierRequest,bot,courier,state);
+                if ok then wardRequest=request end;
+            end;
+            if wardRequest or (COURIER_STATE_IDLE~=nil and state==COURIER_STATE_IDLE)
                 or (COURIER_STATE_AT_BASE~=nil and state==COURIER_STATE_AT_BASE) then
 				local ok, accepted = pcall( function()
 					return bot:ActionImmediate_Courier( courier, COURIER_ACTION_TAKE_AND_TRANSFER_ITEMS );
 				end );
 				if ok and accepted~=false then Report("courier: take_and_transfer submitted delivery_unverified");end
+                if VisionSupply then pcall(VisionSupply.DeliveryAttempt,bot,state,ok,accepted,courier) end;
 				if not ok or accepted==false then CourierDiag(bot,"send_failed");end
 			else
 				CourierDiag( bot, "courier_busy state=" .. tostring( state ) );
@@ -176,6 +181,7 @@ end
 function ItemPurchaseThinkInner( bot )
 	-- T021: доставка важнее очереди — если в стэше уже лежат купленные вещи,
 	-- сначала забираем их курьером, потом продолжаем покупки.
+	if VisionSupply then pcall(VisionSupply.Observe,bot) end;
 	ConsiderCourierDelivery( bot );
     if VisionSupply and not startupObserverPending then
         local ok,attempted=pcall(VisionSupply.TryPurchase,bot);
