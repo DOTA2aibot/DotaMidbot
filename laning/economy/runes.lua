@@ -11,9 +11,19 @@ local function global( name, ... ) return O.Global( name, ... ) end;
 -- вычислялось только в Think, а GetDesire срабатывал раньше на 0.07с — гонка.
 function M.Deadline( s )
     local d = s.deadline or ( s.started_at and s.started_at + C.rune_order_timeout_s ) or nil;
-    if d and s.pickup_seen_at then
-        local ext = s.pickup_seen_at + C.rune_commit_extend_s;
-        if ext > d then d = ext end;
+    if d then
+        -- T031 (матч 9082503862): pickup, выданный из рабочего диапазона, но не
+        -- начатый движком, тоже продлевает попытку (t=253.5: живой pickup с 638
+        -- убит дедлайном 6с спустя); окно first_pickup покрывает цикл перевыдач
+        -- 4 × rune_pickup_reissue_s + запас. После РЕАЛЬНОГО старта движком
+        -- работает короткое rune_commit_extend_s (t=130.5 гонка Decide/Think).
+        if s.pickup_seen_at then
+            local ext = s.pickup_seen_at + C.rune_commit_extend_s;
+            if ext > d then d = ext end;
+        elseif s.first_pickup_at then
+            local ext = s.first_pickup_at + C.rune_first_pickup_window_s;
+            if ext > d then d = ext end;
+        end;
     end;
     return d;
 end;
@@ -82,6 +92,10 @@ function M.Decide( bot )
                 local st0 = loc0 and global( "GetRuneStatus", prior.rune ) or nil;
                 if loc0 and global( "IsLocationVisible", loc0 ) == true and RUNE_STATUS_AVAILABLE ~= nil
                     and A.Number( st0 ) and st0 ~= RUNE_STATUS_AVAILABLE then
+                    -- T031 (матч 9082503862): руна подтверждённо забрана в этом
+                    -- цикле — не ходим к ней до следующего спавна (повторные
+                    -- походы t=137/151 к уже взятой нами руне 2:00).
+                    local dc = prior.done_cycle or {}; dc[prior.rune] = math.floor( now / 120 ); prior.done_cycle = dc;
                     return nil, "rune_taken_while_committed";
                 end;
             end;
@@ -224,6 +238,7 @@ function M.Decide( bot )
         elseif not safe then fail = "unsafe"
         elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
+        elseif prior and prior.done_cycle and prior.done_cycle[rune] == math.floor( now / 120 ) then fail = "already_resolved" -- T031: решённая в этом цикле руна
         elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
         elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
         end;
@@ -264,7 +279,7 @@ end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
     local seen, decide_reason = s.pickup_seen, s.last_reason;
-    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil;
+    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.close_tries = nil; s.first_pickup_at = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
     local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
@@ -335,7 +350,11 @@ function M.Think( bot )
         if s.pickup_seen then
             -- pickup был и закончился (руна взята или исчезла) — отпускаем бота
             -- на линию без ClearActions: чужое/завершённое действие не трогаем.
-            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.deadline = false, nil, nil, nil;
+            -- T031 (матч 9082503862): запоминаем цикл, в котором руна решена —
+            -- после rune_done 120.7 бот ещё дважды (t=137, 151) бежал к УЖЕ
+            -- взятой нами руне. Повторный поход — только следующий цикл спавна.
+            local dc = s.done_cycle or {}; dc[s.rune] = math.floor( now / 120 ); s.done_cycle = dc;
+            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline = false, nil, nil, nil, nil;
             s.retry_after = now + C.rune_retry_s;
             pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
                 owner = "midbot_rune_only", outcome = "unknown" } ) end );
@@ -344,6 +363,10 @@ function M.Think( bot )
         -- Приказ ещё не начался: движок терял его при мгновенном схлопывании
         -- режима (в матче — 3с IDLE после rune_order). Перевыдаём раз в
         -- секунду до таймаута вместо отмены попытки; издалека идём MoveTo.
+        -- T031 (матч 9082503862): перевыдача pickup каждую 1с сбрасывала подход,
+        -- который движок уже начал (t=169.9/171.0: два pickup с d=200 за 1.1с,
+        -- движок так и не стартовал). Move/backoff перевыдаём раз в 1с, pickup —
+        -- раз в rune_pickup_reissue_s, чтобы движок успел дойти и подобрать.
         if now >= ( s.next_order or -math.huge ) and s.rune ~= nil then
             -- T029 (матч 9082458295, t=297-306): стоим НА споте, движок молча
             -- отклоняет pickup — после спавна это пустая точка, не ждём таймаут.
@@ -353,8 +376,11 @@ function M.Think( bot )
             if ( s.close_tries or 0 ) >= C.rune_close_reject_tries then
                 M.Leave( bot, "pickup_rejected_at_point_blank" ); return;
             end;
-            s.next_order = now + 1;
             local d, kind = M.Approach( bot, s, nil, nil, true );
+            if kind == "pickup" then
+                s.next_order = now + C.rune_pickup_reissue_s;
+                if not s.first_pickup_at then s.first_pickup_at = now end;
+            else s.next_order = now + 1 end;
             if kind == "pickup" and A.Number( d ) and d <= 250 and ( now % 120 ) < 100 then
                 s.close_tries = ( s.close_tries or 0 ) + 1;
             else s.close_tries = 0 end;
@@ -367,7 +393,7 @@ function M.Think( bot )
     end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
-    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries = true, plan.rune, now, nil, nil, 0; -- исключение после побочного эффекта требует guard
+    s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.close_tries, s.first_pickup_at = true, plan.rune, now, nil, nil, 0, nil; -- исключение после побочного эффекта требует guard
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
     -- rune_order_timeout_s — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.
@@ -382,6 +408,7 @@ function M.Think( bot )
     end;
     if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
-    M.Approach( bot, s, plan.distance, reason );
+    local _, kind0 = M.Approach( bot, s, plan.distance, reason );
+    if kind0 == "pickup" then s.first_pickup_at = now end;
 end;
 return M;

@@ -127,7 +127,7 @@ test( "engine not starting the pickup re-issues the order instead of cancelling"
     s.action = 2; s.time = 131; eq( s.rune_policy.GetDesire( s.bot ), .85 );
     s.time = 134; eq( s.rune_policy.GetDesire( s.bot ), .85 ); s.rune_policy.Think( s.bot );
     eq( s.cancelled, nil ); eq( #s.runes, 2 ); eq( s.action, 8 );
-    s.time = 138; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- timeout 8с: попытка снята
+    s.time = 142; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- timeout: first_pickup 130 + окно 12с (T031)
 end );
 test( "finished pickup releases the bot without clearing and blocks instant reorder", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
@@ -167,8 +167,10 @@ test( "point blank position backoffs instead of a silently rejected pickup", fun
     s.bot.GetLocation = function() return { x = 200, y = 0 } end; -- отступил: d=200
     s.bot.Action_PickUpRune = function( _, rune ) s.runes[#s.runes + 1] = rune end; -- движок НЕ начинает
     s.time = 131; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup с 200
-    for i = 2, 4 do s.time = 130 + i; s.rune_policy.Think( s.bot ); end; eq( #s.runes, 4 );
-    s.time = 135; s.rune_policy.Think( s.bot ); -- 4 близких отказа без старта → Leave
+    -- T031: pickup перевыдаётся раз в 2.5с, не чаще — движку нужно время дойти
+    s.time = 132; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- интервал не вышел
+    for _, t in ipairs( { 134, 137, 140 } ) do s.time = t; s.rune_policy.Think( s.bot ); end; eq( #s.runes, 4 );
+    s.time = 142.6; s.rune_policy.Think( s.bot ); -- 4 близких отказа без старта → Leave (интервал 2.5с вышел)
     eq( s.cancelled, nil ); eq( #s.runes, 4 ); eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- retry
 end );
 test( "deadline covers the wait for the rune spawn", function()
@@ -189,5 +191,17 @@ test( "distant rune is approached by move before pickup", function()
     s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 0 ); eq( #s.moves, 1 ); eq( s.moves[1].x, 1600 );
     s.bot.GetLocation = function() return { x = 1400, y = 0 } end; -- подошёл: d=200 в рабочем диапазоне 120..900
     s.time = 101; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( s.runes[1], 0 );
+end );
+test( "resolved rune is not retried until the next spawn cycle", function()
+    -- T031 (матч 9082503862): после rune_done 120.7 бот ещё дважды (t=137, 151)
+    -- бежал к уже взятой НАМИ руне — «много лишних движений в сторону рун».
+    -- Решённая руна блокируется до конца текущего 120-секундного цикла.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup, mock ставит action=8
+    s.rune_policy.Think( s.bot ); -- pickup_seen
+    s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- pickup завершён → rune_done
+    s.env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 9000, y = 0 } end; -- вторая руна недосягаема
+    s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 0 решена в этом цикле, rune 1 too_far
+    s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- новый цикл: rune 0 снова в игре
 end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
