@@ -3,7 +3,7 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local M={};
-local function attribute(name) return _G["ATTRIBUTE_"..name] or _G["DOTA_ATTRIBUTE_"..name] end;
+local function attribute(name) return C.treads_raw_states and C.treads_raw_states[name] end;
 local function danger(bot,s)
     local hp=U.HP(bot);if not hp then return false end;
     local recent=U.Call(bot,"WasRecentlyDamagedByAnyHero",2)==true;

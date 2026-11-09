@@ -1,5 +1,10 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.14-control-rollback — кандидат после run9083407516, 2026-11-09
+- Убран personal ROAM entry изall_test, delivery_lane_guard=false и нетroot samplinghook; nativeROAM возвращается чистойустановкой. Guard выдал22атаки/12возвратов и10входов доPT, возможныйисточникдёрганья. Courierdetours не заявленыисправленными.
+- ИсправленаPTrawmap STR0/INT1/AGI2, отличнаяотheroATTRIBUTE STR0/AGI1/INT2. Старый«AGI»держалINT. Исправленаfixture, добавленживойrawstateвobserver. EngineGetAttackDamageнеувеличиваетсявручнуюна10.
+- PT AGIприfarm/AA/regen, INTнаspellintent; anti-spamиWandсохранены. Рун/ward/rootability/purchaseнекасались. Лог/отчёт[9083407516](docs/probes/9083407516/README.md), [новаяпроверка](docs/CONTROL_ROLLBACK_v0314.md).
+
 ## v0.3.13-resources-delivery — кандидат T036/T037, 2026-11-09
 - PT: один intent от подготовки до release/cooldown, подтверждение атрибута перед следующимtoggle, bounded timeout; AGI для фарма/regen, INT для выбранногоspell, STRsurvival ниже незавершённого spell intent.
 - Stick/Wand:HP<=15% в бою даже1charge; knownpotential mana на видимый lethal Raze, сначала бесплатный INT/readback; пустой/unknown/cooldown не нажимается, вне боя charges сохраняются.

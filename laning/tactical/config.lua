@@ -10,6 +10,8 @@ return {
     item_retry_s = 2, item_confirmation_s = 1, bkb_threat_horizon = 1.2,
     bkb_low_hp = .55, bkb_burst_hp_fraction = .20,
     treads_low_hp = .35, treads_recover_hp = .45,
+    -- GetPowerTreadsStat raw states differ from hero ATTRIBUTE_* enums (run9083407516).
+    treads_raw_states = {STRENGTH=0, INTELLECT=1, AGILITY=2},
     treads_timeout = 1, treads_max_toggles = 2,
     treads_toggle_interval = .10, treads_intent_s = 1.5,
     wand_emergency_hp = .15, finisher_retry_s = 3,

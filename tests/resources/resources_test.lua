@@ -107,11 +107,35 @@ test("actual root emergency wand precedes optional PT changes",function()
 end);
 test("PT disabled or unknown stat constants cannot block bottle use",function()
     for _,why in ipairs({"disabled","unknown"}) do local s=scenario();s:boots(2);s:item("item_bottle",0,{charges=3});s.heroes={};s.mana=20;
-        if why=="disabled" then s.config.treads=false else s.env.ATTRIBUTE_AGILITY=nil;s.env.DOTA_ATTRIBUTE_AGILITY=nil end;
+        if why=="disabled" then s.config.treads=false else s.config.treads_raw_states.AGILITY=nil end;
         eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_bottle");
     end;
 end);
 test("free INT mana preparation is attempted before spending wand charges",function()
     local s=scenario();s:wand(2);local pt=s:boots(0);eq(s.finisher.Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_power_treads");eq(pt.stat,2);
+end);
+test("raw PT codes are STR0 INT1 AGI2 independently of hero enums",function()
+    local s=scenario();local b=s:boots(0);eq(b:GetPowerTreadsStat(),0);b.stat=2;eq(b:GetPowerTreadsStat(),1);b.stat=1;eq(b:GetPowerTreadsStat(),2);
+    eq(s.env.ATTRIBUTE_AGILITY,1);eq(s.env.ATTRIBUTE_INTELLECT,2);
+end);
+test("native farm stays on actual AGI with full engine attack damage",function()
+    local s=scenario();local b=s:boots(2);s.attack=s.enemy;
+    s.bot.GetAttackDamage=function() return b.stat==1 and 110 or 100 end;
+    eq(s.bot:GetAttackDamage(),100);s.pt.Tick(s.bot,s.state);eq(b:GetPowerTreadsStat(),2);eq(s.bot:GetAttackDamage(),110);
+    local n=#s.orders;for i=1,20 do s:advance(.1);s.pt.Tick(s.bot,s.state) end;eq(#s.orders,n);
+end);
+test("spell prep reaches actual raw INT1 and release restores raw AGI2",function()
+    local s=scenario();local b=s:boots(1);local a=s.abilities.nevermore_shadowraze1;
+    s.pt.Before(s.bot,s.state,a);s:advance(.11);s.pt.Before(s.bot,s.state,a);eq(b:GetPowerTreadsStat(),1);
+    s:advance(.11);assert(s.pt.Before(s.bot,s.state,a));s.pt.NoteCast(s.state,a);a.cd=10;s:advance(.11);s.pt.Tick(s.bot,s.state);eq(b:GetPowerTreadsStat(),2);
+end);
+test("observer reads raw PT state and fresh engine damage without adding10 again",function()
+    local s=scenario();local b=s:boots(1);s.bot.GetAttackDamage=function() return b.stat==1 and 110 or 100 end;
+    s.bot.GetBaseDamageVariance=function() return 0 end;s.bot.GetAttackCombatProficiency=function() return 1 end;
+    local core=s.env.require("bots/laning/observer/core");local data=core.Capture(s.bot,core.State(s.bot));
+    eq(data.hero.attack_damage,110);local found=false;
+    for _,it in ipairs(data.hero.items) do if it.name=="item_power_treads" then eq(it.treads_raw_state,2);found=true end end;assert(found);
+    b.stat=2;data=core.Capture(s.bot,core.State(s.bot));eq(data.hero.attack_damage,100);
+    for _,it in ipairs(data.hero.items) do if it.name=="item_power_treads" then eq(it.treads_raw_state,1) end end;eq(#s.orders,0);
 end);
 print("RESOURCES PASSED "..count.." cases (live PT/restore/client ownership still require a match)");

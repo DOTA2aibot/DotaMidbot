@@ -344,7 +344,7 @@ test("calm active regen preserves mango instead of stacking consumables",functio
     local s=SCENARIO();s.mana=50;s:item("item_enchanted_mango",0);s.bot.modifiers.modifier_clarity_potion=true;
     eq(s:mod("mana").Tick(s.bot,s.state),false);
 end);
-test("PT accepts documented DOTA attribute constants without short aliases",function()
+test("PT raw-state mapping is independent of hero DOTA attribute enums",function()
     local s=SCENARIO();s.env.ATTRIBUTE_STRENGTH=nil;s.env.ATTRIBUTE_AGILITY=nil;s.env.ATTRIBUTE_INTELLECT=nil;
     s.env.DOTA_ATTRIBUTE_STRENGTH=0;s.env.DOTA_ATTRIBUTE_AGILITY=1;s.env.DOTA_ATTRIBUTE_INTELLECT=2;
     local pt=s:item("item_power_treads",0,{stat=0});eq(s:mod("treads").Before(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(pt.stat,2);

@@ -11,7 +11,6 @@ local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
 local Phase=require(GetScriptDirectory().."/laning/vision/phase");
 local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
-local DeliveryGuard=require(GetScriptDirectory().."/laning/items/delivery_guard");
 local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local M={};
@@ -107,7 +106,6 @@ function M.BindLegacy(env)
         if not C.enabled then return old.AbilityUsageThink() end;
         local bot=env.GetBot();local s=B.State(bot);
         if not U.Actor(bot) then return end;
-        local guarded,guardError=pcall(DeliveryGuard.Sample,bot,s);if not guarded then fail(s,"delivery_guard_sample",guardError) end;
         local sampled,sampleError=pcall(Delivery.Observe,bot,s);if not sampled then fail(s,"courier_observer",sampleError) end;
         local checked,err=pcall(Recovery.Poll,bot,s);if not checked then fail(s,"ward_recovery",err) end;
         -- Keep observation of death, but do not issue dead-hero orders.

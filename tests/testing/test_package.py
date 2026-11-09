@@ -14,8 +14,8 @@ class ShopPackage(unittest.TestCase):
             self.assertEqual('item_purchase_generic.lua' in files,profile=='all_test')
             self.assertEqual(b'ally_ward_free_shop = true' in files['laning/profile.lua'],profile=='all_test')
             self.assertIn('item_purchase_nevermore.lua',files)
-            self.assertEqual('mode_roam_nevermore.lua' in files,profile=='all_test')
-            self.assertEqual(b'delivery_lane_guard = true' in files['laning/profile.lua'],profile=='all_test')
+            self.assertNotIn('mode_roam_nevermore.lua',files)
+            self.assertNotIn(b'delivery_lane_guard = true',files['laning/profile.lua'])
             self.assertEqual('mode_item_nevermore.lua' in files,profile=='all_test')
             self.assertEqual(b'stationary_delivery_enabled = true' in files['laning/profile.lua'],profile=='all_test')
     def test_test_archive_preserves_personal_sf_and_tango(self):
@@ -25,4 +25,14 @@ class ShopPackage(unittest.TestCase):
                 self.assertEqual(z.read('bots/item_purchase_nevermore.lua'),(ROOT/'item_purchase_nevermore.lua').read_bytes())
                 self.assertIn('bots/laning/tactical/tango.lua',z.namelist())
                 self.assertNotIn('bots/mode_laning_nevermore.lua',z.namelist())
+    def test_clean_install_removes_old_courier_roam_entry(self):
+        with tempfile.TemporaryDirectory(prefix='.package-rollback-',dir=ROOT) as d:
+            folder=Path(d);archive=folder/'new.zip';p.build('all_test',archive,'test-rollback',ROOT)
+            game=folder/'client/game/dota';(game.parent/'bin/win64').mkdir(parents=True)
+            (game.parent/'bin/win64/dota2.exe').write_bytes(b'not executed fixture')
+            old=game/'scripts/vscripts/bots';old.mkdir(parents=True);(old/'mode_roam_nevermore.lua').write_text('old guard',encoding='utf-8')
+            result=p.install(archive,game,check_running=False)
+            self.assertFalse((old/'mode_roam_nevermore.lua').exists())
+            self.assertTrue((Path(result['previous_bots_backup'])/'mode_roam_nevermore.lua').exists())
+            self.assertIn(b'delivery_lane_guard = false', (old/'laning/profile.lua').read_bytes())
 if __name__=='__main__':unittest.main()

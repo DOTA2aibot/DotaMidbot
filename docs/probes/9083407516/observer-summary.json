@@ -1,0 +1,131 @@
+{
+  "schema": "midbot-observer-report-1",
+  "records": 5173,
+  "malformed_records": 0,
+  "telemetry_available": true,
+  "runs": [
+    {
+      "file": "midbot-resources-0dc2e60-8f47ea1-test.9083407516.log",
+      "run_id": "observer-v0313:0:1:-89.899993896484",
+      "profile": "all_test",
+      "controller": "valve_native_with_midbot_rune",
+      "snapshots": 90,
+      "first_sample_time": -89.899993896484,
+      "last_sample_time": -0.89999389648438,
+      "sample_gaps_over_2s": 0,
+      "samples_after_10_minutes": 0,
+      "counters": {
+        "last_hits": {
+          "first": 0,
+          "last": 0,
+          "observed_positive_increments": 0,
+          "counter_resets": 0
+        },
+        "denies": {
+          "first": 0,
+          "last": 0,
+          "observed_positive_increments": 0,
+          "counter_resets": 0
+        },
+        "deaths": {
+          "first": 0,
+          "last": 0,
+          "observed_positive_increments": 0,
+          "counter_resets": 0
+        },
+        "kills": {
+          "first": 0,
+          "last": 0,
+          "observed_positive_increments": 0,
+          "counter_resets": 0
+        }
+      },
+      "events": {
+        "rune_priority": 18,
+        "snapshot": 90,
+        "shadow_decision": 90,
+        "ward_suggestion": 90,
+        "mana_purchase_decision": 1
+      },
+      "submitted_actions": {},
+      "last_level": 1,
+      "last_gold": 455,
+      "last_souls": 0,
+      "cast_hit_rate": null,
+      "per_action_kills": null,
+      "reward_labels": null,
+      "attribution": "interval_counters_and_submissions_only"
+    },
+    {
+      "file": "midbot-resources-0dc2e60-8f47ea1-test.9083407516.log",
+      "run_id": "observer-v0313:0:2:0",
+      "profile": "all_test",
+      "controller": "valve_native_with_midbot_rune",
+      "snapshots": 1275,
+      "first_sample_time": 0,
+      "last_sample_time": 1274.1334228516,
+      "sample_gaps_over_2s": 0,
+      "samples_after_10_minutes": 675,
+      "counters": {
+        "last_hits": {
+          "first": 0,
+          "last": 89,
+          "observed_positive_increments": 89,
+          "counter_resets": 0
+        },
+        "denies": {
+          "first": 0,
+          "last": 20,
+          "observed_positive_increments": 20,
+          "counter_resets": 0
+        },
+        "deaths": {
+          "first": 0,
+          "last": 0,
+          "observed_positive_increments": 0,
+          "counter_resets": 0
+        },
+        "kills": {
+          "first": 0,
+          "last": 2,
+          "observed_positive_increments": 2,
+          "counter_resets": 0
+        }
+      },
+      "events": {
+        "snapshot": 1275,
+        "shadow_decision": 1275,
+        "ward_suggestion": 1275,
+        "rune_priority": 253,
+        "mana_purchase_decision": 116,
+        "action_submitted": 205,
+        "cast_consumption_observed": 35,
+        "attack_release_observed": 213,
+        "attack_record_changed": 35,
+        "rune_order": 134,
+        "rune_index_scan": 8,
+        "rune_cancel": 11,
+        "cast_outcome_unknown": 42,
+        "mana_purchase_result": 3,
+        "rune_done": 4
+      },
+      "submitted_actions": {
+        "existing_face_move": 128,
+        "cast": 77
+      },
+      "last_level": 12,
+      "last_gold": 518,
+      "last_souls": 20,
+      "cast_hit_rate": null,
+      "per_action_kills": null,
+      "reward_labels": null,
+      "attribution": "interval_counters_and_submissions_only"
+    }
+  ],
+  "limits": [
+    "Shadow decisions are suggestions, not actions.",
+    "Counters do not identify the action that caused a last-hit or kill.",
+    "Samples after 10:00 prove observation continuity, not successful gameplay.",
+    "Hit rate, native command ownership and performance overhead remain unmeasured."
+  ]
+}

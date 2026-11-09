@@ -140,7 +140,8 @@ function M.Capture( bot, s )
         local item = A.Call( bot, "GetItemInSlot", slot );
         if item then hero.items[#hero.items + 1] = { slot = slot, name = A.Call( item, "GetName" ),
             charges = A.Call( item, "GetCurrentCharges" ), secondary_charges = A.Call( item, "GetSecondaryCharges" ),
-            toggle = A.Call( item, "GetToggleState" ), castable = A.Call( item, "IsFullyCastable" ) } end;
+            toggle = A.Call( item, "GetToggleState" ), castable = A.Call( item, "IsFullyCastable" ),
+            treads_raw_state = A.Call( item, "GetName" ) == "item_power_treads" and A.Call( item, "GetPowerTreadsStat" ) or nil } end;
     end;
     for _, name in ipairs( { "nevermore_shadowraze1", "nevermore_shadowraze2", "nevermore_shadowraze3", "nevermore_frenzy", "nevermore_requiem" } ) do
         local a = A.Call( bot, "GetAbilityByName", name );

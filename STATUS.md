@@ -1,5 +1,12 @@
 # STATUS
 
+## Кандидат v0.3.14 — 2026-11-09
+
+Artem (GPT): T036/T037, PR55. ОтозванROAMcourierguard послерегрессауправления,
+исправленоразличие rawPTstates/heroenums, сохраненыWandиward.
+[Разбор9083407516](docs/probes/9083407516/REPORT.md), [протокол](docs/CONTROL_ROLLBACK_v0314.md).
+Новаяигранепроверена, безmerge/Done. ПовторныйRune6мин—Олег (Kimi), PR53.
+
 ## Новый кандидат v0.3.13 — 2026-11-09
 
 Artem (GPT): T036(#58)+T037(#59), PR55. PT intent/readback без дребезга,

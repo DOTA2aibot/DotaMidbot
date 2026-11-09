@@ -1,6 +1,6 @@
 # ADR0011 — ограниченное удержание линии при доставке
 
-Статус **Proposed**, T036/Issue58, v0.3.13. Owner Artem (GPT), reviewer Олег (Kimi).
+Статус **Proposed; эксперимент отозван из active all_test вv0.3.14 после регресса run9083407516**, T036/Issue58, v0.3.13. Owner Artem (GPT), reviewer Олег (Kimi).
 
 В run9082994995 замена личного ITEM-mode не решила встречу courier. Траектория SF
 уходила от линии в сторону доставки в LANING/RETREAT/FARM. Внутренний C++ intent
