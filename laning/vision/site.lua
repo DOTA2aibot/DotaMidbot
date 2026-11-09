@@ -34,7 +34,7 @@ function M.Get(bot)
     if not runes[1] or not runes[2] then return nil,"rune_landmark_unknown" end;
     local i=U.Distance(q,runes[1])<=U.Distance(q,runes[2]) and 1 or 2;
     fixed={location=q,height=h,rune_location=runes[i],rune=i==1 and RUNE_POWERUP_1 or RUNE_POWERUP_2,
-        lane={mid,ctx.center},expected_coverage="user_coordinate_visibility_unverified",fixed=true,
+        lane={mid,ctx.center},expected_coverage=C.calibration_source and "human_calibrated_point_sf_placement_unverified" or "user_coordinate_visibility_unverified",fixed=true,
         rune_distance=U.Distance(q,runes[i]),rune_in_nominal_range=U.Distance(q,runes[i])<=C.vision_radius};
     return fixed;
 end;

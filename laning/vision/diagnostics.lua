@@ -26,8 +26,12 @@ function M.Tick(bot,s)
     if not s.vision_point_reported then
         local p=U.Point(C.fixed_location);
         if p then
-            local data=geometry(p);data.location=p;data.coordinate_status="unverified_user_test_point";
-            data.photo_match="not_verified";data.plant_validity="not_tested";data.calibration_only=C.calibration_only==true;
+            local data=geometry(p);data.location=p;data.calibration_only=C.calibration_only==true;
+            data.calibration_source=C.calibration_source;
+            data.coordinate_status=C.calibration_source and "human_ward_coordinate_pinned" or "unverified_user_test_point";
+            data.photo_match=C.calibration_source and "human_selected_point_not_image_projection" or "not_verified";
+            data.plant_validity=C.calibration_source and "manual_placement_in_source_match" or "not_tested";
+            data.sf_automatic_placement="requires_current_match_readback";
             B.Emit(s,"ward_test_point_geometry",data);s.vision_point_reported=true;
         end;
     end;

@@ -19,10 +19,10 @@ local function scenario()
     end;
     return s;
 end;
-test("exact human XY uses ground Z, no grid search or invented rune coverage",function()
+test("pinned human entity XY uses ground Z, no grid search or invented SF success",function()
     local s=scenario();s.env.GetAllTrees=function() error("search must not run") end;
-    local p=assert(s:vision("site").Get(s.bot));eq(p.location.x,-197);eq(p.location.y,-1003);eq(p.location.z,128);
-    eq(p.expected_coverage,"user_coordinate_visibility_unverified");assert(p.rune_distance>0);
+    local p=assert(s:vision("site").Get(s.bot));eq(p.location.x,-216.73818969727);eq(p.location.y,-990.77404785156);eq(p.location.z,128);
+    eq(p.expected_coverage,"human_calibrated_point_sf_placement_unverified");assert(p.rune_distance>0);
     local t=scenario();t.env.GetHeightLevel=nil;eq(t.phase.GetDesire(t.bot),0);
 end);
 test("only windows0-15,300-315,600-615 open, no catch-up outside",function()
@@ -41,7 +41,7 @@ test("mode owns approach across ticks then places once and confirms before relea
     local s=scenario();s:start();s.phase.Think(s.bot);eq(s.orders[1].kind,"face");assert(s.state.vision_phase);
     s:advance(.1);s.phase.Think(s.bot);eq(#s.orders,1); -- no per-frame order spam
     s.bot.y=-800;s:advance(.6);s.phase.Think(s.bot);eq(s.orders[2].kind,"ward");
-    eq(s.orders[2].location.x,-197);eq(s.orders[2].location.y,-1003);assert(s.state.ward_pending);
+    eq(s.orders[2].location.x,-216.73818969727);eq(s.orders[2].location.y,-990.77404785156);assert(s.state.ward_pending);
     s:advance();s:mod("wards").Poll(s.bot,s.state);eq(s.state.ward_pending,nil);
     eq(s.phase.Holds(s.bot,s.state),false);eq(s.state.vision_phase,nil);eq(s.state.vision_done_slot,0);
     eq(s.phase.GetDesire(s.bot),0);eq(#s.orders,2);

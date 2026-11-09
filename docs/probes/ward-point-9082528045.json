@@ -1,0 +1,65 @@
+{
+  "format": "midbot-human-ward-calibration-1",
+  "source_log": "midbot-calibration-07bf65f-e38d19e-test.9082528045.log",
+  "source_revision": "test53-07bf65f-55-e38d19e-calibration",
+  "human_instruction": "Artem manually placed one Observer at the desired photo point and requested pinning that exact point.",
+  "event": {
+    "actor_id": 1,
+    "data": {
+      "auto_adopted": false,
+      "coverage_attribution": "range_and_team_visibility_not_exclusive_ward_los",
+      "distance_from_test_point": 23.217881868532,
+      "evidence": "live_allied_observer_entity",
+      "height_level_raw": 3,
+      "human_owned": true,
+      "location": {
+        "x": -216.73818969727,
+        "y": -990.77404785156,
+        "z": 128
+      },
+      "mid_distance": 909.58533617218,
+      "owner_id": 0,
+      "owner_is_bot": false,
+      "owner_matches_sf": false,
+      "passable": false,
+      "runes": [
+        {
+          "distance": 2539.1598762158,
+          "id": 0,
+          "position": {
+            "x": -1640,
+            "y": 1112,
+            "z": 41.3017578125
+          },
+          "team_visible": false,
+          "within_nominal_vision": false
+        },
+        {
+          "distance": 1414.7806544055,
+          "id": 1,
+          "position": {
+            "x": 1180,
+            "y": -1216,
+            "z": 57.3017578125
+          },
+          "team_visible": true,
+          "within_nominal_vision": true
+        }
+      ],
+      "sf_owner_id": 1,
+      "vision_radius": 1600
+    },
+    "kind": "ward_entity_observed",
+    "reward_status": "not_defined",
+    "schema": "midbot-tactical-1",
+    "seq": 4,
+    "time": -41.033332824707,
+    "version": "tactical-1",
+    "source_line": 1214
+  },
+  "limits": [
+    "World XYZ comes from the live Observer, not image projection or ping inference.",
+    "Team rune visibility does not establish exclusive ward LOS.",
+    "SF automatic placement needs a new match readback."
+  ]
+}

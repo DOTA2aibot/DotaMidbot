@@ -1,10 +1,12 @@
 -- T026: one Radiant mid Observer; parameters are explicit baseline rules.
 return {
     enabled=true, lane_end_s=900, duration_s=360, refresh_lead_s=30,
-    -- User-supplied test location; real rune/mid visibility is measured after placement.
-    fixed_location={x=-197,y=-1003},
-    -- Temporarily disabled until the human-placed ward supplies the real photo coordinate.
-    calibration_only=true,
+    -- Human Observer entity from calibration match9082528045, owner0 (human), SFowner1.
+    fixed_location={x=-216.73818969727,y=-990.77404785156,z=128},
+    calibration_source={match_id="9082528045",owner_id=0,observed_at=-41.033332824707,
+        evidence="live_human_observer_entity",source_line=1214},
+    -- Automatic placement is enabled at the human-selected coordinate.
+    calibration_only=false,
     windows={{start=0,finish=15},{start=300,finish=315},{start=600,finish=615}},
     prefetch_s=60, diagnostic_interval_s=5,
     phase_max_s=8, phase_max_approach=1400, phase_retry_s=3,

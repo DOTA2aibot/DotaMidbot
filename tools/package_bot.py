@@ -85,7 +85,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.9-ward-calibration', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.10-fixed-ward', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -96,7 +96,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.9-ward-calibration / PROFILE: %s
+    readme = '''MIDBOT v0.3.10-fixed-ward / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
@@ -115,9 +115,9 @@ Requiem/BKB/PT/mana/neutral decisions; ward execution still requires wards_enabl
 Set laning/tactical/config.lua enabled=false to delegate to original callbacks.
 Ward profiles additionally replace only SF ward-mode with a bounded approach/place/readback
 phase: configured windows0-15/300-315/600-615 with direct-danger/rune guards.
-CURRENT CANDIDATE: calibration_only=true; Radiant SF does not place or refill wards.
-A human ally plants one Observer and the read-only logger records its actualXYZ/owner.
-Automatic warding is re-enabled only after that real coordinate is pinned.
+CURRENT CANDIDATE: calibration_only=false; Radiant SF automatic warding is enabled.
+Pinned human Observer coordinate: (-216.73818969727,-990.77404785156,128), match9082528045.
+A new match must verify automatic placement/offset/vision and the0/5/10 windows.
 Native lane movement/attacks resume when this mode ends. Rune policy is unchanged.
 The configured location and its rune coverage still need a client test.
 all_test additionally replaces the scripted team's non-SF shopping with simple

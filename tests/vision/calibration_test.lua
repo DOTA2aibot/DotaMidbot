@@ -11,8 +11,8 @@ local function scenario()
     s.buys={};s.bot.ActionImmediate_PurchaseItem=function(_,name) s.buys[#s.buys+1]=name;return 0 end;
     return s;
 end;
-test("calibration defaults to readonly and blocks all automatic Radiant ward orders",function()
-    local s=scenario();s:item("item_ward_observer",0);
+test("explicit calibration switch still blocks all automatic Radiant ward orders",function()
+    local s=scenario();s:vision("config").calibration_only=true;s:item("item_ward_observer",0);
     eq(s:vision("config").calibration_only,true);eq(s:vision("phase").GetDesire(s.bot),0);
     eq(s:mod("wards").Tick(s.bot,s.state),false);eq(s:vision("supply").TryPurchase(s.bot),false);eq(#s.orders,0);eq(#s.buys,0);
 end);
@@ -22,7 +22,7 @@ test("manual human Observer records actual XYZ and owner without auto-adoption",
     s:vision("diagnostics").Tick(s.bot,s.state);local log=table.concat(s.logs,"\n");
     assert(log:find('ward_entity_observed',1,true));assert(log:find('"human_owned":true',1,true));
     assert(log:find('"z":128',1,true));assert(log:find('"owner_id":2',1,true));assert(log:find('"auto_adopted":false',1,true));
-    eq(#s.orders,0);eq(s:vision("config").fixed_location.x,-197);
+    eq(#s.orders,0);eq(s:vision("config").fixed_location.x,-216.73818969727);
 end);
 test("unchanged ward emits only once and multiple human wards stay distinct",function()
     local s=scenario();s.wards={s.unit("npc_dota_observer_wards",2,-100,-900)};
@@ -30,7 +30,7 @@ test("unchanged ward emits only once and multiple human wards stay distinct",fun
     s.wards[2]=s.unit("npc_dota_observer_wards",2,-120,-950);s:advance(5);d.Tick(s.bot,s.state);eq(#s.logs,first+1);eq(#s.orders,0);
 end);
 test("geometry records candidate as unverified and unknown API is not false evidence",function()
-    local s=scenario();s.env.GetGroundHeight=nil;s.env.IsLocationVisible=nil;
+    local s=scenario();s:vision("config").calibration_source=nil;s.env.GetGroundHeight=nil;s.env.IsLocationVisible=nil;
     s:vision("diagnostics").Tick(s.bot,s.state);local log=table.concat(s.logs,"\n");
     assert(log:find('"photo_match":"not_verified"',1,true));assert(log:find('"plant_validity":"not_tested"',1,true));
     assert(not log:find('"ground_z":0',1,true));eq(#s.orders,0);
@@ -61,4 +61,19 @@ test("missed window is explicit one-time evidence and never triggers a late catc
     local phase=s:vision("phase");eq(phase.GetDesire(s.bot),0);local count=#s.logs;s:advance();phase.Poll(s.bot,s.state);eq(#s.logs,count);
     assert(table.concat(s.logs,"\n"):find('ward_window_missed',1,true));eq(#s.orders,0);
 end);
-print("VISION_CALIBRATION PASSED "..n.." cases (read-only API mocks, photo coordinates require live entity)");
+test("pinned point is enabled and retains real ward Z without GroundHeight API",function()
+    local s=scenario();local c=s:vision("config");eq(c.calibration_only,false);eq(c.calibration_source.match_id,"9082528045");
+    s.env.GetGroundHeight=nil;local p=assert(s:vision("site").Get(s.bot));
+    eq(p.location.x,-216.73818969727);eq(p.location.y,-990.77404785156);eq(p.location.z,128);
+    s:vision("diagnostics").Tick(s.bot,s.state);local log=table.concat(s.logs,"\n");
+    assert(log:find('human_ward_coordinate_pinned',1,true));assert(log:find('requires_current_match_readback',1,true));
+end);
+test("unwalkable ward cliff remains plantable and approach targets passable cast range",function()
+    local s=scenario();local c=s:vision("config");local q=c.fixed_location;s.bot.x=q.x;s.bot.y=q.y+700;
+    s.env.IsLocationPassable=function(p) return math.sqrt((p.x-q.x)^2+(p.y-q.y)^2)>200 end;
+    s:item("item_ward_observer",0);local phase=s:vision("phase");assert(phase.GetDesire(s.bot)>0);s.mode=20;phase.Start(s.bot);phase.Think(s.bot);
+    eq(s.orders[1].kind,"face");assert(s.env.IsLocationPassable(s.orders[1].location));
+    s.bot.x=s.orders[1].location.x;s.bot.y=s.orders[1].location.y;s:advance(1.1);phase.Think(s.bot);
+    eq(s.orders[2].kind,"ward");eq(s.orders[2].location.x,q.x);eq(s.orders[2].location.y,q.y);eq(s.orders[2].location.z,128);
+end);
+print("VISION_CALIBRATION PASSED "..n.." cases (mock SF execution; human coordinate separately verified in source log)");
