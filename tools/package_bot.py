@@ -18,6 +18,8 @@ ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purc
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
 ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
+WARD_ENTRY = 'mode_ward_nevermore.lua'
+WARD_PROFILES = ('valve_wards', 'valve_lane_economy', 'all_test')
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
             'valve_wards': ('valve_native', False),
             'valve_lane_economy': ('valve_native_with_midbot_rune', False),
@@ -33,7 +35,8 @@ def profile_source(profile, revision='uncommitted'):
             f'observer_enabled = {str(not enabled).lower()}, '
             f'wards_enabled = {str(profile in ("valve_wards", "valve_lane_economy", "all_test")).lower()}, '
             f'economy_enabled = {str(profile in ("valve_lane_economy", "all_test")).lower()}, '
-            + ('ally_ward_free_shop = true, ' if profile == 'all_test' else '') +
+            + (f'ward_phase_enabled = true, ' if profile in WARD_PROFILES else '') +
+            ('ally_ward_free_shop = true, ' if profile == 'all_test' else '') +
             f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
@@ -73,6 +76,8 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
         below(source, root)
         files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
+    if profile in WARD_PROFILES:
+        files[WARD_ENTRY] = (root / 'profiles/vision' / WARD_ENTRY).read_bytes()
     return files
 
 
@@ -80,7 +85,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.7-vision', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.8-ward-phase', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -91,7 +96,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.7-vision / PROFILE: %s
+    readme = '''MIDBOT v0.3.8-ward-phase / PROFILE: %s
 
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
@@ -100,7 +105,7 @@ The installer in tools/package_bot.py --install performs a checked backup + repl
 Start a NEW match after installation; hot reload is not a supported profile switch.
 
 valve_play: native engine movement/attacks; custom abilities and purchases.
-valve_wards: same baseline + opt-in in-range mid ward placement test.
+valve_wards: same baseline + bounded SF mid ward mode (exact test coordinate, safe opportunity only).
 valve_lane_economy: native lane movement/attacks, custom nearby-only river rune mode,
 limited mana purchases, mid ward placement enabled (Oleg request 08.11).
 all_test: the same controller/profile flags as valve_lane_economy, with the
@@ -108,6 +113,10 @@ explicit integration name used for the v0.3.6 combined test.
 Tactical modules are attached in the root ability file for non-probe profiles:
 Requiem/BKB/PT/mana/neutral decisions; ward execution still requires wards_enabled.
 Set laning/tactical/config.lua enabled=false to delegate to original callbacks.
+Ward profiles additionally replace only SF ward-mode with a bounded approach/place/readback
+phase: before creeps, then due at5:30/11:30, combat/farm/rune safety gates first.
+Native lane movement/attacks resume when this mode ends. Rune policy is unchanged.
+The configured location and its rune coverage still need a client test.
 all_test additionally replaces the scripted team's non-SF shopping with simple
 ward-free plans. Select this package only for the controlled SF team; select
 Valve/default scripts for the enemy team. Native shopping fallback is not provided.
@@ -164,6 +173,8 @@ def verify(path):
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
         expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
+        if profile in WARD_PROFILES:
+            expected_entries.add(WARD_ENTRY)
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}

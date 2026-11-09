@@ -124,7 +124,7 @@ test( "lane assignment uses team slots for non-contiguous player IDs", function(
     }, { __index = _G } );
     local chunk = assert( loadfile( "hero_selection.lua" ) ); setfenv( chunk, env ); chunk();
     local lanes = env.UpdateLaneAssignments(); eq( lanes[2], 2 ); eq( lanes[8], nil ); eq( #lanes, 3 );
-    eq( env.GetBotNames()[1], "MIDBOT v0.3.7-vision" );
+    eq( env.GetBotNames()[1], "MIDBOT v0.3.8-ward-phase" );
 end );
 test( "new default issues no orders before joint backend registration", function()
     local s = scenario( { joint_options = true } ); s.enemy_creeps = { s.unit() };

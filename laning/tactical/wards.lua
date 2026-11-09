@@ -4,6 +4,8 @@ local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Site=require(GetScriptDirectory().."/laning/vision/site");
 local Supply=require(GetScriptDirectory().."/laning/vision/supply");
 local Inventory=require(GetScriptDirectory().."/laning/vision/inventory");
+local Phase=require(GetScriptDirectory().."/laning/vision/phase");
+local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local M={};
 local function height(p) if not p then return nil end;local h=U.Global("GetHeightLevel",U.Vector(p));if U.Number(h) and h>=1 and h<=5 then return h end end;
 local function kind(name)
@@ -160,7 +162,9 @@ function M.Poll(bot,s)
                     data.vision_radius=U.Call(w.handle,"GetCurrentVisionRange");data.coverage_attribution="team_visibility_not_exclusive_ward_credit";
                 end;
                 if consumed then data.evidence="new_owned_ward_and_item_consumed" end;
-                if p.fixed and data.owner_matches then Supply.Placed(bot,w.handle,p) end;
+                if p.fixed and data.owner_matches then
+                    Supply.Placed(bot,w.handle,p);s.vision_confirmed_at=U.Now();s.vision_done_slot=Schedule.Slot(U.Now());
+                end;
                 B.Emit(s,"ward_placement_observed",data);s.ward_pending=nil;return;
             end;
         end;
@@ -171,6 +175,8 @@ function M.Tick(bot,s)
     if not C.wards or s.ward_disabled or s.ward_pending or not B.Free(s) or U.Now()<(s.next_ward or -math.huge) then return false end;
     s.next_ward=U.Now()+1;
     if Inventory.Tick(bot,s) then return true end;
+    -- Phase profiles never issue opportunistic fixed-point orders from ability callbacks.
+    if Phase.Enabled(bot) and not s.vision_phase then return false end;
     local p,reason=M.Plan(bot);
     if not p then if s.ward_skip~=reason then B.Emit(s,"ward_skip",{reason=reason});s.ward_skip=reason end;return false end;
     if p.kind~=p.mode then
@@ -186,7 +192,10 @@ function M.Tick(bot,s)
     p.primary=U.Call(p.item,"GetCurrentCharges");p.secondary=U.Call(p.item,"GetSecondaryCharges");
     B.Emit(s,"ward_plan",{kind=p.kind,location=p.location,height=p.height,rune=p.rune,coverage=p.expected_coverage});
     local done=B.Fire(bot,s,"ward",p.item,"validated_"..p.kind.."_point",function() return bot:Action_UseAbilityOnLocation(p.item,U.Vector(p.location)) end,false);
-    if done then p.at=U.Now();s.ward_pending=p;s.next_ward=U.Now()+C.ward_interval_s end;
+    if done then
+        p.at=U.Now();s.ward_pending=p;s.next_ward=U.Now()+C.ward_interval_s;
+        if s.vision_phase then s.vision_phase.awaiting_ward=true end;
+    end;
     return done;
 end;
 return M;

@@ -7,6 +7,7 @@ local Threat=require(GetScriptDirectory().."/laning/tactical/threats");
 local PT=require(GetScriptDirectory().."/laning/tactical/treads");
 local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
+local Phase=require(GetScriptDirectory().."/laning/vision/phase");
 local M={};
 local function fail(s,where,err)
     B.Emit(s,"helper_error",{where=where,error=tostring(err):sub(1,180)});
@@ -16,15 +17,16 @@ local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_unt
 local function tick(bot,s)
     B.Poll(bot,s);Ward.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
-    if Threat.Tick(bot,s) then return true end;
-    if Q.Tick(bot,s) then return true end;
+    if Threat.Tick(bot,s) then Phase.Leave(bot,"emergency_bkb");return true end;
+    if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;
+    if Phase.Holds(bot,s) then return true end;
     if not B.Free(s) then return true end;
     if PT.Tick(bot,s) then return true end;
     if Items.Tick(bot,s) then return true end;
     return not B.Free(s);
 end;
 local function prepare(bot,s,ability)
-    if not enabled(s) or not B.Free(s) then return false end;
+    if not enabled(s) or not B.Free(s) or Phase.Holds(bot,s) then return false end;
     local ok,ready=pcall(PT.Before,bot,s,ability);
     if not ok then fail(s,"prepare",ready);return false end;
     return ready and B.Free(s);
@@ -101,7 +103,11 @@ function M.BindLegacy(env)
         if U.Call(bot,"IsAlive")~=true then pcall(observer.Tick,bot);return end;
         if not s then return old.AbilityUsageThink() end;
         local success,handled=pcall(tick,bot,s);if not success then fail(s,"tick",handled) end;
-        if handled==true or not B.Free(s) then return end;
+        if handled==true or not B.Free(s) then
+            -- A ward lease must not pause the read-only observer.
+            if s.vision_phase then pcall(observer.Tick,bot) end;
+            return;
+        end;
         if enabled(s) then
             local valid,plan=pcall(Neutral.Consider,bot);
             if valid and plan then

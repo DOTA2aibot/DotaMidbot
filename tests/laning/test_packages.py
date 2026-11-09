@@ -70,7 +70,7 @@ class Packages(unittest.TestCase):
         info = package.verify(self.bundle())
         self.assertTrue(info['observer_enabled']); self.assertFalse(info['wards_enabled'])
 
-    def test_economy_has_only_rune_override_and_keeps_native_lane(self):
+    def test_economy_has_rune_and_ward_modes_and_keeps_native_lane(self):
         path = self.bundle('valve_lane_economy')
         info = package.verify(path)
         self.assertTrue(info['economy_enabled'])
@@ -80,7 +80,7 @@ class Packages(unittest.TestCase):
         self.assertFalse(info['runtime_enabled'])
         self.assertEqual(info['controller'], 'valve_native_with_midbot_rune')
         roots = {n for n in info['files_sha256'] if '/' not in n}
-        self.assertEqual(roots, set(package.ROOT_LUA) | {package.RUNE_ENTRY})
+        self.assertEqual(roots, set(package.ROOT_LUA) | {package.RUNE_ENTRY,package.WARD_ENTRY})
         with zipfile.ZipFile(path) as z:
             self.assertEqual(z.read('bots/' + package.RUNE_ENTRY),
                              (ROOT / 'profiles/lane_economy' / package.RUNE_ENTRY).read_bytes())

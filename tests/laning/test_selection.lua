@@ -25,7 +25,7 @@ local function scenario( mode, disabled )
 end
 test( "native 1v1 picks only one SF and preserves stable version name", function()
     local s = scenario( 21 ); s.env.Think(); eq( #s.picks, 1 ); eq( s.picks[1].hero, "npc_dota_hero_nevermore" );
-    eq( #s.env.GetBotNames(), 1 ); eq( s.env.GetBotNames()[1], "MIDBOT v0.3.7-vision" );
+    eq( #s.env.GetBotNames(), 1 ); eq( s.env.GetBotNames()[1], "MIDBOT v0.3.8-ward-phase" );
 end );
 test( "ordinary all pick keeps full team and names", function()
     local s = scenario( 1 ); s.env.Think(); eq( #s.picks, 5 ); eq( #s.env.GetBotNames(), 5 );

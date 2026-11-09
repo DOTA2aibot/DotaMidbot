@@ -3,6 +3,11 @@ import importlib.util,tempfile,unittest,zipfile
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('testing_package',ROOT/'tools/package_bot.py');p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
 class ShopPackage(unittest.TestCase):
+    def test_ward_mode_and_flag_only_ship_in_explicit_ward_profiles(self):
+        for profile in p.PROFILES:
+            files=p.collect(profile,ROOT,'test-phase')
+            self.assertEqual('mode_ward_nevermore.lua' in files,profile in p.WARD_PROFILES)
+            self.assertEqual(b'ward_phase_enabled = true' in files['laning/profile.lua'],profile in p.WARD_PROFILES)
     def test_only_explicit_test_profile_contains_generic_purchase(self):
         for profile in p.PROFILES:
             files=p.collect(profile,ROOT,'test-shop')

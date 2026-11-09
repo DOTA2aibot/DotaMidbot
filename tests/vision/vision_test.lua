@@ -14,6 +14,7 @@ local function scenario()
     s.bot.ActionImmediate_SwapItems=function(_,from,to) s.items[from],s.items[to]=s.items[to],s.items[from] end;
     s.state=s.broker.State(s.bot);
     local profile=s.env.require("bots/laning/profile");profile.wards_enabled=true;profile.runtime_enabled=false;
+    s.env.require("bots/laning/vision/config").fixed_location={x=-200,y=0};
     function s:vision(name) return self.env.require("bots/laning/vision/"..name) end;
     return s;
 end;
@@ -23,9 +24,9 @@ test("Radiant site is stable across bot movements and covers a rune geometricall
     local distance=math.sqrt((a.location.x-a.rune_location.x)^2+(a.location.y-a.rune_location.y)^2);assert(distance<=1480);
     s.bot.x=-1000;local b=site.Get(s.bot);eq(a.location.x,b.location.x);eq(a.location.y,b.location.y);
 end);
-test("no river fallback when a bank or tree geometry is unknown",function()
-    local s=scenario();s.env.GetHeightLevel=function() return 0 end;local p,why=s:vision("site").Get(s.bot);eq(p,nil);eq(why,"no_radiant_bank_rune_view_candidate");
-    local t=scenario();t.env.GetAllTrees=nil;local q,reason=t:vision("site").Get(t.bot);eq(q,nil);eq(reason,"tree_geometry_unknown");
+test("explicit coordinate bypasses search but unknown terrain blocks",function()
+    local s=scenario();s.env.GetAllTrees=nil;local a=assert(s:vision("site").Get(s.bot));eq(a.location.x,-200);eq(a.location.y,0);
+    local t=scenario();t.env.GetHeightLevel=nil;local p,why=t:vision("site").Get(t.bot);eq(p,nil);eq(why,"fixed_coordinate_terrain_unknown");
 end);
 test("Dire illusion dead off-mid and post15min cannot buy recurring observers",function()
     for _,variant in ipairs({"dire","illusion","dead","away","late"}) do
