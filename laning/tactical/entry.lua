@@ -2,6 +2,8 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Q=require(GetScriptDirectory().."/laning/tactical/requiem");
+local Resources=require(GetScriptDirectory().."/laning/tactical/resources");
+local Finisher=require(GetScriptDirectory().."/laning/tactical/finisher");
 local Items=require(GetScriptDirectory().."/laning/tactical/items");
 local Threat=require(GetScriptDirectory().."/laning/tactical/threats");
 local PT=require(GetScriptDirectory().."/laning/tactical/treads");
@@ -9,6 +11,7 @@ local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
 local Phase=require(GetScriptDirectory().."/laning/vision/phase");
 local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
+local DeliveryGuard=require(GetScriptDirectory().."/laning/items/delivery_guard");
 local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local M={};
@@ -24,6 +27,8 @@ local function tick(bot,s)
     if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;
     if Phase.Holds(bot,s) then return true end;
     if not B.Free(s) then return true end;
+    if Resources.Emergency(bot,s) then return true end;
+    if Finisher.Tick(bot,s) then return true end;
     if PT.Tick(bot,s) then return true end;
     if Items.Tick(bot,s) then return true end;
     return not B.Free(s);
@@ -102,6 +107,7 @@ function M.BindLegacy(env)
         if not C.enabled then return old.AbilityUsageThink() end;
         local bot=env.GetBot();local s=B.State(bot);
         if not U.Actor(bot) then return end;
+        local guarded,guardError=pcall(DeliveryGuard.Sample,bot,s);if not guarded then fail(s,"delivery_guard_sample",guardError) end;
         local sampled,sampleError=pcall(Delivery.Observe,bot,s);if not sampled then fail(s,"courier_observer",sampleError) end;
         local checked,err=pcall(Recovery.Poll,bot,s);if not checked then fail(s,"ward_recovery",err) end;
         -- Keep observation of death, but do not issue dead-hero orders.

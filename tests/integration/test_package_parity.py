@@ -32,7 +32,7 @@ class PackageParity(unittest.TestCase):
             self.assertEqual(package.verify(path),manifest)
             expected=package.collect('all_test',ROOT,'review-current')
             self.assertEqual(manifest['files_sha256'],{n:package.sha(b) for n,b in sorted(expected.items())})
-            self.assertEqual(manifest['version'],'v0.3.12-ward-recovery')
+            self.assertEqual(manifest['version'],'v0.3.13-resources-delivery')
             self.assertTrue(manifest['economy_enabled']);self.assertFalse(manifest['runtime_enabled'])
             with zipfile.ZipFile(path) as archive:
                 for name,data in expected.items():self.assertEqual(archive.read('bots/'+name),data,name)

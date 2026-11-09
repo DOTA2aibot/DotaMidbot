@@ -6,3 +6,5 @@ lua=LuaRuntime(unpack_returned_tuples=True)
 lua.globals().SCENARIO=lua.execute((ROOT/'tests/tactical/fixture.lua').read_text(encoding='utf-8'))
 lua.globals().CURRENT_OWNER_SOURCE=str(ROOT/'ability_item_usage_nevermore.lua').replace('\\','/')
 lua.execute((ROOT/'tests/items/delivery_test.lua').read_text(encoding='utf-8'))
+
+lua.execute((ROOT/'tests/items/guard_test.lua').read_text(encoding='utf-8'))

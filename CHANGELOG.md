@@ -1,5 +1,11 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.13-resources-delivery — кандидат T036/T037, 2026-11-09
+- PT: один intent от подготовки до release/cooldown, подтверждение атрибута перед следующимtoggle, bounded timeout; AGI для фарма/regen, INT для выбранногоspell, STRsurvival ниже незавершённого spell intent.
+- Stick/Wand:HP<=15% в бою даже1charge; knownpotential mana на видимый lethal Raze, сначала бесплатный INT/readback; пустой/unknown/cooldown не нажимается, вне боя charges сохраняются.
+- all_test: bounded личный ROAM guard против наблюдённого отхода к courier отmidanchor. Threat/Rune/Ward/cast/queue выше, survival-retreat не запрещён глобально; whole ROAM replacement и его цена явно описаны в ProposedADR0011.
+- Observer version/run prefix приведены к0313. Ward/rune/rootability/purchase без правок. [Подробности](docs/RESOURCES_DELIVERY_v0313.md). Новый clientrun ещё требуется.
+
 ## v0.3.12-ward-recovery — кандидат T035/T036, 2026-11-09
 - Primary0–30/300–330/600–630 обновляет Observer даже поверх старого союзного покрытия; одна подтверждённая постановка на окно. PinnedXYZ прежние.
 - Read-only checkxx:45: missingcoverage+carriedObserver открывает nextminute00–30; missingitem разрешает покупку/доставку при knownstock. Пустая/unknown лавка, недостаток gold и knownfailure ждут следующейxx:45; stash/courier/pending не дублируются.

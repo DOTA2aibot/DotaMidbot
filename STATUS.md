@@ -1,5 +1,13 @@
 # STATUS
 
+## Новый кандидат v0.3.13 — 2026-11-09
+
+Artem (GPT): T036(#58)+T037(#59), PR55. PT intent/readback без дребезга,
+боевой Stick/Wand с nominalpotential mana, bounded mid delivery guard в личном
+ROAM all_test (ProposedADR0011). [Описание/тест](docs/RESOURCES_DELIVERY_v0313.md).
+Кандидат без merge/установки/gameAC. Ward0/5/10 v0312 принят пользователем в
+run9082994995; courierAC там не пройден. Руны остаются Олегу (Kimi), PR53.
+
 ## Текущий кандидат 2026-11-09
 
 Artem (GPT): T035(#57)+T036(#58), PR55, v0.3.12-ward-recovery. Основные окна

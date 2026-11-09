@@ -21,3 +21,5 @@ ADR нужен для игрового маршрута интеграции, к
 Не считать ответ AI одобрением людей. Если мнения разошлись, сохраняются baseline и текущий интерфейс; следующий шаг — конкретный проверяемый spike, а не два несовместимых варианта в main.
 
 - [ADR0010: личный SF ITEM-mode без courier rendezvous](0010-personal-item-delivery-mode.md) — Proposed, T036/Issue58/PR55, тестовый all_test.
+
+- [ADR0011: bounded lane guard при доставке](0011-delivery-lane-guard.md) — Proposed, T036/Issue58; all_test personal ROAM replacement.

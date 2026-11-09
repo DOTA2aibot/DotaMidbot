@@ -164,7 +164,8 @@ test("PT cannot toggle during an ability or channel",function()
 end);
 test("PT failed readback cannot loop forever or block spell forever",function()
     local s=SCENARIO();s:item("item_power_treads",0,{stat=1});s.pt_stuck=true;local t=s:mod("treads");local a=s.abilities.nevermore_shadowraze1;
-    for i=1,3 do t.Before(s.bot,s.state,a);s:advance(.1) end;eq(t.Before(s.bot,s.state,a),true);eq(#s.orders,3);
+    for i=1,3 do t.Before(s.bot,s.state,a);s:advance(.1) end;eq(#s.orders,1);
+    s:advance(.8);eq(t.Before(s.bot,s.state,a),true);eq(#s.orders,1);
 end);
 test("neutral raze chosen while already farming camp",function()
     local s=SCENARIO();s.mode=5;s.mana=600;local a=s.unit("neutral",4,450,0);a.hp=600;local b=s.unit("neutral",4,500,50);b.hp=600;s.neutrals={a,b};
@@ -231,7 +232,7 @@ test("ward planner preserves native attacks and unknown actions",function()
 end);
 test("basic bottle and wand support is retained in active tactical controller",function()
     local s=SCENARIO();s.mana=40;s:item("item_bottle",0,{behavior=8,charges=3});eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_bottle");
-    local t=SCENARIO();t.hp=250;t:item("item_magic_wand",0,{charges=10});eq(t:mod("items").Tick(t.bot,t.state),true);eq(t.orders[1].kind,"self");
+    local t=SCENARIO();t.hp=150;enemy(t);t:item("item_magic_wand",0,{charges=10});eq(t:mod("items").Tick(t.bot,t.state),true);eq(t.orders[1].kind,"self");
 end);
 test("basic salve works only in safe state",function()
     local s=SCENARIO();s.hp=300;s:item("item_flask",0,{behavior=8});eq(s:mod("items").Tick(s.bot,s.state),true);
@@ -283,10 +284,11 @@ test("a hidden handle reporting dead still cannot authorize cancelling requiem",
     local s=SCENARIO();local e=enemy(s);local q=ownRequiem(s,e);e.visible=false;e.hp=0;e.x=1300;
     q.Tick(s.bot,s.state);s:advance(.3);q.Tick(s.bot,s.state);eq(#s.orders,0);
 end);
-test("STR survival can preempt a pending spell preparation without toggling during cast",function()
+test("pending spell preparation outranks optional STR until its bounded expiry",function()
     local s=SCENARIO();local pt=s:item("item_power_treads",0,{stat=1});local t=s:mod("treads");
     s.state.pt_spell={ability=s.abilities.nevermore_requiem,selected_at=s.time};s.hp=250;s.recent=.1;
-    eq(t.Tick(s.bot,s.state),true);eq(pt.stat,0);
+    eq(t.Tick(s.bot,s.state),false);eq(pt.stat,1);eq(#s.orders,0);
+    s:advance(1.6);eq(t.Tick(s.bot,s.state),true);eq(pt.stat,0);
 end);
 test("a low bank cannot pass observer checks even if both sampled banks are river",function()
     local s=SCENARIO();s:item("item_ward_observer",0);s.height_fn=function(p) return math.abs(p.y)>200 and 2 or 1 end;
