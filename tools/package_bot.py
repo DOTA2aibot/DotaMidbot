@@ -87,7 +87,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.15-ward-recovery-pt', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.16-vision-trades', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -98,8 +98,13 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.15-ward-recovery-pt / PROFILE: %s
+    readme = '''MIDBOT v0.3.16-vision-trades / PROFILE: %s
 
+v0316 TEST CANDIDATE: Dire Observer and shared Sentry coordinates are not yet calibrated.
+Their automatic placement is disabled; Radiant Observer retains its established point.
+Calibration: as a human ally of Dire SF, plant Observer on the desired cliff and Sentry
+at the desired river center, wait10 seconds, then retain the console log.
+No new normal lane/attack/courier movement controller. Stick7+/Wand13+ resource trading.
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
 An old root mode_laning_nevermore.lua would keep overriding Valve laning.

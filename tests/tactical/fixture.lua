@@ -112,7 +112,7 @@ local function scenario()
         local k=a.name=="item_ward_observer" and "observer" or a.name=="item_ward_sentry" and "sentry" or (a.toggle and "observer" or "sentry");
         s.orders[#s.orders+1]={kind="ward",ward_kind=k,location=p};
         if k=="observer" then a.charges=a.charges-1 else if a.name=="item_ward_dispenser" then a.secondary=a.secondary-1 else a.charges=a.charges-1 end end;
-        local w=unit(k=="observer" and "npc_dota_observer_wards" or "npc_dota_sentry_wards",2,p.x,p.y);w.id=7;s.wards[#s.wards+1]=w;
+        local w=unit(k=="observer" and "npc_dota_observer_wards" or "npc_dota_sentry_wards",bot:GetTeam(),p.x,p.y);w.id=7;s.wards[#s.wards+1]=w;
     end;
     function bot:Action_MoveDirectly(p) s.orders[#s.orders+1]={kind="face",location=p} end;bot.Action_MoveToLocation=bot.Action_MoveDirectly;
     env.GetBot=function() return bot end;

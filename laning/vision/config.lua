@@ -7,6 +7,13 @@ return {
         evidence="live_human_observer_entity",source_line=1214},
     -- Automatic placement is enabled at the human-selected coordinate.
     calibration_only=false,
+    -- Filled only from the next human calibration; never infer either point from SF position.
+    dire_fixed_location=nil, dire_calibration_source=nil, sentry_fixed_location=nil,
+    sentry_windows={{start=0,finish=30},{start=360,finish=390}}, sentry_duration_s=420,
+    support_enabled=true, deward_enabled=true, support_desire=.80,
+    support_max_s=8, support_max_approach=1000, support_mid_radius=2200,
+    support_enemy_radius=1100, support_creep_radius=1500, support_move_interval_s=.6,
+    deward_expected_hits=2, deward_attack_timeout_s=2.5, deward_max_attempts=4,
     windows={{start=0,finish=30},{start=300,finish=330},{start=600,finish=630}},
     prefetch_s=90, diagnostic_interval_s=5,
     recovery_end_s=720, final_window_start_s=600,

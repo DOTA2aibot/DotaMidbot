@@ -11,7 +11,7 @@ local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local M={};
 function M.Enabled(bot)
     return C.calibration_only~=true and Profile.ward_phase_enabled==true and Profile.runtime_enabled~=true
-        and Profile.wards_enabled==true and Tactical.enabled and Tactical.wards and Site.Radiant(bot);
+        and Profile.wards_enabled==true and Tactical.enabled and Tactical.wards and Site.ObserverSupported(bot);
 end;
 local function skip(s,reason)
     local w=Schedule.Window(U.Now(),s);

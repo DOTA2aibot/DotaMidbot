@@ -3,6 +3,12 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local M={};
+function M.TradeCharged(p)
+    if not p or not p.item or not p.known or not U.Number(p.charges) then return false end;
+    local name=U.Call(p.item,"GetName");
+    local threshold=name=="item_magic_stick" and C.stick_trade_charges or (name=="item_magic_wand" and C.wand_trade_charges);
+    return U.Number(threshold) and p.charges>=threshold;
+end;
 function M.Read(bot,s)
     local hp,maxhp,mana,maxmana=U.Call(bot,"GetHealth"),U.Call(bot,"GetMaxHealth"),U.Call(bot,"GetMana"),U.Call(bot,"GetMaxMana");
     if not U.Number(hp) or not U.Number(maxhp) or not U.Number(mana) or not U.Number(maxmana) or maxhp<=0 or maxmana<=0 then return nil end;
@@ -39,6 +45,13 @@ end;
 function M.Emergency(bot,s)
     local p=M.Read(bot,s);
     if p and p.item and p.hp/p.max_hp<=C.wand_emergency_hp and M.Combat(bot) then return M.Use(bot,s,p,"combat_hp_15_percent") end;
+    if M.TradeCharged(p) and M.Combat(bot) then
+        local nominal=p.charges*p.per_charge;
+        local first=U.Call(bot,"GetAbilityByName","nevermore_shadowraze1");local cost=U.Cost(first);
+        local health_needed=p.max_hp-p.hp>=math.max(75,nominal*C.wand_trade_spend_fraction);
+        local mana_needed=cost and p.mana<2*cost and p.mana_gain>=math.min(cost,nominal*C.wand_trade_spend_fraction);
+        if health_needed or mana_needed then return M.Use(bot,s,p,"charged_wand_trade_resources") end;
+    end;
     return false;
 end;
 return M;

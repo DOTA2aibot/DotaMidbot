@@ -1,5 +1,10 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.16-vision-trades — тестовый кандидат T038
+- Стартовый Sentry, окна0/6мин, запас с4:30, защита stock/gold/pending и readback. Девард уступает фарму и бою, проверяет результат каждого удара.
+- Stick7+/Wand13+: безопасный Raze-харасс и более ранняя полезная активация в бою, без нового контроллера движения.
+- Запись Observer/Sentry для обеих сторон. **Точки Dire/Sentry пока не откалиброваны, их автопостановка выключена.** Radiant-точка неизменна. [Описание и тест](docs/WORK_v0316.md).
+
 ## v0.3.15-ward-recovery-pt — T036/T037, 2026-11-09
 - Полностью удалён эксперимент courier ROAM: source/config/profile/tests/flag. Перемещения, nativeROAM и ground-onlyITEM соответствуют выбранной v0.3.12; vision/rune/закуп не переписаны. 33 файла закреплены исходными312хешами.
 - Обычный cast больше не ждёт переключения ПТ. PT maintenance после ability callback; STR как целевой атрибут отключён, безPTнетspelllease. Сохранены rawmap, bounded recovery маны и Stick/Wand. INT перед каждымcast не гарантируется, попадание важнее.

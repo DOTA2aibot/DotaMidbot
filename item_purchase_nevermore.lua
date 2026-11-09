@@ -21,6 +21,11 @@ local componentFailures = 0; -- подряд неудачные попытки �
 local startupObserverPending = true; -- supply не конкурирует со стартовой очередью
 local ManaEconomy;
 local VisionSupply;
+local SentrySupply;
+do
+    local ok,mod=pcall(function() return require(GetScriptDirectory().."/laning/vision/sentry") end);
+    if ok then SentrySupply=mod end;
+end;
 do
     local ok,mod=pcall(function() return require(GetScriptDirectory().."/laning/vision/supply") end);
     if ok then VisionSupply=mod end;
@@ -185,6 +190,12 @@ function ItemPurchaseThinkInner( bot )
 	ConsiderCourierDelivery( bot );
     if VisionSupply and not startupObserverPending then
         local ok,attempted=pcall(VisionSupply.TryPurchase,bot);
+        if ok and attempted then return end;
+    end;
+    if SentrySupply and not startupObserverPending then
+        local ok,attempted=pcall(SentrySupply.TryStartup,bot);
+        if ok and attempted then return end;
+        ok,attempted=pcall(SentrySupply.TryPurchase,bot);
         if ok and attempted then return end;
     end;
 	if ManaEconomy then

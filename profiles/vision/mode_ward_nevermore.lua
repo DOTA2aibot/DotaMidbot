@@ -1,5 +1,5 @@
 -- Explicit SF ward-mode replacement, only shipped with ward-phase profiles.
-local ok,Phase=pcall(require,GetScriptDirectory().."/laning/vision/phase");
+local ok,Phase=pcall(require,GetScriptDirectory().."/laning/vision/service");
 local function invoke(name,...)
     if not ok then return nil end;
     local success,value=pcall(Phase[name],...);

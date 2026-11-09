@@ -75,7 +75,7 @@ function M.Plan(bot,phase)
             if not U.Number(r) or U.Distance(U.Pos(t),p)<=r+150 or U.Distance(U.Pos(t),q)<=r+150 then return false end;
         end end;return true;
     end;
-    if Site.Radiant(bot) then
+    if Site.Participant(bot) then
         local spot,why=Site.Get(bot);if not spot then return nil,why end;
         if not item.observer then return nil,"fixed_observer_not_in_active_inventory" end;
         local exists,unknown=Site.Existing(spot);if unknown then return nil,unknown end;
@@ -175,7 +175,7 @@ function M.Poll(bot,s)
     if U.Now()-p.at>C.ward_timeout_s then B.Emit(s,"ward_outcome_unknown",{kind=p.kind,reason="placement_unconfirmed"});s.ward_pending=nil end;
 end;
 function M.Tick(bot,s)
-    if Site.Radiant(bot) and VisionConfig.calibration_only==true then return false end;
+    if Site.Participant(bot) and VisionConfig.calibration_only==true then return false end;
     if not C.wards or s.ward_disabled or s.ward_pending or not B.Free(s) or U.Now()<(s.next_ward or -math.huge) then return false end;
     s.next_ward=U.Now()+1;
     if Inventory.Tick(bot,s) then return true end;

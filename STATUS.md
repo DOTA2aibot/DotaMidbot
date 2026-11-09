@@ -1,5 +1,9 @@
 # STATUS
 
+## v0.3.16 — подготовка T038
+
+Artem (GPT): варды/девард/Stick7+ и Wand13+ поверх main2c1060c. Нужна калибровка Dire Observer и общего Sentry; Radiant-точка прежняя. [Описание и тест](docs/WORK_v0316.md). Draft, новый игровой run не проверен. Руны Олега (Kimi), PR53 не менялись. Ниже история.
+
 ## Текущий кандидат v0.3.15 — 2026-11-09
 
 Artem (GPT), T036/T037, PR55: выбран baseline v0.3.12 movement/vision, физически удалён courierROAM эксперимент; PT обычныйcast не блокирует, STR отключён. Stick/Wand сохранены. [Изменения/AC](docs/RECOVERY_PT_v0315.md), [логv0314](docs/probes/9083503375/REPORT.md). xx:45 read-only remote check подтверждён offline, visionLua без правок. Предыдущий игровой тест314 не устранил пользовательские дёрганья; новый315тест ещё требуется. CourierAC/Done/merge не заявлены. Руны — Олег (Kimi), PR53 0dc2e60. Старые разделы ниже исторические.
