@@ -133,6 +133,7 @@ end );
 test( "finished pickup releases the bot without clearing and blocks instant reorder", function()
     local s = scenario(); pickup( s ); s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
     s.rune_policy.Think( s.bot ); -- action==8: движок в пути на руну
+    s.status_map = { [0] = 3 }; -- T035: подтверждение readback'ом — руна видимо исчезла
     s.action = 2; s.time = 102; -- pickup завершён: действие сменилось
     eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune_attempt_finished
     s.rune_policy.Think( s.bot ); eq( s.cancelled, nil ); eq( #s.runes, 1 ); -- очистка без ClearActions
@@ -210,9 +211,11 @@ test( "resolved rune is not retried until the next spawn cycle", function()
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup, mock ставит action=8
     s.rune_policy.Think( s.bot ); -- pickup_seen
+    s.status_map = { [0] = 3 }; -- T035: руна видимо исчезла → подбор подтверждён
     s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- pickup завершён → rune_done
     s.env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 9000, y = 0 } end; -- вторая руна недосягаема
     s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 0 решена в этом цикле, rune 1 too_far
+    s.status_map = nil; -- к следующему циклу руна снова на месте
     s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- новый цикл: rune 0 снова в игре
 end );
 test( "second water rune waits until resources drop", function()
@@ -222,6 +225,7 @@ test( "second water rune waits until resources drop", function()
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
     s.mana = 300; -- полная мана (max 300), hp=1000/1000
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
+    s.status_map = { [0] = 3 }; -- T035: руна видимо исчезла → подбор подтверждён
     s.rune_policy.Think( s.bot ); s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- rune_done
     s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- ресурсы полные: за второй не бежим
     s.mana = 100; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- мана 33% <= 40% → идём
@@ -233,6 +237,7 @@ test( "visible close rune is always taken even with full resources", function()
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
     s.mana = 300; -- полная мана (max 300), hp=1000/1000
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
+    s.status_map = { [0] = 3 }; -- T035: руна видимо исчезла → подбор подтверждён
     s.rune_policy.Think( s.bot ); s.action = 2; s.time = 131; s.rune_policy.Think( s.bot ); -- rune_done
     s.time = 141; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- фулл ресурсы: за второй не бежит
     s.visible = true; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 1 видна, но далеко (2000)
@@ -246,5 +251,30 @@ test( "backoff direction rotates after silent pickup rejects", function()
     s.bot.GetLocation = function() return { x = 380, y = 0 } end; -- d=20 до руны 0
     s.rune_policy.Think( s.bot ); eq( s.moves[1].x, 200 ); eq( s.moves[1].y, 0 ); -- к центру реки
     s.time = 131; s.rune_policy.Think( s.bot ); eq( s.moves[2].x, 400 ); eq( s.moves[2].y, -200 ); -- поворот +90°
+end );
+test( "interrupted pickup keeps the rune unresolved and budget blocks repeats", function()
+    -- T035 (ревью GPT по PR53, матч 9082994995): прерванный pickup раньше
+    -- выдавал ложный rune_done по голой смене action (t=240.7-246.7: бутылка
+    -- 0→0, руна AVAILABLE). Теперь вердикт по readback'у; interrupted цикл НЕ
+    -- закрывает, повтор через rune_interrupt_retry_s (3с); неудачи копятся в
+    -- бюджете (руна, 120-с цикл) — rune_cycle_fail_budget (2) провала
+    -- блокируют руну до следующего спавна.
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- pickup на rune 0 (d=400)
+    s.rune_policy.Think( s.bot ); -- pickup_seen
+    -- pickup прерван: действие сменилось, но руна на месте и бутылки нет
+    s.action = 2; s.time = 131; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune_attempt_interrupted
+    s.rune_policy.Think( s.bot ); -- завершение: bump №1, короткий retry 3с
+    eq( #s.runes, 1 );
+    s.time = 132.5; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- retry ещё держит
+    s.time = 135; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- цикл НЕ закрыт: повтор
+    -- вторая попытка туда же — снова прервана
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 2 );
+    s.rune_policy.Think( s.bot ); -- pickup_seen
+    s.action = 2; s.time = 136; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.rune_policy.Think( s.bot ); -- bump №2 → бюджет исчерпан
+    s.env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 9000, y = 0 } end; -- вторая руна недосягаема
+    s.time = 140; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 0 заблокирована бюджетом, rune 1 too_far
+    s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- новый цикл: бюджет сброшен
 end );
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

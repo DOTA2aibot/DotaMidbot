@@ -6,6 +6,46 @@ local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local O = require( GetScriptDirectory() .. "/laning/observer/core" );
 local M, states = {}, setmetatable( {}, { __mode = "k" } );
 local function global( name, ... ) return O.Global( name, ... ) end;
+-- T035 (ревью GPT по PR53, матч 9082994995): подтверждение подбора по факту,
+-- а не по смене action. Бутылка — самый надёжный readback: заряды растут
+-- (0→3 водяная/силовая) только при реальном подборе руны.
+local function BottleCharges( bot )
+    for slot = 0, 5 do
+        local item = A.Call( bot, "GetItemInSlot", slot );
+        if item ~= nil then
+            local okn, name = pcall( function() return item:GetName() end );
+            if okn and name == "item_bottle" then
+                local okc, charges = pcall( function() return item:GetCurrentCharges() end );
+                if okc and A.Number( charges ) then return charges end;
+                return nil;
+            end;
+        end;
+    end;
+    return nil;
+end;
+-- T035 P2: счётчик неудач на (руна, 120-с цикл) живёт между попытками —
+-- Leave его НЕ стирает, иначе тот же пустой спот выбирался снова каждые ~10с
+-- (матч 9082994995, южная rune1: 4 похода, ~61с потерь).
+local function BumpCycleFail( s, now )
+    if s.rune == nil or not A.Number( now ) then return end;
+    local cycle = math.floor( now / 120 );
+    local cf = s.cycle_fails or {}; s.cycle_fails = cf;
+    local rec = cf[s.rune];
+    if rec and rec.cycle == cycle then rec.count = rec.count + 1
+    else cf[s.rune] = { cycle = cycle, count = 1 } end;
+end;
+local function CycleFailed( prior, rune, now )
+    if not ( prior and prior.cycle_fails and A.Number( now ) ) then return false end;
+    local rec = prior.cycle_fails[rune];
+    return rec ~= nil and rec.cycle == math.floor( now / 120 )
+        and rec.count >= C.rune_cycle_fail_budget;
+end;
+-- T035: трассировка позиций попытки подбора — GPT запросил по загадке
+-- «PICK_UP_RUNE на южную rune1, бот пошёл на северо-запад» (9082994995).
+local function TracePos( p )
+    if not ( p and A.Number( p.x ) and A.Number( p.y ) ) then return nil, nil end;
+    return math.floor( p.x ), math.floor( p.y );
+end;
 -- T029: эффективный deadline попытки — базовый (distance/280+3) плюс продление
 -- от РЕАЛЬНОГО старта pickup движком. Матч 9082458295, t=130.5: продление
 -- вычислялось только в Think, а GetDesire срабатывал раньше на 0.07с — гонка.
@@ -26,6 +66,37 @@ function M.Deadline( s )
         end;
     end;
     return d;
+end;
+-- T035 P1 (ревью GPT, матч 9082994995): вердикт завершения pickup по факту.
+-- Подтверждено: заряды бутылки ВЫРОСЛИ против bottle_start ИЛИ точка видна и
+-- руны там уже нет. Иначе — interrupted (ловушка старой логики: ЛЮБАЯ смена
+-- action после pickup_seen считалась успехом; матч 9082994995 t=240.7-246.7:
+-- pickup прерван, бутылка 0→0, руна AVAILABLE — а rune_done выдан).
+function M.FinishVerdict( bot, s )
+    local now = A.Time();
+    local bottle_now = BottleCharges( bot );
+    if A.Number( bottle_now ) and A.Number( s.bottle_start ) and bottle_now > s.bottle_start then
+        return "confirmed", bottle_now;
+    end;
+    local loc = global( "GetRuneSpawnLocation", s.rune );
+    local st = loc and global( "GetRuneStatus", s.rune ) or nil;
+    if loc and global( "IsLocationVisible", loc ) == true and RUNE_STATUS_AVAILABLE ~= nil
+        and A.Number( st ) and st ~= RUNE_STATUS_AVAILABLE then
+        return "confirmed", bottle_now;
+    end;
+    return "interrupted", bottle_now;
+end;
+function M.PickupTrace( bot, s, verdict, bottle_now )
+    pcall( function()
+        local sx, sy = TracePos( s.pickup_start_pos );
+        local ex, ey = TracePos( A.Position( bot ) );
+        local loc = global( "GetRuneSpawnLocation", s.rune );
+        local rx, ry = TracePos( loc );
+        O.Emit( O.State( bot ), "rune_pickup_trace", { rune = s.rune, verdict = verdict,
+            sx = sx, sy = sy, ex = ex, ey = ey, expected_x = rx, expected_y = ry,
+            bottle_start = s.bottle_start, bottle_now = bottle_now,
+            owner = "midbot_rune_only", outcome = "unknown" } );
+    end );
 end;
 function M.Decide( bot )
     if not Actor.Real(bot) then return nil,"not_real_sf" end;
@@ -82,8 +153,19 @@ function M.Decide( bot )
                 and A.Call( bot, "NumQueuedActions" ) == 0 then
                 -- T033 (матч 9082519811): завершение подбора ловится и ЗДЕСЬ —
                 -- без done_cycle бот снова бежал к только что взятой руне (t=131.6).
-                local dc = prior.done_cycle or {}; dc[prior.rune] = math.floor( now / 120 ); prior.done_cycle = dc;
-                return nil, "rune_attempt_finished"; -- подобрал (или точка пуста) — назад на линию
+                -- T035 P1: завершение подтверждаем readback'ом (бутылка выросла
+                -- или руна видимо исчезла), а не голой сменой action — матч
+                -- 9082994995, t=240.7-246.7: прерванный pickup выдавал ложный
+                -- rune_done, руна оставалась AVAILABLE, бутылка 0→0.
+                local verdict, bottle_now = M.FinishVerdict( bot, prior );
+                M.PickupTrace( bot, prior, verdict, bottle_now );
+                if verdict == "confirmed" then
+                    local dc = prior.done_cycle or {}; dc[prior.rune] = math.floor( now / 120 ); prior.done_cycle = dc;
+                    return nil, "rune_attempt_finished"; -- подобрал (или точка пуста) — назад на линию
+                end;
+                -- прервано: цикл НЕ закрываем; бюджет неудач и событие — в Leave.
+                prior.finish_interrupted = true;
+                return nil, "rune_attempt_interrupted";
             end;
         else
             -- T028: ждать руну на пустой точке нормально (слепое окно), но если
@@ -275,6 +357,7 @@ function M.Decide( bot )
         elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
         elseif prior and prior.done_cycle and prior.done_cycle[rune] == math.floor( now / 120 ) then fail = "already_resolved" -- T031: решённая в этом цикле руна
+        elseif CycleFailed( prior, rune, now ) then fail = "cycle_fail_budget" -- T035 P2: лимит неудач на (руна, цикл)
         elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
         elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
         end;
@@ -315,8 +398,25 @@ end;
 function M.Leave( bot, reason )
     local s = states[bot]; if not s or not s.owned_order then return end;
     local seen, decide_reason = s.pickup_seen, s.last_reason;
-    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.failed_pickups = nil; s.last_kind = nil; s.first_pickup_at = nil; s.backoff_count = nil; -- done_cycle не чистим: память о решённой руне живёт дальше попытки (T031)
-    local now = A.Time(); if now then s.retry_after = now + C.rune_retry_s end;
+    local now = A.Time();
+    -- T035 P2: неудачные попытки (timeout / отказ в упор / прерванный pickup)
+    -- идут в бюджет на (руна, 120-с цикл) и НЕ стираются Leave'ом — матч
+    -- 9082994995: та же пустая южная точка выбиралась снова каждые ~10с
+    -- (4 похода, ~61с потерь). cycle_fails не чистим.
+    local interrupted = s.finish_interrupted == true;
+    if reason == "rune_pickup_timeout" or reason == "pickup_rejected_at_point_blank" or interrupted then
+        BumpCycleFail( s, now );
+    end;
+    if interrupted then
+        M.PickupTrace( bot, s, "interrupted", BottleCharges( bot ) );
+        pcall( function() O.Emit( O.State( bot ), "rune_interrupted", { rune = s.rune,
+            owner = "midbot_rune_only", outcome = "unknown" } ) end );
+    end;
+    s.owned_order = false; s.pickup_seen = nil; s.pickup_seen_at = nil; s.deadline = nil; s.failed_pickups = nil; s.last_kind = nil; s.first_pickup_at = nil; s.backoff_count = nil; -- done_cycle и cycle_fails не чистим: память о решённой/неудачной руне живёт дальше попытки (T031/T035)
+    s.bottle_start, s.pickup_start_pos, s.finish_interrupted = nil, nil, nil;
+    -- T035: после прерванного pickup повторяем быстро (руна рядом), после
+    -- обычного отказа — стандартный длинный retry.
+    if now then s.retry_after = now + ( interrupted and C.rune_interrupt_retry_s or C.rune_retry_s ) end;
     local action = A.Call( bot, "GetCurrentActionType" );
     local can_cancel = BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE
         and A.Call( bot, "NumQueuedActions" ) == 0
@@ -377,6 +477,10 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = s.rune, distance = d,
         submitted = called, kind = kind, rule = reason, reissue = reissue or nil,
         rune_status = global( "GetRuneStatus", s.rune ),
+        -- T035: тип руны в лог — GPT запросил по загадке «pickup на южную
+        -- rune1, бот пошёл на северо-запад» (матч 9082994995): проверим, не
+        -- водяная ли руна живёт под неожиданным индексом.
+        rune_type = (function() local okt, rt = pcall( function() return global( "GetRuneType", s.rune ) end ); if okt then return rt end; return nil end)(),
         spot_visible = loc ~= nil and global( "IsLocationVisible", loc ) or nil,
         outcome = "unknown", owner = "midbot_rune_only" } ) end );
     return d, kind;
@@ -417,20 +521,36 @@ function M.Think( bot )
         end;
         local action = A.Call( bot, "GetCurrentActionType" );
         if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE then
-            if not s.pickup_seen then s.pickup_seen, s.pickup_seen_at = true, now end;
+            -- T035: позиция старта pickup — для трассировки rune_pickup_trace.
+            if not s.pickup_seen then s.pickup_seen, s.pickup_seen_at, s.pickup_start_pos = true, now, A.Position( bot ) end;
             return; -- движок в пути на руну — не трогаем (продление через M.Deadline)
         end;
         if s.pickup_seen then
-            -- pickup был и закончился (руна взята или исчезла) — отпускаем бота
-            -- на линию без ClearActions: чужое/завершённое действие не трогаем.
+            -- pickup был и закончился — отпускаем бота на линию без
+            -- ClearActions: чужое/завершённое действие не трогаем.
             -- T031 (матч 9082503862): запоминаем цикл, в котором руна решена —
             -- после rune_done 120.7 бот ещё дважды (t=137, 151) бежал к УЖЕ
             -- взятой нами руне. Повторный поход — только следующий цикл спавна.
-            local dc = s.done_cycle or {}; dc[s.rune] = math.floor( now / 120 ); s.done_cycle = dc;
-            s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count, s.failed_pickups, s.last_kind = false, nil, nil, nil, nil, nil, nil, nil;
-            s.retry_after = now + C.rune_retry_s;
-            pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
-                owner = "midbot_rune_only", outcome = "unknown" } ) end );
+            -- T035 P1 (ревью GPT, матч 9082994995): вердикт по readback'у.
+            -- Подтверждено — цикл закрываем; прервано — цикл НЕ закрываем,
+            -- попытка идёт в бюджет неудач (P2), повтор через короткий retry.
+            local verdict, bottle_now = M.FinishVerdict( bot, s );
+            M.PickupTrace( bot, s, verdict, bottle_now );
+            if verdict == "confirmed" then
+                local dc = s.done_cycle or {}; dc[s.rune] = math.floor( now / 120 ); s.done_cycle = dc;
+                s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count, s.failed_pickups, s.last_kind = false, nil, nil, nil, nil, nil, nil, nil;
+                s.bottle_start, s.pickup_start_pos, s.finish_interrupted = nil, nil, nil;
+                s.retry_after = now + C.rune_retry_s;
+                pcall( function() O.Emit( O.State( bot ), "rune_done", { rune = s.rune,
+                    owner = "midbot_rune_only", outcome = "unknown" } ) end );
+            else
+                BumpCycleFail( s, now );
+                s.owned_order, s.pickup_seen, s.pickup_seen_at, s.first_pickup_at, s.deadline, s.backoff_count, s.failed_pickups, s.last_kind = false, nil, nil, nil, nil, nil, nil, nil;
+                s.bottle_start, s.pickup_start_pos, s.finish_interrupted = nil, nil, nil;
+                s.retry_after = now + C.rune_interrupt_retry_s;
+                pcall( function() O.Emit( O.State( bot ), "rune_interrupted", { rune = s.rune,
+                    owner = "midbot_rune_only", outcome = "unknown" } ) end );
+            end;
             return;
         end;
         -- Приказ ещё не начался: движок терял его при мгновенном схлопывании
@@ -475,6 +595,8 @@ function M.Think( bot )
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
     s.owned_order, s.rune, s.started_at, s.pickup_seen, s.pickup_seen_at, s.failed_pickups, s.first_pickup_at, s.backoff_count, s.last_kind = true, plan.rune, now, nil, nil, 0, nil, nil, nil; -- исключение после побочного эффекта требует guard
+    -- T035: стартовый снапшот бутылки для readback-вердикта (P1).
+    s.bottle_start = BottleCharges( bot ); s.pickup_start_pos = nil; s.finish_interrupted = nil;
     -- T028: deadline по дистанции (пешком ~280 ед/с + запас 3с), минимум
     -- rune_order_timeout_s — дальние desperate-походы (3500)
     -- не умирают по 8с таймауту на полпути.

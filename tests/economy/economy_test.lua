@@ -13,7 +13,7 @@ local function scenario( disabled )
     env.BOT_ACTION_TYPE_PICK_UP_RUNE = 8;
     env.RUNE_POWERUP_1, env.RUNE_POWERUP_2, env.RUNE_STATUS_AVAILABLE, env.PURCHASE_ITEM_SUCCESS = 0, 1, 1, 0;
     env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 2000, y = 0 } end;
-    env.GetRuneStatus = function() return s.status or 1 end;
+    env.GetRuneStatus = function( rune ) return ( s.status_map and s.status_map[rune] ) or s.status or 1 end;
     env.IsLocationVisible = function() return s.visible end;
     env.IsLocationPassable = function() return s.passable end;
     env.GetNumCouriers = function() return #s.couriers end;
