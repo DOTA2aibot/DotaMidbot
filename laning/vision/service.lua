@@ -37,6 +37,7 @@ function M.Holds(bot,b)
     end;
     local why;
     if not Sentry.Enabled(bot) or U.Now()>=job.deadline or U.Now()>=C.recovery_end_s then why="timeout_or_disabled"
+    elseif job.toggle_failed then why="dispenser_mode_unconfirmed"
     elseif U.Call(bot,"GetActiveMode")~=BOT_MODE_WARD then why="mode_preempted"
     elseif job.kind=="deward" and not Deward.Valid(bot,job.target) then why="target_hidden_or_unavailable"
     else
@@ -54,9 +55,10 @@ local function candidate(bot,b)
 end;
 function M.GetDesire(bot)
     local b=B.State(bot);if not b then return 0 end;M.Poll(bot,b);
-    if b.vision_support then return M.Holds(bot,b) and C.support_desire or 0 end;
+    local desire=Idle.Startup() and C.ward_start_desire or C.support_desire;
+    if b.vision_support then return M.Holds(bot,b) and desire or 0 end;
     if b.vision_phase then return Phase.GetDesire(bot) end;
-    local job=candidate(bot,b);if job then return C.support_desire end;
+    local job=candidate(bot,b);if job then return desire end;
     return Phase.GetDesire(bot);
 end;
 function M.Start(bot)

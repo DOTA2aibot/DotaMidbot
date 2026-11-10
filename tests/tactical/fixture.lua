@@ -96,13 +96,14 @@ local function scenario()
     function bot:Action_UseAbility(a)
         s.orders[#s.orders+1]={kind="self",ability=a.name};
         if a.name=="item_power_treads" then if not s.pt_stuck then a.stat=({[0]=2,[2]=1,[1]=0})[a.stat] end
-        elseif a.name=="item_ward_dispenser" then a.toggle=not a.toggle
+        elseif a.name=="item_ward_dispenser" then -- no-target order is ignored by the client
         elseif a.name:find("item_",1,true)==1 then a.charges=math.max(0,a.charges-1);a.cd=10
         else s.active=a;s.using=true;a.phase=true end;
         if s.action_throw then error("unknown after order") end;
     end;
     function bot:Action_UseAbilityOnEntity(a,target)
-        assert(target==bot);s.orders[#s.orders+1]={kind="entity",ability=a.name};a.charges=math.max(0,a.charges-1);a.cd=10;
+        assert(target==bot);s.orders[#s.orders+1]={kind="entity",ability=a.name};
+        if a.name=="item_ward_dispenser" then a.toggle=not a.toggle else a.charges=math.max(0,a.charges-1);a.cd=10 end;
         if s.action_throw then error("unknown after order") end;
     end;
     function bot:Action_ClearActions(stop)

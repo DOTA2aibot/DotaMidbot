@@ -194,7 +194,7 @@ function M.Tick(bot,s)
         s.ward_toggle={item=p.item,wanted=p.kind,tries=old and old.tries+1 or 1,
             primary=U.Call(p.item,"GetCurrentCharges"),secondary=U.Call(p.item,"GetSecondaryCharges")};
         s.observer_toggle_wait={item=p.item,toggle_pending=true,toggle_after=U.Now()+.5};
-        return B.Fire(bot,s,"ward_mode_toggle",p.item,"select_"..p.kind,function() return bot:Action_UseAbility(p.item) end,false);
+        return B.Fire(bot,s,"ward_mode_toggle",p.item,"select_"..p.kind,function() return bot:Action_UseAbilityOnEntity(p.item,bot) end,false);
     end;
     p.vision_slot=s.vision_phase and s.vision_phase.slot;
     p.vision_window=s.vision_phase and s.vision_phase.window;

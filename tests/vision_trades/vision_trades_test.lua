@@ -174,7 +174,7 @@ test('merged dispenser uses secondary charges for Sentry and primary for Observe
 end);
 test('wrong dispenser mode toggles before placement and never guesses unknown mode',function()
     local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};local it=s:item('item_ward_dispenser',0,{charges=1,secondary=1,toggle=true});
-    local job=s.sentry.Candidate(s.bot);s.sentry.Execute(s.bot,s.state,job);eq(#s.orders,1);eq(s.orders[1].kind,'self');
+    local job=s.sentry.Candidate(s.bot);s.sentry.Execute(s.bot,s.state,job);eq(#s.orders,1);eq(s.orders[1].kind,'entity');
     s:advance(.6);s.sentry.Execute(s.bot,s.state,job);eq(s.orders[2].ward_kind,'sentry');
     local t=scenario();t.v.sentry_fixed_location={x=0,y=0,z=0};local item=t:item('item_ward_dispenser',0,{charges=1,secondary=1});
     item.GetToggleState=function() return nil end;local plan=t.sentry.Candidate(t.bot);t.sentry.Execute(t.bot,t.state,plan);eq(#t.orders,0);
@@ -299,8 +299,8 @@ end);
 test('owned dispenser toggle phase does not abort a Sentry job as busy',function()
     local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};
     local item=s:item('item_ward_dispenser',0,{charges=1,secondary=1,toggle=true});
-    local original=s.bot.Action_UseAbility;
-    s.bot.Action_UseAbility=function(bot,a) original(bot,a);s.using=true;s.active=a;s.queued=1 end;
+    local original=s.bot.Action_UseAbilityOnEntity;
+    s.bot.Action_UseAbilityOnEntity=function(bot,a,target) original(bot,a,target);s.using=true;s.active=a;s.queued=1 end;
     s.service.Start(s.bot);s.mode=20;s.service.Think(s.bot);eq(#s.orders,1);assert(s.state.vision_support);
     for i=1,4 do s:advance(.08);eq(s.service.Holds(s.bot,s.state),true);s.service.Think(s.bot) end;
     eq(#s.orders,1);s.using=false;s.active=nil;s.queued=0;s:advance(.3);

@@ -87,7 +87,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.20-ward-sequence-test', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.21-ward-startup-test', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -98,15 +98,16 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.20-ward-sequence-test / PROFILE: %s
+    readme = '''MIDBOT v0.3.21-ward-startup-test / PROFILE: %s
 
-v0320 TEST CANDIDATE: Dire Observer and shared Sentry use human-calibrated coordinates.
+v0321 TEST CANDIDATE: Dire Observer and shared Sentry use human-calibrated coordinates.
 Starting Sentry purchase does not require manual coordinate calibration. Windows:0/6min.
 Dire Observer and shared Sentry were calibrated in match9083785339. Radiant point is preserved.
 Raze requires a fresh stable facing sample; only an owned active cast may be cancelled on drift.
 Sentry coverage is required before Observer; after confirmed Sentry placement, up to two local enemy-Sentry attacks may finish before farm.
 No chase: local cleanup yields to danger and stays bounded. Observer yields to farm/combat/runes.
-Raze and PT/resource logic are unchanged from0319. A new Dota match is required.
+Startup0-30 ward desire is.99; later farm remains higher. Dispenser switches via self-targeted cast.
+Raze and PT/resource logic are unchanged from0320. A new Dota match is required.
 No new Stick/Wand/PT changes beyond the previously prepared0316 logic.
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.

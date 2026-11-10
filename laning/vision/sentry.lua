@@ -130,7 +130,7 @@ function M.Candidate(bot)
     if not item then item=I.Find(bot,"sentry",6,8);stored=item~=nil end;
     local range=U.Call(item,"GetCastRange");
     if not item or (not stored and not U.Ready(item)) or not U.Number(range) or range<=25
-        or U.Distance(U.Pos(bot),p)>range-25+C.support_max_approach then return skip("item_unready_or_approach_out_of_range") end;
+        or U.Distance(U.Pos(bot),p)>range-25+(Idle.Startup() and C.ward_start_approach or C.support_max_approach) then return skip("item_unready_or_approach_out_of_range") end;
     s.skipReason=nil;
     return {kind="sentry",location=p,window=w,item=item,range=range,prior=wards,started=now,deadline=math.min(now+C.support_max_s,w.finish)};
 end;
@@ -181,10 +181,14 @@ function M.Execute(bot,b,job)
     if name=="item_ward_dispenser" then
         local toggle=U.Call(item,"GetToggleState");if type(toggle)~="boolean" then return end;
         if toggle then
-            if (job.toggles or 0)>=2 or U.Now()<(job.toggle_after or -math.huge) then return end;
+            if (job.toggles or 0)>=2 then job.toggle_failed=true;return end;
+            if U.Now()<(job.toggle_after or -math.huge) then return end;
             job.toggles=(job.toggles or 0)+1;job.toggle_after=U.Now()+.5;
-            if B.Fire(bot,b,"ward_mode_toggle",item,"select_sentry",function() return bot:Action_UseAbility(item) end,false) then job.toggle_pending=true end;
+            if B.Fire(bot,b,"ward_mode_toggle",item,"select_sentry",function() return bot:Action_UseAbilityOnEntity(item,bot) end,false) then job.toggle_pending=true end;
             return;
+        end;
+        if job.toggle_pending then
+            B.Emit(b,"sentry_mode_observed",{toggle=toggle,mode="sentry",evidence="readback_after_self_cast"});job.toggle_pending=false;
         end;
     end;
     if U.Distance(U.Pos(bot),job.location)>job.range-25 then Idle.Step(bot,b,job.location,job.range-25,"sentry_window");return end;
