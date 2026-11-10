@@ -133,7 +133,8 @@ local function scenario()
         function item:GetName() return self.name end;function item:GetCurrentCharges() return self.charges end;
         function item:GetSecondaryCharges() return self.secondary end;function item:GetBehavior() return self.behavior end;
         function item:GetCooldownTimeRemaining() return self.cd end;function item:IsFullyCastable() return self.cd<=0 end;
-        function item:IsHidden() return false end;function item:GetPowerTreadsStat() return self.stat end;
+        -- stat stays a semantic hero attribute in tests; API returns the separate raw PT code.
+        function item:IsHidden() return false end;function item:GetPowerTreadsStat() return ({[0]=0,[1]=2,[2]=1})[self.stat] end;
         function item:GetToggleState() return self.toggle end;function item:GetCastRange() return self.range end;
         function item:GetSpecialValueFloat(k) return self.special[k] or 0 end;item.GetSpecialValueInt=item.GetSpecialValueFloat;
         s.items[slot or 0]=item;return item;

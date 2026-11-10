@@ -148,23 +148,24 @@ test("BKB never interrupts unowned cast or channel",function()
 end);
 test("PT preparation reads actual state and reaches INT with bounded toggles",function()
     local s=SCENARIO();local pt=s:item("item_power_treads",0,{stat=1});local t=s:mod("treads");local a=s.abilities.nevermore_shadowraze1;
-    eq(t.Before(s.bot,s.state,a),false);eq(pt.stat,0);s:advance();eq(t.Before(s.bot,s.state,a),false);eq(pt.stat,2);
-    s:advance();eq(t.Before(s.bot,s.state,a),true);eq(#s.orders,2);
+    eq(t.PrepareMana(s.bot,s.state,a),false);eq(pt.stat,0);s:advance();eq(t.PrepareMana(s.bot,s.state,a),false);eq(pt.stat,2);
+    s:advance();eq(t.PrepareMana(s.bot,s.state,a),true);eq(#s.orders,2);
 end);
 test("PT restores AGI after confirmed release",function()
     local s=SCENARIO();local pt=s:item("item_power_treads",0,{stat=2});local t=s:mod("treads");local a=s.abilities.nevermore_shadowraze1;
-    eq(t.Before(s.bot,s.state,a),true);t.NoteCast(s.state,a);s:release(a);s:advance();eq(t.Tick(s.bot,s.state),true);eq(pt.stat,1);
+    eq(t.PrepareMana(s.bot,s.state,a),true);t.NoteCast(s.state,a);s:release(a);s:advance();eq(t.Tick(s.bot,s.state),true);eq(pt.stat,1);
 end);
-test("PT switches STR under low HP and recent damage",function()
+test("low HP never selects STR when survival toggling is disabled",function()
     local s=SCENARIO();local pt=s:item("item_power_treads",0,{stat=1});s.hp=250;s.recent=.5;
-    eq(s:mod("treads").Tick(s.bot,s.state),true);eq(pt.stat,0);
+    eq(s:mod("treads").Tick(s.bot,s.state),false);eq(pt.stat,1);
 end);
 test("PT cannot toggle during an ability or channel",function()
-    local s=SCENARIO();s:item("item_power_treads",0,{stat=1});s.using=true;eq(s:mod("treads").Before(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(#s.orders,0);
+    local s=SCENARIO();s:item("item_power_treads",0,{stat=1});s.using=true;eq(s:mod("treads").PrepareMana(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(#s.orders,0);
 end);
 test("PT failed readback cannot loop forever or block spell forever",function()
     local s=SCENARIO();s:item("item_power_treads",0,{stat=1});s.pt_stuck=true;local t=s:mod("treads");local a=s.abilities.nevermore_shadowraze1;
-    for i=1,3 do t.Before(s.bot,s.state,a);s:advance(.1) end;eq(t.Before(s.bot,s.state,a),true);eq(#s.orders,3);
+    for i=1,3 do t.PrepareMana(s.bot,s.state,a);s:advance(.1) end;eq(#s.orders,1);
+    s:advance(.8);eq(t.PrepareMana(s.bot,s.state,a),true);eq(#s.orders,1);
 end);
 test("neutral raze chosen while already farming camp",function()
     local s=SCENARIO();s.mode=5;s.mana=600;local a=s.unit("neutral",4,450,0);a.hp=600;local b=s.unit("neutral",4,500,50);b.hp=600;s.neutrals={a,b};
@@ -231,7 +232,7 @@ test("ward planner preserves native attacks and unknown actions",function()
 end);
 test("basic bottle and wand support is retained in active tactical controller",function()
     local s=SCENARIO();s.mana=40;s:item("item_bottle",0,{behavior=8,charges=3});eq(s:mod("items").Tick(s.bot,s.state),true);eq(s.orders[1].ability,"item_bottle");
-    local t=SCENARIO();t.hp=250;t:item("item_magic_wand",0,{charges=10});eq(t:mod("items").Tick(t.bot,t.state),true);eq(t.orders[1].kind,"self");
+    local t=SCENARIO();t.hp=150;enemy(t);t:item("item_magic_wand",0,{charges=10});eq(t:mod("items").Tick(t.bot,t.state),true);eq(t.orders[1].kind,"self");
 end);
 test("basic salve works only in safe state",function()
     local s=SCENARIO();s.hp=300;s:item("item_flask",0,{behavior=8});eq(s:mod("items").Tick(s.bot,s.state),true);
@@ -249,10 +250,11 @@ test("BKB and spell cannot issue two orders in same callback tick",function()
     local s=SCENARIO();local e=enemy(s);local a=s:ability("sven_storm_bolt");a.caster=e;s.projectiles={{is_attack=false,ability=a}};
     s:item("item_black_king_bar",0);s:bind();s.env.AbilityUsageThink();s.env.ItemUsageThink();eq(#s.orders,1);eq(s.orders[1].ability,"item_black_king_bar");
 end);
-test("actual root waits for PT INT before requiem and returns AGI afterwards",function()
-    local s=SCENARIO();enemy(s);local pt=s:item("item_power_treads",0,{stat=1});s:bind();
-    s.env.AbilityUsageThink();s:advance();s.env.AbilityUsageThink();s:advance();s.env.AbilityUsageThink();eq(#s.orders,3);eq(s.orders[3].ability,"nevermore_requiem");eq(pt.stat,2);
-    s:release(s.abilities.nevermore_requiem);s:advance();s.env.AbilityUsageThink();eq(pt.stat,1);
+test("actual root casts requiem immediately regardless of PT state",function()
+    for _,stat in ipairs({0,1,2}) do
+        local s=SCENARIO();enemy(s);local pt=s:item("item_power_treads",0,{stat=stat});s:bind();
+        s.env.ItemUsageThink();s.env.AbilityUsageThink();eq(#s.orders,1);eq(s.orders[1].ability,"nevermore_requiem");eq(pt.stat,stat);
+    end;
 end);
 test("unsafe clarity cannot be used by the delegated legacy callback",function()
     local s=SCENARIO();s.mana=50;s:item("item_clarity",0,{behavior=8});enemy(s,950);s:bind();s.env.ItemUsageThink();eq(#s.orders,0);
@@ -283,10 +285,11 @@ test("a hidden handle reporting dead still cannot authorize cancelling requiem",
     local s=SCENARIO();local e=enemy(s);local q=ownRequiem(s,e);e.visible=false;e.hp=0;e.x=1300;
     q.Tick(s.bot,s.state);s:advance(.3);q.Tick(s.bot,s.state);eq(#s.orders,0);
 end);
-test("STR survival can preempt a pending spell preparation without toggling during cast",function()
+test("resource preparation expires without ever selecting STR",function()
     local s=SCENARIO();local pt=s:item("item_power_treads",0,{stat=1});local t=s:mod("treads");
     s.state.pt_spell={ability=s.abilities.nevermore_requiem,selected_at=s.time};s.hp=250;s.recent=.1;
-    eq(t.Tick(s.bot,s.state),true);eq(pt.stat,0);
+    eq(t.Tick(s.bot,s.state),false);eq(pt.stat,1);eq(#s.orders,0);
+    s:advance(1.6);eq(t.Tick(s.bot,s.state),false);eq(pt.stat,1);
 end);
 test("a low bank cannot pass observer checks even if both sampled banks are river",function()
     local s=SCENARIO();s:item("item_ward_observer",0);s.height_fn=function(p) return math.abs(p.y)>200 and 2 or 1 end;
@@ -342,9 +345,9 @@ test("calm active regen preserves mango instead of stacking consumables",functio
     local s=SCENARIO();s.mana=50;s:item("item_enchanted_mango",0);s.bot.modifiers.modifier_clarity_potion=true;
     eq(s:mod("mana").Tick(s.bot,s.state),false);
 end);
-test("PT accepts documented DOTA attribute constants without short aliases",function()
+test("PT raw-state mapping is independent of hero DOTA attribute enums",function()
     local s=SCENARIO();s.env.ATTRIBUTE_STRENGTH=nil;s.env.ATTRIBUTE_AGILITY=nil;s.env.ATTRIBUTE_INTELLECT=nil;
     s.env.DOTA_ATTRIBUTE_STRENGTH=0;s.env.DOTA_ATTRIBUTE_AGILITY=1;s.env.DOTA_ATTRIBUTE_INTELLECT=2;
-    local pt=s:item("item_power_treads",0,{stat=0});eq(s:mod("treads").Before(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(pt.stat,2);
+    local pt=s:item("item_power_treads",0,{stat=0});eq(s:mod("treads").PrepareMana(s.bot,s.state,s.abilities.nevermore_shadowraze1),false);eq(pt.stat,2);
 end);
 print("TACTICAL PASSED "..count.." cases (synthetic API; live Dota not tested)");

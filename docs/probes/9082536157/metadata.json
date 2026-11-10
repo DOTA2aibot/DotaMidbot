@@ -1,0 +1,22 @@
+{
+  "match_id": "9082536157",
+  "source_file": "midbot-fixedward-18e7d4c-06e5fbd-test.9082536157.log",
+  "source_revision": [
+    "test53-18e7d4c-55-06e5fbd-fixedward"
+  ],
+  "game_time_first": -89.899993896484,
+  "game_time_last": 735.13342285156,
+  "original_bytes": 11233880,
+  "original_sha256": "f0bec3fddf4c2c049b095f1c21043777fa0ee437f6cbadff2041340ef0cda4ca",
+  "published_sanitized_bytes": 11233880,
+  "published_sanitized_sha256": "47f4b7bb024eafc25492e0721dbd2e6731efc6b2da776ed78c1aef811e190952",
+  "redactions": {
+    "ipv4": 35,
+    "steam_id": 9,
+    "local_user_path": 4,
+    "auth_value": 0
+  },
+  "gzip_bytes": 391071,
+  "record_parse_failures": 0,
+  "note": "Full console retained in gzip, with network identifiers/auth/local user paths redacted; event extracts are for connected AI reading. No gameplay fix applied yet."
+}

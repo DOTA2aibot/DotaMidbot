@@ -1,0 +1,11 @@
+{
+  "source_pr53": "0dc2e604f6a6f6f0178cf5abb0d41a714564d21c",
+  "synthetic_only": true,
+  "gameplay_changed": false,
+  "results": [
+    "Decide: reason=rune_attempt_finished, rune_status=1, bottle_charges=0, same_cycle_next_plan=nil, after=no_nearby_river_rune:already_resolved:d=400",
+    "Think: reason=rune_done=true, rune_status=1, bottle_charges=0, same_cycle_next_plan=nil, after=no_nearby_river_rune:already_resolved:d=400",
+    "retry_after_failure: same_cycle_next_plan=0, reason=bottle_empty_rune_run"
+  ],
+  "limits": "Tests demonstrate bookkeeping and retry behavior, not the client cause of southern-water pickup failure."
+}

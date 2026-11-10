@@ -1,0 +1,703 @@
+[
+  {
+    "rune": 0,
+    "start": 103.83334350586,
+    "line": 1868,
+    "orders": [
+      {
+        "t": 103.83334350586,
+        "kind": "move",
+        "d": 1833.2492786023,
+        "line": 1868
+      },
+      {
+        "t": 104.86666870117,
+        "kind": "move",
+        "d": 1518.1896816312,
+        "line": 1873
+      },
+      {
+        "t": 105.9333190918,
+        "kind": "move",
+        "d": 1192.8653374352,
+        "line": 1881
+      },
+      {
+        "t": 107.03332519531,
+        "kind": "pickup",
+        "d": 857.36325049606,
+        "line": 1887
+      },
+      {
+        "t": 109.60000610352,
+        "kind": "backoff",
+        "d": 74.525256506234,
+        "line": 1903
+      },
+      {
+        "t": 110.73333740234,
+        "kind": "pickup",
+        "d": 200.00004277818,
+        "line": 1910
+      },
+      {
+        "t": 113.26666259766,
+        "kind": "pickup",
+        "d": 200.00004277818,
+        "line": 1928
+      },
+      {
+        "t": 115.76666259766,
+        "kind": "pickup",
+        "d": 200.00004277818,
+        "line": 1939
+      },
+      {
+        "t": 118.33334350586,
+        "kind": "pickup",
+        "d": 200.00004277818,
+        "line": 1953
+      },
+      {
+        "t": 120.83334350586,
+        "kind": "pickup",
+        "d": 200.00004277818,
+        "line": 1967
+      }
+    ],
+    "end": 121.13333129883,
+    "end_line": 1974,
+    "end_kind": "rune_done",
+    "end_data": {
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "rune": 0
+    },
+    "duration": 17.29998779297
+  },
+  {
+    "rune": 1,
+    "start": 136.79998779297,
+    "line": 2089,
+    "orders": [
+      {
+        "t": 136.79998779297,
+        "kind": "move",
+        "d": 1735.2250391524,
+        "line": 2089
+      },
+      {
+        "t": 137.89999389648,
+        "kind": "move",
+        "d": 1403.4212344992,
+        "line": 2097
+      },
+      {
+        "t": 138.96667480469,
+        "kind": "move",
+        "d": 1078.0837757905,
+        "line": 2103
+      },
+      {
+        "t": 140.03332519531,
+        "kind": "pickup",
+        "d": 752.75586242353,
+        "line": 2111
+      },
+      {
+        "t": 142.66665649414,
+        "kind": "backoff",
+        "d": 0.41962292697793,
+        "line": 2128
+      },
+      {
+        "t": 143.76666259766,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2134
+      },
+      {
+        "t": 146.26666259766,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2154
+      },
+      {
+        "t": 147.29998779297,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2163
+      },
+      {
+        "t": 149.86666870117,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2177
+      },
+      {
+        "t": 151,
+        "kind": "pickup",
+        "d": 145.66559115636,
+        "line": 2185
+      },
+      {
+        "t": 153.53332519531,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2199
+      },
+      {
+        "t": 154.66665649414,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2206
+      }
+    ],
+    "end": 155.13333129883,
+    "end_line": 2208,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_pickup_timeout",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "mode_ended",
+      "submitted": false
+    },
+    "duration": 18.33334350586
+  },
+  {
+    "rune": 1,
+    "start": 165.23333740234,
+    "line": 2276,
+    "orders": [
+      {
+        "t": 165.23333740234,
+        "kind": "move",
+        "d": 1908.478027583,
+        "line": 2276
+      },
+      {
+        "t": 166.33334350586,
+        "kind": "move",
+        "d": 1572.9948751626,
+        "line": 2283
+      },
+      {
+        "t": 167.46667480469,
+        "kind": "move",
+        "d": 1227.3287855658,
+        "line": 2288
+      },
+      {
+        "t": 168.5666809082,
+        "kind": "pickup",
+        "d": 891.82679942235,
+        "line": 2296
+      },
+      {
+        "t": 171.16665649414,
+        "kind": "backoff",
+        "d": 98.8334136209,
+        "line": 2312
+      },
+      {
+        "t": 172.30001831055,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2320
+      },
+      {
+        "t": 174.86666870117,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2330
+      },
+      {
+        "t": 176.03332519531,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2338
+      },
+      {
+        "t": 178.70001220703,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2352
+      },
+      {
+        "t": 179.70001220703,
+        "kind": "backoff",
+        "d": 104.99959950711,
+        "line": 2360
+      },
+      {
+        "t": 180.76666259766,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2368
+      },
+      {
+        "t": 183.30001831055,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2384
+      }
+    ],
+    "end": 183.60000610352,
+    "end_line": 2387,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 2,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_order_committed",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "rune_pickup_timeout",
+      "submitted": false
+    },
+    "duration": 18.366668701180004
+  },
+  {
+    "rune": 1,
+    "start": 194.89999389648,
+    "line": 2473,
+    "orders": [
+      {
+        "t": 194.89999389648,
+        "kind": "move",
+        "d": 1589.402748233,
+        "line": 2473
+      },
+      {
+        "t": 195.93334960938,
+        "kind": "move",
+        "d": 1322.7480014899,
+        "line": 2482
+      },
+      {
+        "t": 197.0666809082,
+        "kind": "move",
+        "d": 1061.3314903713,
+        "line": 2489
+      },
+      {
+        "t": 198.13333129883,
+        "kind": "move",
+        "d": 919.2486111598,
+        "line": 2498
+      },
+      {
+        "t": 199.23333740234,
+        "kind": "move",
+        "d": 919.2486111598,
+        "line": 2516
+      }
+    ],
+    "end": 199.5666809082,
+    "end_line": 2517,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_order_committed",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "mode_ended",
+      "submitted": false
+    },
+    "duration": 4.6666870117200006
+  },
+  {
+    "rune": 1,
+    "start": 209.66668701172,
+    "line": 2580,
+    "orders": [
+      {
+        "t": 209.66668701172,
+        "kind": "move",
+        "d": 1913.04349723,
+        "line": 2580
+      },
+      {
+        "t": 210.73333740234,
+        "kind": "move",
+        "d": 1594.0761416049,
+        "line": 2593
+      },
+      {
+        "t": 211.76666259766,
+        "kind": "move",
+        "d": 1278.9121961894,
+        "line": 2598
+      },
+      {
+        "t": 212.93334960938,
+        "kind": "move",
+        "d": 923.07291722816,
+        "line": 2603
+      },
+      {
+        "t": 213.93334960938,
+        "kind": "pickup",
+        "d": 618.07331210289,
+        "line": 2608
+      },
+      {
+        "t": 216.46667480469,
+        "kind": "backoff",
+        "d": 0,
+        "line": 2623
+      },
+      {
+        "t": 217.46667480469,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2628
+      },
+      {
+        "t": 220.03332519531,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2644
+      },
+      {
+        "t": 221.10000610352,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2650
+      },
+      {
+        "t": 223.70001220703,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2663
+      },
+      {
+        "t": 224.80001831055,
+        "kind": "pickup",
+        "d": 135.50142418155,
+        "line": 2670
+      },
+      {
+        "t": 227.30001831055,
+        "kind": "backoff",
+        "d": 199.99999973729,
+        "line": 2684
+      },
+      {
+        "t": 228.30001831055,
+        "kind": "pickup",
+        "d": 199.99999973729,
+        "line": 2692
+      }
+    ],
+    "end": 229.03335571289,
+    "end_line": 2693,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_order_committed",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "rune_pickup_timeout",
+      "submitted": false
+    },
+    "duration": 19.36666870117
+  },
+  {
+    "rune": 1,
+    "start": 240.70001220703,
+    "line": 2767,
+    "orders": [
+      {
+        "t": 240.70001220703,
+        "kind": "pickup",
+        "d": 626.96442449798,
+        "line": 2767
+      }
+    ],
+    "end": 246.70001220703,
+    "end_line": 2806,
+    "end_kind": "rune_done",
+    "end_data": {
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "rune": 1
+    },
+    "duration": 6.0
+  },
+  {
+    "rune": 0,
+    "start": 258.23333740234,
+    "line": 2885,
+    "orders": [
+      {
+        "t": 258.23333740234,
+        "kind": "move",
+        "d": 2118.8729367411,
+        "line": 2885
+      },
+      {
+        "t": 259.33334350586,
+        "kind": "move",
+        "d": 1785.9329510493,
+        "line": 2890
+      },
+      {
+        "t": 260.33334350586,
+        "kind": "move",
+        "d": 1484.2640362572,
+        "line": 2896
+      },
+      {
+        "t": 261.36666870117,
+        "kind": "move",
+        "d": 1187.6634382572,
+        "line": 2902
+      },
+      {
+        "t": 262.39999389648,
+        "kind": "move",
+        "d": 901.68331173077,
+        "line": 2907
+      },
+      {
+        "t": 263.39999389648,
+        "kind": "pickup",
+        "d": 599.92246599648,
+        "line": 2913
+      }
+    ],
+    "end": 263.80001831055,
+    "end_line": 2916,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_order_committed",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "mode_ended",
+      "submitted": false
+    },
+    "duration": 5.566680908210003
+  },
+  {
+    "rune": 0,
+    "start": 273.86666870117,
+    "line": 2994,
+    "orders": [
+      {
+        "t": 273.86666870117,
+        "kind": "move",
+        "d": 1926.1724429505,
+        "line": 2994
+      },
+      {
+        "t": 274.96667480469,
+        "kind": "move",
+        "d": 1669.2959272341,
+        "line": 3000
+      },
+      {
+        "t": 276.03335571289,
+        "kind": "move",
+        "d": 1390.0929562036,
+        "line": 3007
+      },
+      {
+        "t": 277.0666809082,
+        "kind": "move",
+        "d": 1082.1418646021,
+        "line": 3014
+      },
+      {
+        "t": 278.0666809082,
+        "kind": "pickup",
+        "d": 777.14140035958,
+        "line": 3020
+      }
+    ],
+    "end": 280.23333740234,
+    "end_line": 3045,
+    "end_kind": "rune_done",
+    "end_data": {
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "rune": 0
+    },
+    "duration": 6.366668701169999
+  },
+  {
+    "rune": 0,
+    "start": 360.26669311523,
+    "line": 3540,
+    "orders": [
+      {
+        "t": 360.26669311523,
+        "kind": "move",
+        "d": 1880.687261576,
+        "line": 3540
+      },
+      {
+        "t": 361.33334350586,
+        "kind": "move",
+        "d": 1555.7901491163,
+        "line": 3546
+      },
+      {
+        "t": 362.50003051758,
+        "kind": "move",
+        "d": 1199.9838546848,
+        "line": 3551
+      },
+      {
+        "t": 363.60000610352,
+        "kind": "pickup",
+        "d": 864.49162447221,
+        "line": 3556
+      },
+      {
+        "t": 366.16665649414,
+        "kind": "backoff",
+        "d": 81.66137107013,
+        "line": 3567
+      },
+      {
+        "t": 367.26669311523,
+        "kind": "pickup",
+        "d": 199.925682771,
+        "line": 3576
+      }
+    ],
+    "end": 367.66665649414,
+    "end_line": 3583,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_attempt_finished",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "pickup_seen": true,
+      "reason": "mode_ended",
+      "submitted": false
+    },
+    "duration": 7.399963378910002
+  },
+  {
+    "rune": 0,
+    "start": 481.70004272461,
+    "line": 4280,
+    "orders": [
+      {
+        "t": 481.70004272461,
+        "kind": "move",
+        "d": 2176.6460710907,
+        "line": 4280
+      },
+      {
+        "t": 482.73336791992,
+        "kind": "move",
+        "d": 1821.0363057607,
+        "line": 4285
+      },
+      {
+        "t": 483.80001831055,
+        "kind": "move",
+        "d": 1457.0870440686,
+        "line": 4291
+      },
+      {
+        "t": 484.86666870117,
+        "kind": "move",
+        "d": 1107.9085926849,
+        "line": 4296
+      },
+      {
+        "t": 485.89999389648,
+        "kind": "pickup",
+        "d": 767.5810372087,
+        "line": 4302
+      }
+    ],
+    "end": 487.80001831055,
+    "end_line": 4313,
+    "end_kind": "rune_done",
+    "end_data": {
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "rune": 0
+    },
+    "duration": 6.099975585940001
+  },
+  {
+    "rune": 1,
+    "start": 600.2333984375,
+    "line": 5144,
+    "orders": [
+      {
+        "t": 600.2333984375,
+        "kind": "move",
+        "d": 1841.4216589383,
+        "line": 5144
+      },
+      {
+        "t": 601.30004882813,
+        "kind": "move",
+        "d": 1479.0950200054,
+        "line": 5151
+      },
+      {
+        "t": 602.30004882813,
+        "kind": "move",
+        "d": 1129.3150622702,
+        "line": 5157
+      },
+      {
+        "t": 603.46667480469,
+        "kind": "pickup",
+        "d": 720.97399873254,
+        "line": 5162
+      }
+    ],
+    "end": 605.2333984375,
+    "end_line": 5172,
+    "end_kind": "rune_done",
+    "end_data": {
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "rune": 1
+    },
+    "duration": 5.0
+  },
+  {
+    "rune": 0,
+    "start": 615.36669921875,
+    "line": 5237,
+    "orders": [
+      {
+        "t": 615.36669921875,
+        "kind": "move",
+        "d": 2023.2212676826,
+        "line": 5237
+      }
+    ],
+    "end": 615.93334960938,
+    "end_line": 5238,
+    "end_kind": "rune_cancel",
+    "end_data": {
+      "current_action": 1,
+      "guard": "preserve_other_or_unknown_action",
+      "last_decide_reason": "rune_taken_while_committed",
+      "outcome": "unknown",
+      "owner": "midbot_rune_only",
+      "reason": "mode_ended",
+      "submitted": false
+    },
+    "duration": 0.5666503906300022
+  }
+]

@@ -1,5 +1,33 @@
 # STATUS
 
+## Текущий кандидат v0.3.15 — 2026-11-09
+
+Artem (GPT), T036/T037, PR55: выбран baseline v0.3.12 movement/vision, физически удалён courierROAM эксперимент; PT обычныйcast не блокирует, STR отключён. Stick/Wand сохранены. [Изменения/AC](docs/RECOVERY_PT_v0315.md), [логv0314](docs/probes/9083503375/REPORT.md). xx:45 read-only remote check подтверждён offline, visionLua без правок. Предыдущий игровой тест314 не устранил пользовательские дёрганья; новый315тест ещё требуется. CourierAC/Done/merge не заявлены. Руны — Олег (Kimi), PR53 0dc2e60. Старые разделы ниже исторические.
+
+## Кандидат v0.3.14 — 2026-11-09
+
+Artem (GPT): T036/T037, PR55. ОтозванROAMcourierguard послерегрессауправления,
+исправленоразличие rawPTstates/heroenums, сохраненыWandиward.
+[Разбор9083407516](docs/probes/9083407516/REPORT.md), [протокол](docs/CONTROL_ROLLBACK_v0314.md).
+Новаяигранепроверена, безmerge/Done. ПовторныйRune6мин—Олег (Kimi), PR53.
+
+## Новый кандидат v0.3.13 — 2026-11-09
+
+Artem (GPT): T036(#58)+T037(#59), PR55. PT intent/readback без дребезга,
+боевой Stick/Wand с nominalpotential mana, bounded mid delivery guard в личном
+ROAM all_test (ProposedADR0011). [Описание/тест](docs/RESOURCES_DELIVERY_v0313.md).
+Кандидат без merge/установки/gameAC. Ward0/5/10 v0312 принят пользователем в
+run9082994995; courierAC там не пройден. Руны остаются Олегу (Kimi), PR53.
+
+## Текущий кандидат 2026-11-09
+
+Artem (GPT): T035(#57)+T036(#58), PR55, v0.3.12-ward-recovery. Основные окна
+Observer, minute-recovery с shopstock backoff и all_test SF ITEM-mode без встречи
+курьера. [Варды](docs/VISION_T026.md), [курьер/ограничения](docs/STATIONARY_DELIVERY.md),
+ADR0010 Proposed. Claim сохранён; нужны независимое review и новый clientrun, без merge.
+Олег (Kimi): PR53/T034, head0dc2e60 — southern-rune backoff rotation и rune index
+scan diagnostics. Его policy-файлы Artem (GPT) не изменяет. Старые разделы ниже исторические.
+
 ## Кандидат общей сборки — 2026-11-08
 
 T025 / [Issue50](https://github.com/DOTA2aibot/DotaMidbot/issues/50), owner **Artem (GPT)**, reviewer **Олег (Kimi)**. Подготовлен кандидат v0.3.6-github поверх main0c3bf83 (после PR51): явное tactical-подключение, локальные integration guards и воспроизводимый all_test. [Инструкция и проверки](docs/INTEGRATION_T025.md). Воспроизводятся51 Lua установленной тестовой сборки4850e41a29. Это не подтверждение merge, независимого review, игрового качества или принятия ADR. Задачи и дальнейшие handoff — в канонической Issue50; установка и новый матч здесь не выполнялись.

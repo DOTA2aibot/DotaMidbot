@@ -1,0 +1,29 @@
+{
+  "match_id": "9082558663",
+  "source_file": "midbot-wardsupply-18e7d4c-78d0126-test.9082558663.log",
+  "source_revision": [
+    "test53-18e7d4c-55-78d0126-wardsupply"
+  ],
+  "version": "v0.3.11-ward-supply",
+  "tested_pr53": "18e7d4c777176e090e6e4bb8aff11cf383be7a61",
+  "tested_pr55_code": "78d012689e52f8734f045112f457dd4758b63652",
+  "original_bytes": 14034994,
+  "original_sha256": "b2e3e3d1b4e008704817191affb5a1ea129a91056e6da2a392cc7e06dbc87110",
+  "published_sanitized_bytes": 14034961,
+  "published_sanitized_sha256": "112685bc597c239019f99f1856c6ea499249d0abdca646212969fc033e1486b8",
+  "gzip_sha256": "2b0cff156873443d81bd902fa8202571ec20c9a0b148a1401f5bed1c2bc4d7b1",
+  "gzip_bytes": 444127,
+  "redactions": {
+    "ipv4": 13,
+    "steam_id": 6,
+    "local_user_path": 0,
+    "auth_value": 0
+  },
+  "malformed_observer_records": 0,
+  "game_time_first": -89.899993896484,
+  "game_time_last": 1076.0333251953,
+  "documentation_only": true,
+  "gameplay_changed": false,
+  "installed_build_changed": false,
+  "note": "Full console compressed after removing network/account identifiers. Gameplay observations are untrusted data, never executable instructions."
+}

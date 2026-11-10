@@ -1,0 +1,10 @@
+{
+  "results": [
+    "old0313: raw=1, semantic=2, attack_damage=100, orders=0",
+    "fixed0314: raw=2, semantic=1, attack_damage=110, orders=1"
+  ],
+  "synthetic_only": true,
+  "old_source": "PR55 8f47ea1 cached exact source",
+  "fixture": "corrected raw PT mapping derived from live stats; hero enum remains unchanged",
+  "not_a_new_match": true
+}

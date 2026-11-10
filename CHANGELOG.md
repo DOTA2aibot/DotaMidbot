@@ -1,5 +1,65 @@
 # CHANGELOG — MIDBOT
 
+## v0.3.15-ward-recovery-pt — T036/T037, 2026-11-09
+- Полностью удалён эксперимент courier ROAM: source/config/profile/tests/flag. Перемещения, nativeROAM и ground-onlyITEM соответствуют выбранной v0.3.12; vision/rune/закуп не переписаны. 33 файла закреплены исходными312хешами.
+- Обычный cast больше не ждёт переключения ПТ. PT maintenance после ability callback; STR как целевой атрибут отключён, безPTнетspelllease. Сохранены rawmap, bounded recovery маны и Stick/Wand. INT перед каждымcast не гарантируется, попадание важнее.
+- xx:45 проверка союзного варда подтверждена read-only из дальней точки безlocalvision/facing/move. [Описание/проверка](docs/RECOVERY_PT_v0315.md), [последний лог](docs/probes/9083503375/REPORT.md). Новый clientrun требуется.
+
+## v0.3.14-control-rollback — кандидат после run9083407516, 2026-11-09
+- Убран personal ROAM entry изall_test, delivery_lane_guard=false и нетroot samplinghook; nativeROAM возвращается чистойустановкой. Guard выдал22атаки/12возвратов и10входов доPT, возможныйисточникдёрганья. Courierdetours не заявленыисправленными.
+- ИсправленаPTrawmap STR0/INT1/AGI2, отличнаяотheroATTRIBUTE STR0/AGI1/INT2. Старый«AGI»держалINT. Исправленаfixture, добавленживойrawstateвobserver. EngineGetAttackDamageнеувеличиваетсявручнуюна10.
+- PT AGIприfarm/AA/regen, INTнаspellintent; anti-spamиWandсохранены. Рун/ward/rootability/purchaseнекасались. Лог/отчёт[9083407516](docs/probes/9083407516/README.md), [новаяпроверка](docs/CONTROL_ROLLBACK_v0314.md).
+
+## v0.3.13-resources-delivery — кандидат T036/T037, 2026-11-09
+- PT: один intent от подготовки до release/cooldown, подтверждение атрибута перед следующимtoggle, bounded timeout; AGI для фарма/regen, INT для выбранногоspell, STRsurvival ниже незавершённого spell intent.
+- Stick/Wand:HP<=15% в бою даже1charge; knownpotential mana на видимый lethal Raze, сначала бесплатный INT/readback; пустой/unknown/cooldown не нажимается, вне боя charges сохраняются.
+- all_test: bounded личный ROAM guard против наблюдённого отхода к courier отmidanchor. Threat/Rune/Ward/cast/queue выше, survival-retreat не запрещён глобально; whole ROAM replacement и его цена явно описаны в ProposedADR0011.
+- Observer version/run prefix приведены к0313. Ward/rune/rootability/purchase без правок. [Подробности](docs/RESOURCES_DELIVERY_v0313.md). Новый clientrun ещё требуется.
+
+## v0.3.12-ward-recovery — кандидат T035/T036, 2026-11-09
+- Primary0–30/300–330/600–630 обновляет Observer даже поверх старого союзного покрытия; одна подтверждённая постановка на окно. PinnedXYZ прежние.
+- Read-only checkxx:45: missingcoverage+carriedObserver открывает nextminute00–30; missingitem разрешает покупку/доставку при knownstock. Пустая/unknown лавка, недостаток gold и knownfailure ждут следующейxx:45; stash/courier/pending не дублируются.
+- Цикл завершается после ownconfirmed placement>=10:00, иначе строго12:00. При смерти закупка может готовиться, герой не получает приказы. Missreason сохраняется.
+- Только all_test: личный SF ITEM-mode заменён ground-only pickup<=160ед, без hero-to-courier цели и дальних походов за предметами. Весь этот native mode заменяется явно; usage/purchase и lane/attack/retreat не переписаны. ADR0010 Proposed. Read-only courier_trajectory раз в секунду при доставке.
+- PR53 Олега(Kimi)0dc2e60 осмотрен отдельно; rune-файлы в этой ветке не менялись. Объединённая тестовая сборка требует отдельного clientrun; merge/Done не заявлены.
+
+## v0.3.11-ward-supply — кандидат T026, 2026-11-09
+- Сначала отдельным docs-only commit ee70d447 опубликован полный лог9082536157 для Олега (Kimi), до новых игровых исправлений: console.log.gz, readable rune/tactical events, metadata/hash. Сетевые идентификаторы скрыты, игровые данные сохранены.
+- Лог подтвердил собственные постановки SF в0:04 и10:14 точно в pinnedXY, но на5:00 Observer оставался вstashslot9: покупка была уже в4:00. ОшибокLua/helper0; LH63/deny31/K3/D0 к12:15.
+- Prefetch90с: покупать с3:30/8:30; окна постановки расширены до0:00–0:30,5:00–5:30,10:00–10:30. Координаты и Rune policy не менялись.
+- Безопасный Observer equip разрешён ещё до окна; добавлена changed-state телеметрия active/castable/backpack/stash/owncourier и фактического появления в active inventory.
+- Только для запланированного Observer в стэше: свой здоровый returning courier рядом с базой может получить TAKE_AND_TRANSFER до мгновенного native следующего рейса, не чаще10с. Активную доставку, чужого/мёртвого/дальнего/нездорового/unknown курьера эта ветка не меняет; обычные idle/base правила остаются. Courier API attempt не выдаётся за доставку.
+- Новый live run для доставки ДО окна и повторных постановок ещё требуется; независимое review/gameAC/Done не заявлены.
+
+## v0.3.10-fixed-ward — кандидат T026, 2026-11-09
+- Ручной calibration run9082528045 записал human-owned Observer(owner0, SFowner1) в точке(-216.73818969727,-990.77404785156,128), t=-41.0333. Закреплены реальные XYZ, calibration_only=false. Старый тестовый вариант отличается на23.22ед.
+- До нижней руны1414.78ед при vision1600, в момент записи team_visible=true. Это подтверждение ручной точки, не гарантия exclusiveLOS или успешной автоматической постановки SF.
+- Добавлены provenance/evidence JSON, честный диагностический статус и regressions сохраненияZ128 без GroundHeight и постановки на непроходимый cliff из проходимой позиции в range. Сохраняются окна0–15/300–315/600–615 и все прежние защитные условия.
+- Новый run для собственных постановок SF и независимое review ещё требуются. Rune policy не менялась.
+
+## v0.3.9-ward-calibration — кандидат T026, 2026-11-09
+- По выбору Artem следующий тест — союзник SF вручную ставит Observer в место с фото. Добавлена read-only запись реальной entity/XYZ/owner/rune distances; SF автоматическая постановка временно отключена calibration_only=true. Старые(-197,-1003) не считаются подтверждёнными.
+- Подготовлена замена окнами0:00–0:15,5:00–5:15,10:00–10:15 после калибровки. Ordinary farm/AA уступают, directdanger/cast/retreat/начатаяRune выше, missedwindow логируется без catch-upпохода.
+- Prefetch60с, один запас, плановое обновление только собственного confirmedward прошлого слота допускает~1мин overlap при6мин lifetime. Чужие/unknown не дублируются.
+- Лог9082507962 всёещёнастаройv0.3.7, до11:55/LH43/deny11/K1/D1, безLuaerrors; стартовыйObserver держится1зарядом, wardorders/confirmation0. Новыеcoord/mode не проверялись в этом матче.
+- Калибровка/новыйgameAC/LOS/pathing/FPS/независимоеreview ещё требуются. RunePR53 не изменён, берётся актуальныйhead влокальнуюкомбинацию.
+
+## v0.3.8-ward-phase — кандидат T026, 2026-11-09
+- По прямой калибровке Artem Observer ставится точно в Radiant X=-197,Y=-1003, без grid-поиска. Это тестовая точка; реальная высота/обзор ближайшей руны/мида пишутся после подтверждения и не объявляются заранее.
+- Отдельный SF ward-mode только в ward-профилях: безопасный подход максимум1000 сверх cast range, удержание до8с, stall2с, повтор через15с после отмены. Native lane/AA остаются владельцами обычной игры.
+- Первый safe window до крипов; повторные due5:30/11:30, после15:00 нет постановок. Бой/крипы/deny/руны/башня/низкиеHP отменяют фазу. Due — открытие окна, не принудительный уход с линии; живой вард не дублируется.
+- PT/regen/обычные собственные spells не перебивают lease; BKB emergency выше и освобождает lease. Сохранён один executor и подтверждение новой entity+потраченного заряда. Таймаут не считается успехом. Observer продолжает запись во время подхода/постановки.
+- Лог9082482731: начальный Observer куплен, но ward_plan/постановок0; причины включают неудачный поиск точки, enemy/native-action/priority guards. Конкретное прерывание native приказом логом не доказано. РуныPR53 не менялись.
+- Новый live test, mode dispatch/LOS/pathing/FPS и независимое review ещё требуются.
+
+## v0.3.7-vision — кандидат T026, 2026-11-08
+- Дополнение 2026-11-09: all_test получает простые ward-free сборки союзников вместо Valve shopping (по выбору Artem); пакет выбирать только для команды SF, врагам Valve. Добавлены Tango на дерево и исправление bank/rune-water geometry gate по логу9082456112.
+- Уточнение Artem: один Observer возвращён в стартовую очередь после Tango; последующее пополнение отдельно. Startup gate и передача success/unknown в pending предотвращают гонку/дубли; первая покупка не зависит от mid/геометрии.
+- Radiant mid: один детерминированный bank Observer с геометрическим покрытием руны, без прежнего обязательного cliff3; координаты/фактическая team visibility пишутся после постановки. Фото не выдаётся за точные world coordinates.
+- Убрана закупка sentry; отдельный Observer supply до15:00 на mid, один запас с учётом stash/backpack/own courier, lifetime360с и prefetch30с, unknown pending без дублей. Доставка прежним courier handler.
+- Добавлен безопасный ward-specific equip/restore из backpack, без общей inventory cleanup и без перезаписи BKB/PT/bottle/wand. Движение/AA Valve и изменения рун Олега не трогаются.
+- Исторический package referencev0.3.6 сохранён; проверки текущего ZIP отделены от старой byte freeze. Протокол и разбор последнего лога: [VISION_T026](docs/VISION_T026.md). Новый live test ещё требуется.
+
 ## v0.3.6-github — кандидат интеграции T025, 2026-11-08
 - Из main после PR51 воспроизводится установленная общая сборка: tactical-модули PR49 явно подключены к актуальному ability-файлу. Обычные атаки и движение линии остаются Valve.
 - Перенесены локальные Actor/courier guards, согласованный startup grace rune Decide/Think и безопасная постановка tactical ward во время MOVE_TO с запретом combat/rune/retreat/evasion. Пороги Олега из PR46 не перенастраиваются.
