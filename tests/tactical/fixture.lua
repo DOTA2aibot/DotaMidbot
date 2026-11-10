@@ -96,13 +96,14 @@ local function scenario()
     function bot:Action_UseAbility(a)
         s.orders[#s.orders+1]={kind="self",ability=a.name};
         if a.name=="item_power_treads" then if not s.pt_stuck then a.stat=({[0]=2,[2]=1,[1]=0})[a.stat] end
-        elseif a.name=="item_ward_dispenser" then a.toggle=not a.toggle
+        elseif a.name=="item_ward_dispenser" then -- no-target order is ignored by the client
         elseif a.name:find("item_",1,true)==1 then a.charges=math.max(0,a.charges-1);a.cd=10
         else s.active=a;s.using=true;a.phase=true end;
         if s.action_throw then error("unknown after order") end;
     end;
     function bot:Action_UseAbilityOnEntity(a,target)
-        assert(target==bot);s.orders[#s.orders+1]={kind="entity",ability=a.name};a.charges=math.max(0,a.charges-1);a.cd=10;
+        assert(target==bot);s.orders[#s.orders+1]={kind="entity",ability=a.name};
+        if a.name=="item_ward_dispenser" then a.toggle=not a.toggle else a.charges=math.max(0,a.charges-1);a.cd=10 end;
         if s.action_throw then error("unknown after order") end;
     end;
     function bot:Action_ClearActions(stop)
@@ -112,7 +113,7 @@ local function scenario()
         local k=a.name=="item_ward_observer" and "observer" or a.name=="item_ward_sentry" and "sentry" or (a.toggle and "observer" or "sentry");
         s.orders[#s.orders+1]={kind="ward",ward_kind=k,location=p};
         if k=="observer" then a.charges=a.charges-1 else if a.name=="item_ward_dispenser" then a.secondary=a.secondary-1 else a.charges=a.charges-1 end end;
-        local w=unit(k=="observer" and "npc_dota_observer_wards" or "npc_dota_sentry_wards",2,p.x,p.y);w.id=7;s.wards[#s.wards+1]=w;
+        local w=unit(k=="observer" and "npc_dota_observer_wards" or "npc_dota_sentry_wards",bot:GetTeam(),p.x,p.y);w.id=7;s.wards[#s.wards+1]=w;
     end;
     function bot:Action_MoveDirectly(p) s.orders[#s.orders+1]={kind="face",location=p} end;bot.Action_MoveToLocation=bot.Action_MoveDirectly;
     env.GetBot=function() return bot end;
@@ -127,6 +128,8 @@ local function scenario()
     end;
     function s:mod(name) return env.require("bots/laning/tactical/"..name) end;
     s.config=s:mod("config");s.broker=s:mod("broker");s.state=s.broker.State(bot);
+    -- Existing component suites isolate pre-sequence behaviour; sequence tests explicitly enable the real policy.
+    env.require("bots/laning/vision/config").sentry_first=false;
     function s:item(name,slot,opts)
         opts=opts or {};local item={name=name,charges=opts.charges or 1,secondary=opts.secondary or 0,cd=0,stat=opts.stat or 1,
             toggle=opts.toggle==true,behavior=opts.behavior or 4,special=opts.special or {},range=opts.range or 500};

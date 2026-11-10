@@ -14,6 +14,8 @@ return {
     treads_timeout = 1, treads_max_toggles = 2,
     treads_toggle_interval = .10, treads_intent_s = 1.5, treads_hint_s = .15,
     wand_emergency_hp = .15, finisher_retry_s = 3,
+    wand_trade_charges = 13, stick_trade_charges = 7, wand_trade_min_hp = .55, wand_trade_potential_hp = .80,
+    wand_trade_spend_fraction = .50,
     neutral_reserve_razes = 2, neutral_radius = 950, neutral_face_step = 48, neutral_face_interval = .12,
     ward_min_hp = .70, ward_enemy_radius = 1100, ward_interval_s = 20,
     ward_timeout_s = 3, ward_dedup_radius = 900,
