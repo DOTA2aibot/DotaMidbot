@@ -29,7 +29,7 @@ function M.Tick(bot,s)
         if dire and not C.dire_fixed_location then p=nil end;
         if p then
             local data=geometry(p);data.location=p;data.calibration_only=C.calibration_only==true;
-            data.calibration_source=not dire and C.calibration_source or nil;data.sf_team=U.Call(bot,"GetTeam");
+            data.calibration_source=dire and C.dire_calibration_source or C.calibration_source;data.sf_team=U.Call(bot,"GetTeam");
             data.coordinate_status=data.calibration_source and "human_ward_coordinate_pinned" or "unverified_user_test_point";
             data.photo_match=data.calibration_source and "human_selected_point_not_image_projection" or "not_verified";
             data.plant_validity=data.calibration_source and "manual_placement_in_source_match" or "not_tested";

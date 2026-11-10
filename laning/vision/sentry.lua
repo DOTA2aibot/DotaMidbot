@@ -69,7 +69,9 @@ function M.Check(bot)
     local p,pointReason=M.Point();local pointKey=p and (p.x..":"..p.y) or pointReason;
     if s.pointKey~=pointKey then
         s.pointKey=pointKey;B.Emit(b,"sentry_site_state",{known=p~=nil,location=p,reason=pointReason,
-            source=C.sentry_fixed_location and "fixed" or "river_rune_midpoint"});
+            source=C.sentry_fixed_location and "fixed" or "river_rune_midpoint",
+            height_level_raw=p and U.Global("GetHeightLevel",U.Vector(p)),passable=p and U.Global("IsLocationPassable",U.Vector(p)),
+            calibration_source=C.sentry_fixed_location and C.sentry_calibration_source or nil});
     end;
     if not p then return end;
     local stock=I.Stock(bot,"sentry");if stock and stock.total>0 then s.pending=nil end;
@@ -115,7 +117,10 @@ function M.Candidate(bot)
     if #wards>0 and not (w.primary and w.start>0) then return skip("sentry_already_present") end;
     local idle,why=Idle.Check(bot,p);if not idle then return skip(why) end;
     local height=U.Global("GetHeightLevel",U.Vector(p));
-    if not U.Number(height) or height>1 or U.Global("IsLocationPassable",U.Vector(p))~=true then return skip("invalid_river_point") end;
+    -- Fixed XY is manually calibrated. HeightLevel is not a reliable river classifier: the live river ward returned4.
+    local fixed=U.Point(C.sentry_fixed_location)~=nil;
+    if not U.Number(height) or height<1 or height>5 or (not fixed and height~=1)
+        or U.Global("IsLocationPassable",U.Vector(p))~=true then return skip("invalid_sentry_terrain") end;
     local item=I.Find(bot,"sentry");local stored=false;
     if not item then item=I.Find(bot,"sentry",6,8);stored=item~=nil end;
     local range=U.Call(item,"GetCastRange");

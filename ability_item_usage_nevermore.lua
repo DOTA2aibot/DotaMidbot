@@ -83,10 +83,15 @@ local function Observe( method, ... )
         end;
     end;
 end
-local function TrackedCast( bot, ability, reason )
+local RazeGuard;
+do
+    local ok,mod=pcall(require,GetScriptDirectory().."/laning/tactical/raze");if ok then RazeGuard=mod end;
+end;
+local function TrackedCast( bot, ability, reason, aim )
+    if aim and RazeGuard then RazeGuard.Submitted(bot,ability,aim) end;
     Observe( "BeforeAction", bot, ability );
     bot:Action_UseAbility( ability );
-    Observe( "Action", bot, "cast", ability, nil, reason );
+    Observe( "Action", bot, "cast", ability, aim, reason );
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -588,8 +593,10 @@ function CastRaze( npcBot, razeAbility, vLoc )
 		local vImpact = GetCurrentRazeImpact( npcBot, i );
 		if ( Dist2D( vLoc, vImpact ) <= RAZE_RADIUS - RAZE_HIT_MARGIN )
 		then
+            -- Do not fire while still turning through the hit circle. One fresh stable callback suffices.
+            if RazeGuard and not RazeGuard.Ready(npcBot,razeAbility,vLoc,RAZE_DIST[i],RAZE_RADIUS) then return end;
             faceBurstCount=0;faceBurstStarted=-math.huge;faceBurstUntil=-math.huge;
-			TrackedCast( npcBot, razeAbility, "existing_raze_geometry_verified" );
+			TrackedCast( npcBot, razeAbility, "existing_raze_geometry_verified", vLoc );
 			return;
 		end
 	elseif ( npcBot:IsFacingLocation( vLoc, 5 ) )

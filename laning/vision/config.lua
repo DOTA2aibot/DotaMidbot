@@ -8,8 +8,13 @@ return {
     -- Automatic placement is enabled at the human-selected coordinate.
     calibration_only=false,
     -- Filled only from the next human calibration; never infer either point from SF position.
-    dire_fixed_location=nil, dire_calibration_source=nil, sentry_fixed_location=nil,
-    sentry_use_rune_midpoint=true, -- shared map landmark, validated as walkable river
+    dire_fixed_location={x=-549.09741210938,y=425.63497924805,z=128},
+    dire_calibration_source={match_id="9083785339",owner_id=0,observed_at=-55.966667175293,
+        evidence="live_human_observer_entity",source_line=855},
+    sentry_fixed_location={x=-556.30944824219,y=-290.81549072266,z=0},
+    sentry_calibration_source={match_id="9083785339",owner_id=0,observed_at=-55.966667175293,
+        evidence="live_human_sentry_entity",source_line=856,height_level_raw=4,passable=true},
+    sentry_use_rune_midpoint=false, -- human-selected shared point; midpoint was rejected in317
     sentry_windows={{start=0,finish=30},{start=360,finish=390}}, sentry_duration_s=420,
     support_enabled=true, deward_enabled=true, support_desire=.80,
     support_max_s=8, support_max_approach=1000, support_mid_radius=2200,

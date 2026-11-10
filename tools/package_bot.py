@@ -87,7 +87,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.17-sentry-test', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.18-ward-raze-test', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -98,13 +98,13 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.17-sentry-test / PROFILE: %s
+    readme = '''MIDBOT v0.3.18-ward-raze-test / PROFILE: %s
 
-v0317 TEST CANDIDATE: Sentry uses the shared river-rune midpoint only on validated river terrain.
+v0318 TEST CANDIDATE: Dire Observer and shared Sentry use human-calibrated coordinates.
 Starting Sentry purchase does not require manual coordinate calibration. Windows:0/6min.
-Dire Observer still needs manual calibration; Radiant retains its established point.
-Calibration: as a human ally of Dire SF, plant Observer on the desired cliff, wait10s,
-then retain the console log. Raze turn streams are bounded; aligned casts do not wait.
+Dire Observer and shared Sentry were calibrated in match9083785339. Radiant point is preserved.
+Raze requires a fresh stable facing sample; only an owned active cast may be cancelled on drift.
+Submission/phase/release geometry is logged; hit rate still requires a new Dota match.
 No new Stick/Wand/PT changes beyond the previously prepared0316 logic.
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.

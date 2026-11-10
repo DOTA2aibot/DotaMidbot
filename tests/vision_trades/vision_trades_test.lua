@@ -11,6 +11,8 @@ local function scenario()
     s.bot.ActionImmediate_PurchaseItem=function(_,name) s.buy[#s.buy+1]=name;return s.buy_result end;s.buy_result=0;
     local p=s.env.require('bots/laning/profile');p.wards_enabled=true;p.ward_phase_enabled=true;p.runtime_enabled=false;
     s.v=s.env.require('bots/laning/vision/config');s.v.calibration_only=false;s.v.sentry_use_rune_midpoint=false;
+    s.calibrated={dire=s.v.dire_fixed_location,sentry=s.v.sentry_fixed_location,source=s.v.sentry_calibration_source};
+    s.v.dire_fixed_location=nil;s.v.sentry_fixed_location=nil;
     function s:vmod(name) return self.env.require('bots/laning/vision/'..name) end;
     s.sentry=s:vmod('sentry');s.service=s:vmod('service');s.deward=s:vmod('deward');
     s.state=s.broker.State(s.bot);
@@ -159,7 +161,8 @@ test('actual bound root can turn a declined ordinary Raze into a safe charged-Wa
     local root=assert(loadfile(CURRENT_OWNER_SOURCE));setfenv(root,s.env);root();s.env.require=require;
     s.env.ConsiderRazeOnHero=function() return 0 end;s.env.ConsiderRazeOnCreeps=function() return 0 end;s.env.ConsiderFeastOfSouls=function() return 0 end;
     assert(s:mod('entry').BindLegacy(s.env));
-    s.env.AbilityUsageThink();assert(#s.orders==1,table.concat(s.logs,'\n'));eq(s.orders[1].ability,'nevermore_shadowraze1');
+    s.env.AbilityUsageThink();eq(#s.orders,0);s:advance(.033);s.env.AbilityUsageThink();
+    assert(#s.orders==1,table.concat(s.logs,'\n'));eq(s.orders[1].ability,'nevermore_shadowraze1');
 end);
 test('basic Stick also spends7charges in a useful combat trade',function()
     local s=scenario();s:item('item_magic_stick',0,{charges=7,special={restore_per_charge=15}});s.hp=850;
@@ -181,9 +184,9 @@ test('foreign placement without our charge consumption is not accepted',function
     s.bot.Action_UseAbilityOnLocation=function() local w=s.unit('npc_dota_sentry_wards',2,0,0);w.id=0;s.wards={w} end;
     s.sentry.Execute(s.bot,s.state,job);eq(s.sentry.Poll(s.bot,s.state,job),false);eq(s.sentry.Candidate(s.bot),nil);
 end);
-test('high ground or unwalkable Sentry coordinate cannot cause placement',function()
-    for _,why in ipairs({'high','blocked'}) do local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);
-        if why=='high' then s.env.GetHeightLevel=function() return 3 end else s.env.IsLocationPassable=function() return false end end;
+test('unknown terrain or unwalkable Sentry coordinate cannot cause placement',function()
+    for _,why in ipairs({'unknown','blocked'}) do local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);
+        if why=='unknown' then s.env.GetHeightLevel=function() return nil end else s.env.IsLocationPassable=function() return false end end;
         eq(s.sentry.Candidate(s.bot),nil);eq(#s.orders,0);
     end;
 end);
@@ -277,4 +280,20 @@ test('unknown landmarks or non-river midpoint disable placement but not starting
         eq(s.sentry.Point(),nil);eq(s.sentry.Candidate(s.bot),nil);eq(s.sentry.TryStartup(s.bot),true);eq(s.buy[1],'item_ward_sentry');
     end;
 end);
-print('VISION_TRADES PASSED '..n..' cases (new game/calibration still required)');
+test('manual calibration pins Dire Observer and one identical Sentry for both sides',function()
+    local s=scenario();eq(s.calibrated.dire.x,-549.09741210938);eq(s.calibrated.dire.y,425.63497924805);
+    eq(s.calibrated.sentry.x,-556.30944824219);eq(s.calibrated.sentry.y,-290.81549072266);
+    eq(s.calibrated.source.match_id,'9083785339');eq(s.calibrated.source.source_line,856);
+    for _,team in ipairs({2,3}) do
+        local t=scenario();t.bot.team=team;t.bot.x=-600;t.bot.y=-300;t.v.sentry_fixed_location=t.calibrated.sentry;
+        t.env.GetHeightLevel=function() return 4 end;t.env.IsLocationPassable=function() return true end;t:item('item_ward_sentry',0);
+        local job=t.sentry.Candidate(t.bot);assert(job);eq(job.location.x,s.calibrated.sentry.x);
+        t.sentry.Execute(t.bot,t.state,job);eq(t.orders[1].ward_kind,'sentry');eq(t.orders[1].location.y,s.calibrated.sentry.y);
+        eq(t.sentry.Poll(t.bot,t.state,job),true);
+    end;
+end);
+test('fixed human Sentry does not depend on rune landmarks or river height guesses',function()
+    local s=scenario();s.v.sentry_fixed_location=s.calibrated.sentry;s.env.GetRuneSpawnLocation=function() error('not needed') end;
+    local p=s.sentry.Point();eq(p.x,-556.30944824219);eq(p.z,0);eq(#s.orders,0);
+end);
+print('VISION_TRADES PASSED '..n..' cases (new automatic placement game still required)');

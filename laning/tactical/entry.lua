@@ -2,6 +2,7 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Q=require(GetScriptDirectory().."/laning/tactical/requiem");
+local Raze=require(GetScriptDirectory().."/laning/tactical/raze");
 local Resources=require(GetScriptDirectory().."/laning/tactical/resources");
 local Finisher=require(GetScriptDirectory().."/laning/tactical/finisher");
 local Trades=require(GetScriptDirectory().."/laning/tactical/trades");
@@ -22,7 +23,9 @@ local function fail(s,where,err)
 end;
 local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_until or -math.huge) end;
 local function tick(bot,s)
-    B.Poll(bot,s);Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
+    B.Poll(bot,s);
+    if enabled(s) and Raze.Poll(bot,s) then return true end;
+    Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
     if Threat.Tick(bot,s) then Phase.Leave(bot,"emergency_bkb");return true end;
     if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;
