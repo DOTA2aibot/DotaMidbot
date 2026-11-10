@@ -80,9 +80,13 @@ function M.Check(bot)
     local wards,unknown=I.Allied("sentry",p,C.dedup_radius);s.recovery=nil;
     local nextMinute=(minute+1)*60;
     if wards and #wards==0 and nextMinute<C.recovery_end_s then s.recovery={key="sentry-recovery:"..nextMinute,start=nextMinute,finish=nextMinute+30} end;
+    local reason=unknown or (wards and #wards>0 and "coverage_present")
+        or (not stock and "owned_stock_unknown")
+        or (stock and stock.active+stock.backpack>0 and "carried_recovery_scheduled")
+        or (stock and stock.total>0 and "already_in_stash_or_courier") or "purchase_needed";
     B.Emit(b,"sentry_recovery_check",{present=wards and #wards>0 or false,known=wards~=nil,reason=unknown,
         active=stock and stock.active,carried=stock and stock.backpack,stash=stock and stock.stash,courier=stock and stock.courier,
-        next_check=(minute+1)*60+45,next_window=s.recovery and s.recovery.start});
+        next_check=(minute+1)*60+45,next_window=s.recovery and s.recovery.start,decision=reason});
 end;
 function M.TryPurchase(bot)
     M.Check(bot);if not M.Enabled(bot) or not M.Point() then return false end;
@@ -111,11 +115,12 @@ function M.Candidate(bot)
         if s.skipReason~=reason then s.skipReason=reason;B.Emit(b,"sentry_plan_skip",{reason=reason}) end;
     end;
     local w=window(now,s,false);if not w then return skip("outside_or_completed_window") end;
-    if s.deferred_window==w.key then return skip("deferred_to_next_window") end;
+    if now<(s.retry_after or -math.huge) then return skip("retry_wait") end;
+    if s.attempt_window==w.key and (s.window_attempts or 0)>=C.sentry_attempts_per_window then return skip("window_attempt_budget") end;
     local wards=I.Allied("sentry",p,C.dedup_radius);
     if not wards then return skip("allied_ward_api_unknown") end;
     if #wards>0 and not (w.primary and w.start>0) then return skip("sentry_already_present") end;
-    local idle,why=Idle.Check(bot,p);if not idle then return skip(why) end;
+    local idle,why=Idle.Check(bot,p,nil,false,"sentry");if not idle then return skip(why) end;
     local height=U.Global("GetHeightLevel",U.Vector(p));
     -- Fixed XY is manually calibrated. HeightLevel is not a reliable river classifier: the live river ward returned4.
     local fixed=U.Point(C.sentry_fixed_location)~=nil;
@@ -130,7 +135,19 @@ function M.Candidate(bot)
     return {kind="sentry",location=p,window=w,item=item,range=range,prior=wards,started=now,deadline=math.min(now+C.support_max_s,w.finish)};
 end;
 function M.Defer(bot,job)
-    local s=state(bot);if s and job then s.deferred_window=job.window.key end;
+    local s=state(bot);if s and job then s.retry_after=U.Now()+C.sentry_retry_s end;
+end;
+function M.Started(bot,job)
+    local s=state(bot);if not s then return end;
+    if s.attempt_window~=job.window.key then s.attempt_window=job.window.key;s.window_attempts=0 end;
+    s.window_attempts=s.window_attempts+1;
+end;
+function M.WaitingToggle(bot,job)
+    if not job or not job.toggle_pending or U.Now()>=job.toggle_after then return false end;
+    local active=U.Call(bot,"GetCurrentActiveAbility");
+    if active~=nil and active~=job.item then return false end;
+    for _,key in ipairs({"IsChanneling","IsStunned","IsHexed","IsMuted"}) do if U.Call(bot,key)~=false then return false end end;
+    return true;
 end;
 local function equip(bot,b)
     local item=I.Find(bot,"sentry");if item then return item end;
@@ -157,6 +174,7 @@ function M.Restore(bot,b)
 end;
 function M.Execute(bot,b,job)
     if job.pending then return end;
+    if M.WaitingToggle(bot,job) then return end;
     local item=equip(bot,b);if not B.Free(b) or not U.Ready(item) then return end;
     job.item=item;job.range=U.Call(item,"GetCastRange");if not U.Number(job.range) then return end;
     local name=U.Call(item,"GetName");
@@ -165,7 +183,8 @@ function M.Execute(bot,b,job)
         if toggle then
             if (job.toggles or 0)>=2 or U.Now()<(job.toggle_after or -math.huge) then return end;
             job.toggles=(job.toggles or 0)+1;job.toggle_after=U.Now()+.5;
-            B.Fire(bot,b,"ward_mode_toggle",item,"select_sentry",function() return bot:Action_UseAbility(item) end,false);return;
+            if B.Fire(bot,b,"ward_mode_toggle",item,"select_sentry",function() return bot:Action_UseAbility(item) end,false) then job.toggle_pending=true end;
+            return;
         end;
     end;
     if U.Distance(U.Pos(bot),job.location)>job.range-25 then Idle.Step(bot,b,job.location,job.range-25,"sentry_window");return end;

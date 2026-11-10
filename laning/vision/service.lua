@@ -32,8 +32,8 @@ function M.Holds(bot,b)
     elseif U.Call(bot,"GetActiveMode")~=BOT_MODE_WARD then why="mode_preempted"
     elseif job.kind=="deward" and not Deward.Valid(bot,job.target) then why="target_hidden_or_unavailable"
     else
-        local awaiting=job.kind=="sentry" and job.pending and U.Now()-job.pending<3;
-        local ok,reason=Idle.Check(bot,job.location,job.kind=="deward" and job.target or nil,awaiting);
+        local awaiting=job.kind=="sentry" and ((job.pending and U.Now()-job.pending<3) or Sentry.WaitingToggle(bot,job));
+        local ok,reason=Idle.Check(bot,job.location,job.kind=="deward" and job.target or nil,awaiting,job.kind);
         if not ok then why=reason end;
     end;
     if why then M.Leave(bot,why);return false end;return true;
@@ -52,7 +52,10 @@ end;
 function M.Start(bot)
     local b=B.State(bot);if not b then return end;
     local job=candidate(bot,b);
-    if job then b.vision_support=job;B.Emit(b,"vision_support_start",{kind=job.kind,location=job.location,deadline=job.deadline});return end;
+    if job then
+        if job.kind=="sentry" then Sentry.Started(bot,job) end;
+        b.vision_support=job;B.Emit(b,"vision_support_start",{kind=job.kind,location=job.location,deadline=job.deadline});return;
+    end;
     Phase.Start(bot);
 end;
 function M.Think(bot)

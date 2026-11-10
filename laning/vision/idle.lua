@@ -2,7 +2,7 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/vision/config");
 local Site=require(GetScriptDirectory().."/laning/vision/site");
 local M={};
-function M.Check(bot,goal,ownTarget,awaitingOwnWard)
+function M.Check(bot,goal,ownTarget,awaitingOwnWard,taskKind)
     if not Site.Participant(bot) or U.Call(bot,"IsAlive")~=true or (not awaitingOwnWard and not U.CanUse(bot)) then return false,"busy" end;
     local p=U.Pos(bot);local mid=U.Point(U.Global("GetLocationAlongLane",LANE_MID,.5));
     if not p or not mid or U.Distance(p,mid)>C.support_mid_radius or not goal then return false,"not_mid" end;
@@ -20,14 +20,24 @@ function M.Check(bot,goal,ownTarget,awaitingOwnWard)
     local towers=U.Call(bot,"GetNearbyTowers",1599,true);
     if type(enemies)~="table" or type(towers)~="table" then return false,"safety_unknown" end;
     for _,e in ipairs(enemies) do if U.Visible(e) and math.min(U.Distance(p,U.Pos(e)),U.Distance(goal,U.Pos(e)))<=C.support_enemy_radius then return false,"hero_priority" end end;
+    local farmRadius=taskKind=="sentry" and C.sentry_farm_radius or C.support_creep_radius;
     for _,enemy in ipairs({true,false}) do
-        local creeps=U.Call(bot,"GetNearbyLaneCreeps",C.support_creep_radius,enemy);
+        local creeps=U.Call(bot,"GetNearbyLaneCreeps",farmRadius,enemy);
         if type(creeps)~="table" then return false,"creeps_unknown" end;
-        for _,c in ipairs(creeps) do if U.Visible(c) then return false,"lane_farm_priority" end end;
+        for _,c in ipairs(creeps) do if U.Visible(c) then
+            if taskKind~="sentry" then return false,"lane_farm_priority" end;
+            local distance=U.Distance(p,U.Pos(c));
+            if enemy and distance<=farmRadius then return false,"lane_farm_priority" end;
+            if not enemy then
+                local range=U.Call(bot,"GetAttackRange");local hp=U.Call(c,"GetHealth");local maxhp=U.Call(c,"GetMaxHealth");
+                if not U.Number(range) or not U.Number(hp) or not U.Number(maxhp) or maxhp<=0 then return false,"deny_safety_unknown" end;
+                if distance<=range+75 and hp<=maxhp*.5 then return false,"lane_deny_priority" end;
+            end;
+        end end;
     end;
-    local neutrals=U.Call(bot,"GetNearbyNeutralCreeps",C.support_creep_radius);
+    local neutrals=U.Call(bot,"GetNearbyNeutralCreeps",farmRadius);
     if type(neutrals)~="table" then return false,"neutrals_unknown" end;
-    for _,creep in ipairs(neutrals) do if U.Visible(creep) then return false,"neutral_farm_priority" end end;
+    for _,creep in ipairs(neutrals) do if U.Visible(creep) and (taskKind~="sentry" or U.Distance(p,U.Pos(creep))<=farmRadius) then return false,"neutral_farm_priority" end end;
     for _,t in ipairs(towers) do if U.Visible(t) then
         local range=U.Call(t,"GetAttackRange");local q=U.Pos(t);
         if not U.Number(range) or not q then return false,"tower_unknown" end;

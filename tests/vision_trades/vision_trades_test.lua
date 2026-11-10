@@ -296,4 +296,66 @@ test('fixed human Sentry does not depend on rune landmarks or river height guess
     local s=scenario();s.v.sentry_fixed_location=s.calibrated.sentry;s.env.GetRuneSpawnLocation=function() error('not needed') end;
     local p=s.sentry.Point();eq(p.x,-556.30944824219);eq(p.z,0);eq(#s.orders,0);
 end);
+test('owned dispenser toggle phase does not abort a Sentry job as busy',function()
+    local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};
+    local item=s:item('item_ward_dispenser',0,{charges=1,secondary=1,toggle=true});
+    local original=s.bot.Action_UseAbility;
+    s.bot.Action_UseAbility=function(bot,a) original(bot,a);s.using=true;s.active=a;s.queued=1 end;
+    s.service.Start(s.bot);s.mode=20;s.service.Think(s.bot);eq(#s.orders,1);assert(s.state.vision_support);
+    for i=1,4 do s:advance(.08);eq(s.service.Holds(s.bot,s.state),true);s.service.Think(s.bot) end;
+    eq(#s.orders,1);s.using=false;s.active=nil;s.queued=0;s:advance(.3);
+    s.service.Think(s.bot);eq(#s.orders,2);eq(s.orders[2].ward_kind,'sentry');
+    s:advance(.033);s.service.Poll(s.bot,s.state);eq(s.state.vision_support,nil);
+end);
+test('toggle grace never shields another spell disabling effect or permanent busy state',function()
+    for _,why in ipairs({'other','stun','expired'}) do
+        local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};
+        local item=s:item('item_ward_dispenser',0,{charges=1,secondary=1,toggle=true});
+        s.service.Start(s.bot);s.mode=20;s.service.Think(s.bot);s.using=true;s.active=item;
+        if why=='other' then s.active=s.abilities.nevermore_shadowraze3 elseif why=='stun' then s.stunned=true end;
+        s:advance(why=='expired' and .6 or .033);eq(s.service.Holds(s.bot,s.state),false);eq(#s.orders,1);
+    end;
+end);
+test('preempted Sentry can resume later in the same window without interrupting farm',function()
+    local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);s.time=45;
+    s.sentry.Check(s.bot);s.time=60;s.service.Start(s.bot);s.mode=20;
+    s.creeps={s.unit('npc_dota_creep_badguys_melee',3,100,0)};
+    eq(s.service.Holds(s.bot,s.state),false);eq(#s.orders,0);s.creeps={};
+    s:advance(1);eq(s.sentry.Candidate(s.bot),nil);s:advance(2.1);assert(s.sentry.Candidate(s.bot));
+    s.service.Start(s.bot);s.service.Think(s.bot);eq(s.orders[1].ward_kind,'sentry');
+end);
+test('retry budget bounds starts within one window and resets in the next minute',function()
+    local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);s.time=45;s.sentry.Check(s.bot);s.time=60;
+    for i=1,3 do s.service.Start(s.bot);assert(s.state.vision_support);s.service.Leave(s.bot,'mode_preempted');s:advance(3.1) end;
+    eq(s.sentry.Candidate(s.bot),nil);s.time=105;s.sentry.Check(s.bot);s.time=120;assert(s.sentry.Candidate(s.bot));eq(#s.orders,0);
+end);
+test('Sentry allows a pushed distant wave and healthy allies but preserves reachable farm and deny',function()
+    for _,why in ipairs({'far_enemy','healthy_ally','enemy','deny','neutral'}) do
+        local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);
+        local enemy,allies={},{};
+        if why=='far_enemy' or why=='enemy' then enemy={s.unit('npc_dota_creep_badguys_melee',3,why=='far_enemy' and 1300 or 600,0)} end;
+        if why=='healthy_ally' or why=='deny' then local c=s.unit('npc_dota_creep_goodguys_melee',2,300,0);c.hp=why=='deny' and 300 or 1000;allies={c} end;
+        s.bot.GetNearbyLaneCreeps=function(_,radius,opposing) return opposing and enemy or allies end;
+        if why=='neutral' then s.neutrals={s.unit('npc_dota_neutral_centaur_khan',4,600,0)} end;
+        local job=s.sentry.Candidate(s.bot);
+        if why=='far_enemy' or why=='healthy_ally' then assert(job) else eq(job,nil) end;
+        eq(#s.orders,0);
+    end;
+end);
+test('lost or missed Sentry schedules next minute while present coverage does not',function()
+    for _,team in ipairs({2,3}) do
+        local s=scenario();s.bot.team=team;s.v.sentry_fixed_location={x=0,y=0,z=0};s:item('item_ward_sentry',0);
+        s.hp=0;s.time=45;s.sentry.Check(s.bot);s.hp=1000;s.time=60;assert(s.sentry.Candidate(s.bot));
+        s.wards={s.unit('npc_dota_sentry_wards',team,0,0)};s.time=105;s.sentry.Check(s.bot);s.time=120;eq(s.sentry.Candidate(s.bot),nil);
+        s.wards={};s.time=165;s.sentry.Check(s.bot);s.time=180;assert(s.sentry.Candidate(s.bot));eq(#s.orders,0);
+    end;
+end);
+test('recovery purchase waits for affordable stock and credits courier stock without duplicate orders',function()
+    local s=scenario();s.v.sentry_fixed_location={x=0,y=0,z=0};s.time=45;s.gold=49;
+    eq(s.sentry.TryPurchase(s.bot),false);s.time=60;s.gold=50;eq(s.sentry.TryPurchase(s.bot),false);eq(#s.buy,0);
+    s.time=105;s.shop=0;eq(s.sentry.TryPurchase(s.bot),false);s.time=165;s.shop=2;eq(s.sentry.TryPurchase(s.bot),true);eq(#s.buy,1);
+    local it=s:item('item_ward_sentry',9);s.items[9]=nil;s.env.GetNumCouriers=function() return 1 end;
+    s.env.GetCourier=function() return {GetPlayerID=function() return 7 end,GetItemInSlot=function(_,slot) return slot==0 and it or nil end} end;
+    s.time=225;eq(s.sentry.TryPurchase(s.bot),false);eq(#s.buy,1);
+end);
 print('VISION_TRADES PASSED '..n..' cases (new automatic placement game still required)');
