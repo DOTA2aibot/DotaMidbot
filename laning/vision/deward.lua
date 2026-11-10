@@ -52,9 +52,11 @@ function M.Execute(bot,b,job)
         elseif U.Now()-job.sent_at<C.deward_attack_timeout_s then return end;
         job.waiting=nil;
     end;
-    if job.attempts>=C.deward_max_attempts then return end;
+    if job.attempts>=(job.max_attempts or C.deward_max_attempts) then return end;
     local p=U.Pos(job.target);if not p then return end;job.location=p;
-    if U.Distance(U.Pos(bot),p)>job.range-25 then Idle.Step(bot,b,p,job.range-25,"deward_window");return end;
+    local distance=U.Distance(U.Pos(bot),p);
+    if job.no_chase then if distance>job.range then return end;
+    elseif distance>job.range-25 then Idle.Step(bot,b,p,job.range-25,"deward_window");return end;
     job.before_hp=hp;
     if B.Fire(bot,b,"deward_attack",nil,"visible_enemy_ward",function() return bot:Action_AttackUnit(job.target,true) end,false) then
         job.waiting=true;job.sent_at=U.Now();job.attempts=job.attempts+1;

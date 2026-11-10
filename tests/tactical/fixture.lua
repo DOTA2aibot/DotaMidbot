@@ -127,6 +127,8 @@ local function scenario()
     end;
     function s:mod(name) return env.require("bots/laning/tactical/"..name) end;
     s.config=s:mod("config");s.broker=s:mod("broker");s.state=s.broker.State(bot);
+    -- Existing component suites isolate pre-sequence behaviour; sequence tests explicitly enable the real policy.
+    env.require("bots/laning/vision/config").sentry_first=false;
     function s:item(name,slot,opts)
         opts=opts or {};local item={name=name,charges=opts.charges or 1,secondary=opts.secondary or 0,cd=0,stat=opts.stat or 1,
             toggle=opts.toggle==true,behavior=opts.behavior or 4,special=opts.special or {},range=opts.range or 500};

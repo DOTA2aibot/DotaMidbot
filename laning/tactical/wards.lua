@@ -7,6 +7,7 @@ local Inventory=require(GetScriptDirectory().."/laning/vision/inventory");
 local Phase=require(GetScriptDirectory().."/laning/vision/phase");
 local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local VisionConfig=require(GetScriptDirectory().."/laning/vision/config");
+local Sequence=require(GetScriptDirectory().."/laning/vision/sequence");
 local M={};
 local function height(p) if not p then return nil end;local h=U.Global("GetHeightLevel",U.Vector(p));if U.Number(h) and h>=1 and h<=5 then return h end end;
 local function kind(name)
@@ -76,6 +77,7 @@ function M.Plan(bot,phase)
         end end;return true;
     end;
     if Site.Participant(bot) then
+        local allowed,why=Sequence.ObserverAllowed(bot);if not allowed then return nil,why end;
         local spot,why=Site.Get(bot);if not spot then return nil,why end;
         if not item.observer then return nil,"fixed_observer_not_in_active_inventory" end;
         local exists,unknown=Site.Existing(spot);if unknown then return nil,unknown end;
@@ -191,6 +193,7 @@ function M.Tick(bot,s)
         end;
         s.ward_toggle={item=p.item,wanted=p.kind,tries=old and old.tries+1 or 1,
             primary=U.Call(p.item,"GetCurrentCharges"),secondary=U.Call(p.item,"GetSecondaryCharges")};
+        s.observer_toggle_wait={item=p.item,toggle_pending=true,toggle_after=U.Now()+.5};
         return B.Fire(bot,s,"ward_mode_toggle",p.item,"select_"..p.kind,function() return bot:Action_UseAbility(p.item) end,false);
     end;
     p.vision_slot=s.vision_phase and s.vision_phase.slot;

@@ -8,6 +8,8 @@ local Site=require(GetScriptDirectory().."/laning/vision/site");
 local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local Supply=require(GetScriptDirectory().."/laning/vision/supply");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
+local Sequence=require(GetScriptDirectory().."/laning/vision/sequence");
+local Idle=require(GetScriptDirectory().."/laning/vision/idle");
 local M={};
 function M.Enabled(bot)
     return C.calibration_only~=true and Profile.ward_phase_enabled==true and Profile.runtime_enabled~=true
@@ -38,10 +40,15 @@ local function safety(bot,s,spot,owned)
         or (BOT_MODE_EVASIVE_MANEUVERS~=nil and mode==BOT_MODE_EVASIVE_MANEUVERS) then return "priority_mode" end;
     for _,k in ipairs({"IsStunned","IsHexed","IsMuted"}) do if U.Call(bot,k)~=false then return "disabled" end end;
     -- An owned ward cast may be using an ability; let its readback finish.
-    if not (owned and s.ward_pending) then
+    local ownTransition=owned and (s.ward_pending or Sequence.ObserverTransition(bot,s));
+    if not ownTransition then
         if not U.CanUse(bot) then return "busy" end;
         local a=U.Call(bot,"GetCurrentActionType");
         if a~=BOT_ACTION_TYPE_IDLE and a~=BOT_ACTION_TYPE_NONE and a~=BOT_ACTION_TYPE_MOVE_TO and a~=BOT_ACTION_TYPE_ATTACK then return "native_action" end;
+    end;
+    if Sequence.Enabled(bot) then
+        local safe,why=Idle.Check(bot,spot.location,nil,ownTransition,"sentry");
+        if not safe then return why end;
     end;
     local p=U.Pos(bot);
     local enemies=U.Call(bot,"GetNearbyHeroes",1599,true,BOT_MODE_NONE);
@@ -72,6 +79,7 @@ local function candidate(bot,s)
     if not M.Enabled(bot) or BOT_MODE_WARD==nil then return skip(s,"profile_or_mode_disabled") end;
     local now=U.Now();local window=Schedule.Window(now,s);local slot=window and window.slot;
     if slot==nil or Schedule.Completed(s,window) then return skip(s,"schedule_complete") end;
+    local allowed,why=Sequence.ObserverAllowed(bot);if not allowed then return skip(s,why) end;
     if now<(s.vision_phase_retry or -math.huge) then return nil,"retry_wait" end;
     if s.ward_pending or s.ward_disabled then return skip(s,"ward_unconfirmed_or_disabled") end;
     local spot,why=Site.Get(bot);if not spot then return skip(s,why) end;
@@ -94,6 +102,8 @@ function M.Holds(bot,s)
     elseif p.awaiting_ward and not s.ward_pending then reason="placement_unconfirmed"
     elseif not s.ward_pending and Schedule.Slot(U.Now(),s)~=p.slot then reason="window_closed"
     elseif U.Now()>=p.deadline then reason="timeout"
+    elseif not s.ward_pending then
+        local allowed,why=Sequence.ObserverAllowed(bot);if not allowed then reason=why else reason=safety(bot,s,p.spot,true) end;
     else reason=safety(bot,s,p.spot,true) end;
     if reason then M.Leave(bot,reason);return false end;
     return true;
@@ -126,7 +136,7 @@ end;
 function M.Think(bot)
     local s=B.State(bot);if not M.Holds(bot,s) or not B.Free(s) then return end;
     local p=s.vision_phase;
-    if s.ward_pending then return end;
+    if s.ward_pending or Sequence.ObserverTransition(bot,s) then return end;
     local exists,unknown=Site.Existing(p.spot);
     if unknown or (exists and not Supply.CanReplace(bot,exists,p.window)) then M.Leave(bot,unknown or "observer_already_present");return end;
     local item,range=ready(bot);

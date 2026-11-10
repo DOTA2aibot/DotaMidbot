@@ -19,6 +19,7 @@ return {
     support_enabled=true, deward_enabled=true, support_desire=.80,
     support_max_s=8, support_max_approach=1000, support_mid_radius=2200,
     sentry_retry_s=3, sentry_attempts_per_window=3, sentry_farm_radius=950,
+    sentry_first=true, sentry_followup_s=5, sentry_reveal_grace_s=.35, sentry_enemy_site_radius=350,
     support_enemy_radius=1100, support_creep_radius=1500, support_move_interval_s=.6,
     deward_expected_hits=2, deward_attack_timeout_s=2.5, deward_max_attempts=4,
     windows={{start=0,finish=30},{start=300,finish=330},{start=600,finish=630}},
