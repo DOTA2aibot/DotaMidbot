@@ -13,7 +13,7 @@ local function scenario( disabled )
     env.BOT_ACTION_TYPE_PICK_UP_RUNE = 8;
     env.RUNE_POWERUP_1, env.RUNE_POWERUP_2, env.RUNE_STATUS_AVAILABLE, env.PURCHASE_ITEM_SUCCESS = 0, 1, 1, 0;
     env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 2000, y = 0 } end;
-    env.GetRuneStatus = function() return s.status or 1 end;
+    env.GetRuneStatus = function( rune ) return ( s.status_map and s.status_map[rune] ) or s.status or 1 end;
     env.IsLocationVisible = function() return s.visible end;
     env.IsLocationPassable = function() return s.passable end;
     env.GetNumCouriers = function() return #s.couriers end;
@@ -178,10 +178,40 @@ test( "wave, combat, retreat and target hero outrank rune", function()
     s.mode = 1; s.target = s:unit(); eq( s.rune_policy.GetDesire( s.bot ), 0 );
 end );
 test( "distant, unseen, missing and impassable rune are never pursued", function()
-    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 1300, y = 0 } end; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- 1300 > rune_distance 1100
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 2400, y = 0 } end; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- T025: 2400 > rune_distance 2200
     local t = scenario(); t.visible = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.visible = true; t.status = 2; eq( t.rune_policy.GetDesire( t.bot ), 0 );
     t.status = 1; t.passable = false; eq( t.rune_policy.GetDesire( t.bot ), 0 );
+end );
+test( "missing rune spawn API reports spawn_location_unknown, not none_checked", function()
+    -- T026 (review GPT PR53): при nil-координатах причина терялась, в лог
+    -- уходило немое none_checked:d=? — диагностика теряла смысл.
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return nil end;
+    local plan, reason = s.rune_policy.Decide( s.bot );
+    eq( plan, nil ); eq( reason, "no_nearby_river_rune:spawn_location_unknown:d=?" );
+end );
+test( "empty bottle and low mana always pursue a potential rune", function()
+    -- T027 (Олег 09.11): 0 зарядов бутылки + маны < 90 + потенциальная руна = идём.
+    local s = scenario(); s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    s.time = 460; s.visible = false; -- tmod=100: раньше обычного слепого окна
+    local plan, reason = s.rune_policy.Decide( s.bot ); assert( plan ); eq( plan.desire, .85 );
+    eq( reason, "bottle_empty_rune_run" );
+    s.time = 1000; assert( s.rune_policy.Decide( s.bot ) ); -- cap 15 минут не действует
+    s.mana = 200; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- мана есть: не desperate, окно закрыто
+end );
+test( "empty bottle run ignores close creeps but respects danger and taken runes", function()
+    local s = scenario(); s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    s.creeps = { s:unit() }; -- вплотную: обычно блокирует
+    assert( s.rune_policy.Decide( s.bot ) ); -- desperate: крипы не блокируют
+    s.enemies = { s:unit() }; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- враг рядом: опасность блокирует
+    s.enemies = {}; s.status = 3; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- руну забрали на глазах
+end );
+test( "empty bottle extends the rune search distance", function()
+    local s = scenario(); s.env.GetRuneSpawnLocation = function() return { x = 2400, y = 0 } end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- 2400 > 2200
+    s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
+    assert( s.rune_policy.Decide( s.bot ) ); -- 2400 <= 3500
+    s.items[0] = s:item( "item_bottle", 3 ); eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- полная бутылка: обычный лимит
 end );
 test( "blind power rune window pursues unseen rune after six minutes", function()
     local s = scenario(); s.time = 370; s.visible = false; s.status = 3; -- окно 6:05-6:45, руна не видна

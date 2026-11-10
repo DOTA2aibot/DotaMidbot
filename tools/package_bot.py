@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
+GENERIC_RUNE_ENTRY = 'mode_rune_generic.lua'
 ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
 WARD_ENTRY = 'mode_ward_nevermore.lua'
 ITEM_ENTRY = 'mode_item_nevermore.lua'
@@ -78,6 +79,12 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         below(source, root)
         files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
         files[ITEM_ENTRY] = (root / 'profiles/all_test' / ITEM_ENTRY).read_bytes()
+        # T025 (Олег 09.11): чистый тест рун — глушим rune mode у дефолтных
+        # ботов (союзников и врагов), чтобы они не воровали руны у нашего SF.
+        # У nevermore персональный файл приоритетнее generic — он не затронут.
+        source = root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY
+        below(source, root)
+        files[GENERIC_RUNE_ENTRY] = source.read_bytes()
     if profile in WARD_PROFILES:
         files[WARD_ENTRY] = (root / 'profiles/vision' / WARD_ENTRY).read_bytes()
     return files
@@ -189,7 +196,9 @@ def verify(path):
         if archive.read('bots/laning/profile.lua') != expected_profile:
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
-        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
+        expected_entries = {PROBE_ENTRY} if enabled else (
+            {RUNE_ENTRY, GENERIC_RUNE_ENTRY} if profile == 'all_test'
+            else ({RUNE_ENTRY} if profile == 'valve_lane_economy' else set()))
         if profile in WARD_PROFILES:
             expected_entries.add(WARD_ENTRY)
         if profile == 'all_test':

@@ -1,12 +1,15 @@
 local count=0;
 local function eq(a,b) assert(a==b,tostring(a).." ~= "..tostring(b)) end;
 local function test(name,fn) fn();count=count+1;print("PASS V036 "..name) end;
-test("fresh rune MOVE_TO retains ownership without resubmitting pickup",function()
+test("fresh rune order retains ownership and re-issues a pickup the engine lost",function()
     local s=ECON_CASE();s.time=370;s.mode=7;s.visible=false;
     s.bot.Action_PickUpRune=function(_,r) s.runes[#s.runes+1]=r;s.action=1 end;
     s.rune_policy.Think(s.bot);eq(#s.runes,1);
-    s.time=370.13;s.rune_policy.Think(s.bot);eq(s.rune_policy.GetDesire(s.bot),.85);
-    s.time=371.2;s.rune_policy.Think(s.bot);eq(#s.runes,1);
+    -- T026 (матч 9082418779): движок терял приказ (3с IDLE до конца grace,
+    -- затем отмена) — теперь перевыдаём раз в секунду вместо отмены.
+    s.time=370.13;s.rune_policy.Think(s.bot);eq(s.rune_policy.GetDesire(s.bot),.85);eq(#s.runes,1); -- throttle 1с
+    s.time=371.2;s.rune_policy.Think(s.bot);eq(#s.runes,2); -- перевыдача
+    s.action=8;s.rune_policy.Think(s.bot);eq(#s.runes,2); -- движок начал pickup — не трогаем
 end);
 test("real source footer activates tactical callbacks",function()
     local s=TACTICAL_SCENARIO();eq(s:bind(),true);assert(s.env.MIDBOT_TACTICAL_BOUND);
