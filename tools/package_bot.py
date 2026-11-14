@@ -171,7 +171,7 @@ Game execution must be verified in the installed client.
     if profile == 'tower_pressure_test':
         manifest['results_attribution'] = 'Native lane/attack/rune/ward mechanics plus bounded MIDBOT tower-pressure ROAM replacement'
         manifest['tower_pressure_enabled'] = True
-        readme = """MIDBOT v0.3.24-tower-pressure-test / EXPERIMENTAL PROFILE
+        readme = f"""MIDBOT {manifest['version']} / EXPERIMENTAL PROFILE
 Install the complete bots folder and start a new local match.
 This explicitly replaces SF ROAM with bounded mid-T1 pressure and disables SF SIDE_SHOP neutral capture.
 Native ROAM ganks/objective trips are not available in this test profile.

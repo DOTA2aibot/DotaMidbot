@@ -18,7 +18,9 @@ class PressurePackage(unittest.TestCase):
    self.assertEqual(p.verify(archive),m)
    self.assertEqual(m['version'],'v0.3.25-pressure-deward-test')
    self.assertTrue(m['economy_enabled']);self.assertTrue(m['wards_enabled'])
-   with zipfile.ZipFile(archive) as z:self.assertIn(b'Native ROAM ganks/objective trips are not available',z.read('INSTALL.txt'))
+   with zipfile.ZipFile(archive) as z:
+    self.assertIn(b'Native ROAM ganks/objective trips are not available',z.read('INSTALL.txt'))
+    self.assertIn(m['version'].encode(),z.read('INSTALL.txt'))
  def test_all_test_control_has_no_pressure_entrypoints(self):
   files=p.collect('all_test',R,'control')
   self.assertNotIn('mode_roam_nevermore.lua',files);self.assertNotIn('mode_side_shop_nevermore.lua',files)
