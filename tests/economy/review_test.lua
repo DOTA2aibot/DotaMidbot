@@ -426,4 +426,51 @@ test( "pickup retry also yields to a recent Raze turn", function()
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( #s.moves, 0 );
 end );
 
+test( "early available or unknown spots never send SF away before water preparation", function()
+    for _, now in ipairs( { 0, 35.1, 64.67, 83, 99.9 } ) do
+        local s = scenario(); pickup( s ); s.time = now; s.mode = 7;
+        s.items[0] = s:item( "item_bottle", 0 ); s.mana = 0;
+        eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+        eq( #s.moves, 0 ); eq( #s.runes, 0 );
+    end;
+end );
+
+test( "known bounty runes are ignored even with an empty bottle and low mana", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.items[0] = s:item( "item_bottle", 0 );
+    s.env.RUNE_BOUNTY = 5; s.env.GetRuneType = function() return 5 end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+    eq( #s.moves, 0 ); eq( #s.runes, 0 );
+end );
+
+test( "a farther water rune wins over a visible nearby bounty", function()
+    local s = scenario(); pickup( s ); s.time = 130;
+    s.env.GetRuneType = function( rune ) return rune == 0 and 5 or 7 end;
+    eq( assert( s.rune_policy.Decide( s.bot ) ).rune, 1 );
+end );
+
+test( "an owned pickup identified as bounty is stopped once without another order", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+    s.env.GetRuneType = function() return 5 end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+    eq( s.cancelled, 1 ); eq( #s.runes, 1 ); eq( #s.moves, 0 );
+    s.rune_policy.Leave( s.bot, "mode_ended" ); eq( s.cancelled, 1 );
+end );
+
+test( "last moment approach guard cannot submit a bounty pickup", function()
+    local s = scenario(); pickup( s ); s.time = 130;
+    s.env.GetRuneType = function() return 5 end;
+    local _, kind = s.rune_policy.Approach( s.bot, { rune = 0 }, 400 );
+    eq( kind, "ignored_bounty" ); eq( #s.runes, 0 ); eq( #s.moves, 0 );
+end );
+
+test( "double damage type zero and water remain eligible", function()
+    for _, kind in ipairs( { 0, 7 } ) do
+        local s = scenario(); pickup( s ); s.time = 130;
+        s.env.GetRuneType = function() return kind end;
+        assert( s.rune_policy.Decide( s.bot ) );
+    end;
+end );
+
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

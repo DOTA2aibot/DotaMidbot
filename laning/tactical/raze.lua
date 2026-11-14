@@ -6,6 +6,17 @@ local M={};
 local STABLE_S=.025; -- one fresh callback, not a timed spell-preparation sequence
 local SAMPLE_MAX_S=.15;
 local MAX_TURN_DEG=3;
+function M.Pending(bot)
+    if not C.enabled then return false end;
+    local s=B.State(bot);local now=U.Now();local p=s and s.raze_cast;
+    if not p or not now or now-p.at>1.5 then return false end;
+    local cd=U.Call(p.ability,"GetCooldownTimeRemaining");
+    if U.Number(cd) and U.Number(p.cd) and cd>p.cd+.05 then return false end;
+    if U.Call(p.ability,"IsInAbilityPhase")==true then return true end;
+    if p.phase_seen then return false end;
+    -- Bridge only the short delay between submitting our cast and engine acknowledgement.
+    return now-p.at<.2;
+end;
 local function geometry(bot,a,aim,range,radius)
     local p=U.Pos(bot);local facing=U.Call(bot,"GetFacing");
     range=U.Special(a,{"shadowraze_range"}) or range;

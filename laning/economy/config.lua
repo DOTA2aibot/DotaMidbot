@@ -14,6 +14,7 @@ return {
     -- (выход в 1:50, пешком ~5.5с — успевает к спавну). Компромисс: враг у руны
     -- может быть вне скана 1600, пока бот далеко — окно вслепую, риск принят
     -- для тестового этапа.
+    rune_first_scout_time = 100, -- no early empty/bounty trips; earliest pre-water approach is 1:40
     lane_radius = 1200, rune_distance = 2200, rune_desire = 0.85,
     rune_enemy_radius = 500, rune_min_hp = 0.35, rune_window_end = 900,
     rune_creep_block_radius = 700, -- finish the reachable wave before a new rune trip

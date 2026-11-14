@@ -112,4 +112,29 @@ test('expired ownership cannot cancel a later cast of the same ability',function
     s.active=s.a;s.a.phase=true;s.bot.GetFacing=function() return 60 end;s:advance(2.1);
     eq(g.Poll(s.bot,s.state),false);eq(#s.orders,0);eq(s.state.raze_cast,nil);
 end);
+test('an owned Raze cannot be resubmitted or turned away during its phase',function()
+    local s=scenario();s.env.CastRaze(s.bot,s.a,s.env.Vector(700,0,0));s:advance(.033);
+    s.env.CastRaze(s.bot,s.a,s.env.Vector(700,0,0));eq(#s.orders,1);
+    s:advance(.1);s.using=false; -- engine IsUsingAbility may lag the ability phase
+    s.env.CastRaze(s.bot,s.a,s.env.Vector(700,0,0));eq(#s.orders,1);
+    s.env.CastRaze(s.bot,s.a,s.env.Vector(0,700,0));eq(#s.orders,1);
+end);
+
+test('unacknowledged cast blocks only the short submission gap',function()
+    local s=scenario();local g=s:mod('raze');g.Submitted(s.bot,s.a,{x=700,y=0});
+    eq(g.Pending(s.bot),true);s:advance(.1);eq(g.Pending(s.bot),true);
+    s:advance(.11);eq(g.Pending(s.bot),false);
+end);
+
+test('a released Raze does not delay a different ready Raze',function()
+    local s=scenario();local g=s:mod('raze');g.Submitted(s.bot,s.a,{x=700,y=0});
+    s.a.phase=true;eq(g.Pending(s.bot),true);s:release(s.a);eq(g.Pending(s.bot),false);
+end);
+
+test('lost or stale phases never retain the cast lock',function()
+    local s=scenario();local g=s:mod('raze');g.Submitted(s.bot,s.a,{x=700,y=0});
+    s.state.raze_cast.phase_seen=true;s.a.phase=false;eq(g.Pending(s.bot),false);
+    s.a.phase=true;s:advance(1.6);eq(g.Pending(s.bot),false);
+end);
+
 print('RAZE_TURN PASSED '..n..' cases; real jitter/hit rate still need a new match');
