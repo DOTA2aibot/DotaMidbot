@@ -84,8 +84,10 @@ local function Observe( method, ... )
     end;
 end
 local RazeGuard;
+local TowerPressure;
 do
     local ok,mod=pcall(require,GetScriptDirectory().."/laning/tactical/raze");if ok then RazeGuard=mod end;
+    local towerOK,towerMod=pcall(require,GetScriptDirectory().."/laning/pressure/entry");if towerOK then TowerPressure=towerMod end;
 end;
 local function TrackedCast( bot, ability, reason, aim )
     if aim and RazeGuard then RazeGuard.Submitted(bot,ability,aim) end;
@@ -629,7 +631,8 @@ function CastRaze( npcBot, razeAbility, vLoc )
 	local tableTowers = npcBot:GetNearbyTowers( 900, true );
 	for _, npcTower in pairs( tableTowers )
 	do
-		if ( GetUnitToLocationDistance( npcTower, vStep ) <= TOWER_DANGER_RANGE ) then return end;
+		if ( GetUnitToLocationDistance( npcTower, vStep ) <= TOWER_DANGER_RANGE )
+            and not (TowerPressure and TowerPressure.AllowStep(npcBot,vStep,npcTower)) then return end;
 	end
 
 	if ( IsLocationPassable( vStep ) )

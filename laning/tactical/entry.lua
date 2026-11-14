@@ -16,6 +16,8 @@ local Phase=require(GetScriptDirectory().."/laning/vision/service");
 local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
 local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
+local Pressure=require(GetScriptDirectory().."/laning/pressure/entry");
+local Watchers=require(GetScriptDirectory().."/laning/pressure/watchers");
 local M={};
 local function fail(s,where,err)
     B.Emit(s,"helper_error",{where=where,error=tostring(err):sub(1,180)});
@@ -24,6 +26,7 @@ end;
 local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_until or -math.huge) end;
 local function tick(bot,s)
     B.Poll(bot,s);
+    if enabled(s) and Watchers.Tick(bot,s) then return true end;
     if enabled(s) and Raze.Poll(bot,s) then return true end;
     Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
@@ -32,7 +35,7 @@ local function tick(bot,s)
     if Phase.Holds(bot,s) then return true end;
     if not B.Free(s) then return true end;
     if Resources.Emergency(bot,s) then return true end;
-    if Finisher.Tick(bot,s) then return true end;
+    if not Pressure.Exiting(bot) and Finisher.Tick(bot,s) then return true end;
     if Items.Tick(bot,s) then return true end;
     return not B.Free(s);
 end;
@@ -70,12 +73,14 @@ function M.BindLegacy(env)
     end;
     observer.AfterAbilities=function(bot)
         if not C.enabled or not C.wards then return oldAfter(bot) end;
+        if Pressure.Holds(bot) then return end;
         local s=B.State(bot);if not enabled(s) or not U.Actor(bot) or not B.Free(s) then return end;
         local success,err=pcall(Ward.Tick,bot,s);if not success then fail(s,"wards",err) end;
     end;
     local function select(name,abilityName,index)
         env[name]=function(bot,...)
             if not C.enabled then return old[name](bot,...) end;
+            if Pressure.Exiting(bot) then return 0 end;
             local s=B.State(bot);if not U.Actor(bot) then return 0 end;
             if not enabled(s) then return old[name](bot,...) end;
             if not B.Free(s) then return 0 end;
@@ -84,6 +89,8 @@ function M.BindLegacy(env)
             if name=="ConsiderRazeOnHero" then
                 local success,desire,location,ability=pcall(Trades.Consider,bot,s);
                 if success and desire and desire>(result[1] or 0) then result={desire,location,ability} end;
+                local pressureOK,pd,pl,pa=pcall(Pressure.Raze,bot);
+                if pressureOK and pd and pd>(result[1] or 0) then result={pd,pl,pa} end;
             end;
             if type(result[1])=="number" and result[1]>0 then
                 if index then a=result[index] else a=U.Call(bot,"GetAbilityByName",abilityName) end;
@@ -96,6 +103,7 @@ function M.BindLegacy(env)
     select("ConsiderFeastOfSouls","nevermore_frenzy");
     env.ConsiderRequiem=function(bot)
         if not C.enabled then return old.ConsiderRequiem(bot) end;
+        if Pressure.Holds(bot) then return 0 end; -- do not extend a short tower budget with a new long Requiem
         local s=B.State(bot);if not enabled(s) or not B.Free(s) then return 0 end;
         local success,desire,target,selection=pcall(Q.Consider,bot,s);
         if not success then fail(s,"requiem_consider",desire);return 0 end;
@@ -125,7 +133,7 @@ function M.BindLegacy(env)
             if s.vision_phase then pcall(observer.Tick,bot) end;
             return;
         end;
-        if enabled(s) then
+        if enabled(s) and not Pressure.Holds(bot) then
             local valid,plan=pcall(Neutral.Consider,bot);
             if valid and plan then
                 if not prepare(bot,s,plan.ability) then return end;
@@ -141,7 +149,7 @@ function M.BindLegacy(env)
         local result=old.AbilityUsageThink();
         if enabled(s) and B.Free(s) then pcall(Sentry.Restore,bot,s) end;
         -- PT is leftover work: casts/turning/wards already had the order budget.
-        if enabled(s) and B.Free(s) and not s.ward_pending and not Phase.Holds(bot,s) then
+        if enabled(s) and B.Free(s) and not s.ward_pending and not Phase.Holds(bot,s) and not Pressure.Exiting(bot) then
             local maintained,ptError=pcall(PT.Tick,bot,s);if not maintained then fail(s,"pt_maintenance",ptError) end;
         end;
         return result;

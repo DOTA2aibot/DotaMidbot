@@ -21,14 +21,21 @@ GENERIC_RUNE_ENTRY = 'mode_rune_generic.lua'
 ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
 WARD_ENTRY = 'mode_ward_nevermore.lua'
 ITEM_ENTRY = 'mode_item_nevermore.lua'
-WARD_PROFILES = ('valve_wards', 'valve_lane_economy', 'all_test')
+WARD_PROFILES = ('valve_wards', 'valve_lane_economy', 'all_test', 'tower_pressure_test')
 PROFILES = {'valve_play': ('valve_native', False), 'lane_probe': ('midbot_runtime', True),
             'valve_wards': ('valve_native', False),
             'valve_lane_economy': ('valve_native_with_midbot_rune', False),
-            'all_test': ('valve_native_with_midbot_rune', False)}
+            'all_test': ('valve_native_with_midbot_rune', False),
+            'tower_pressure_test': ('valve_native_with_midbot_pressure', False)}
 
 
 def profile_source(profile, revision='uncommitted'):
+    if profile == 'tower_pressure_test':
+        return (profile_source('all_test', revision)
+                .replace(b'name = "all_test"', b'name = "tower_pressure_test"')
+                .replace(b'controller = "valve_native_with_midbot_rune"', b'controller = "valve_native_with_midbot_pressure"')
+                .replace(b'source_revision = ', b'tower_pressure_enabled = true, ignore_watchers = true, source_revision = '))
+
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', revision):
         raise ValueError('Revision must be a plain ASCII identifier or commit SHA')
     controller, enabled = PROFILES[profile]
@@ -38,7 +45,7 @@ def profile_source(profile, revision='uncommitted'):
             f'wards_enabled = {str(profile in ("valve_wards", "valve_lane_economy", "all_test")).lower()}, '
             f'economy_enabled = {str(profile in ("valve_lane_economy", "all_test")).lower()}, '
             + (f'ward_phase_enabled = true, ' if profile in WARD_PROFILES else '') +
-            ('ally_ward_free_shop = true, stationary_delivery_enabled = true, ' if profile == 'all_test' else '') +
+            ('ally_ward_free_shop = true, stationary_delivery_enabled = true, ' if profile in ('all_test', 'tower_pressure_test') else '') +
             f'source_revision = "{revision}" }};\n').encode('utf-8')
 
 
@@ -52,6 +59,13 @@ def below(path, parent):
 
 
 def collect(profile, root=ROOT, revision='uncommitted'):
+    if profile == 'tower_pressure_test':
+        files = collect('all_test', root, revision)
+        files['laning/profile.lua'] = profile_source(profile, revision)
+        for name in ('mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua'):
+            files[name] = (root / 'profiles/tower_pressure' / name).read_bytes()
+        return files
+
     if profile not in PROFILES:
         raise ValueError('Unknown controller profile')
     # Source tree itself is the play layout; the old root entry must be removed.
@@ -70,11 +84,11 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         source = root / 'profiles/lane_probe' / PROBE_ENTRY
         below(source, root)
         files[PROBE_ENTRY] = source.read_bytes()
-    if profile in ('valve_lane_economy', 'all_test'):
+    if profile in ('valve_lane_economy', 'all_test', 'tower_pressure_test'):
         source = root / 'profiles/lane_economy' / RUNE_ENTRY
         below(source, root)
         files[RUNE_ENTRY] = source.read_bytes()
-    if profile == 'all_test':
+    if profile in ('all_test', 'tower_pressure_test'):
         files[GENERIC_RUNE_ENTRY] = (root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY).read_bytes()
         source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
         below(source, root)
@@ -89,14 +103,14 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.21-ward-startup-test', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': re.search(r'version\s*=\s*"([^"]+)"', (root / 'laning/observer/config.lua').read_text(encoding='utf-8')).group(1), 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
-        'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
-        'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
+        'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test', 'tower_pressure_test'),
+        'economy_enabled': profile in ('valve_lane_economy', 'all_test', 'tower_pressure_test'),
         'source_revision': revision, 'revision_claim_verified_by_packager': False,
         'dota_execution_verified': False, 'clean_folder_install_required': True,
         'results_attribution': ('Valve lane movement/attacks + MIDBOT rune mode, abilities/purchases'
-        if profile in ('valve_lane_economy', 'all_test') else 'Valve movement/attacks + MIDBOT abilities/purchases')
+        if profile in ('valve_lane_economy', 'all_test', 'tower_pressure_test') else 'Valve movement/attacks + MIDBOT abilities/purchases')
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
@@ -154,6 +168,21 @@ lane_probe: existing diagnostic controller, one attack and a 600-second lane win
 This bundle does not fix extra bot slots or claim any measured LH/hit-rate result.
 Game execution must be verified in the installed client.
 ''' % profile
+    if profile == 'tower_pressure_test':
+        manifest['results_attribution'] = 'Native lane/attack/rune/ward mechanics plus bounded MIDBOT tower-pressure ROAM replacement'
+        manifest['tower_pressure_enabled'] = True
+        readme = """MIDBOT v0.3.24-tower-pressure-test / EXPERIMENTAL PROFILE
+Install the complete bots folder and start a new local match.
+This explicitly replaces SF ROAM with bounded mid-T1 pressure and disables SF SIDE_SHOP neutral capture.
+Native ROAM ganks/objective trips are not available in this test profile.
+Ordinary lane, attack, retreat, shopping, runes, wards, PT and Wand are retained.
+Watcher ability_lamp_use / exact watcher targets are rejected; other channels are untouched.
+Deaggro is a single attack-order attempt followed by tower-target readback, not a guarantee.
+No-creep dives require a conservative ready-Raze kill estimate and an escape damage budget.
+Unseen enemy cooldowns are not read; safety/kill predictions are estimates.
+Keep the accepted v0.3.23 archive/main78ef254 as the control.
+Offline tests do not prove native mode arbitration, pathing or deaggro execution.
+"""
     output = Path(output)
     if output.suffix.lower() != '.zip' or output.is_symlink():
         raise ValueError('Output must be a regular .zip path')
@@ -183,11 +212,11 @@ def verify(path):
         controller, enabled = PROFILES[profile]
         if manifest['controller'] != controller or manifest['runtime_enabled'] is not enabled:
             raise ValueError('Profile metadata mismatch')
-        if manifest.get('observer_enabled') is not (not enabled) or manifest.get('wards_enabled') is not (profile in ('valve_wards', 'valve_lane_economy', 'all_test')):
+        if manifest.get('observer_enabled') is not (not enabled) or manifest.get('wards_enabled') is not (profile in ('valve_wards', 'valve_lane_economy', 'all_test', 'tower_pressure_test')):
             raise ValueError('Observer/ward profile mismatch')
         legacy_observer = (manifest.get('version') == 'v0.3.3' and 'economy_enabled' not in manifest
                            and profile in ('valve_play', 'valve_wards', 'lane_probe'))
-        if not legacy_observer and manifest.get('economy_enabled') is not (profile in ('valve_lane_economy', 'all_test')):
+        if not legacy_observer and manifest.get('economy_enabled') is not (profile in ('valve_lane_economy', 'all_test', 'tower_pressure_test')):
             raise ValueError('Economy profile mismatch')
         files = manifest['files_sha256']
         if set(names) != {'MANIFEST.json', 'INSTALL.txt'} | {'bots/' + n for n in files}:
@@ -200,16 +229,18 @@ def verify(path):
         if archive.read('bots/laning/profile.lua') != expected_profile:
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
-        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
+        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test', 'tower_pressure_test') else set())
         if profile in WARD_PROFILES:
             expected_entries.add(WARD_ENTRY)
-        if profile == 'all_test':
+        if profile in ('all_test', 'tower_pressure_test'):
             expected_entries.add(ITEM_ENTRY)
             expected_entries.add(GENERIC_RUNE_ENTRY)
+        if profile == 'tower_pressure_test':
+            expected_entries.update({'mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua'})
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}
-        expected_purchase = {'item_purchase_nevermore.lua'} | ({ALLY_PURCHASE_ENTRY} if profile == 'all_test' else set())
+        expected_purchase = {'item_purchase_nevermore.lua'} | ({ALLY_PURCHASE_ENTRY} if profile in ('all_test', 'tower_pressure_test') else set())
         if purchase_entries != expected_purchase:
             raise ValueError('Unexpected purchase entrypoints')
         for name, expected in files.items():

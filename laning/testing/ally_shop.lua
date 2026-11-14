@@ -66,7 +66,7 @@ local function courier(bot,s,now)
     end;
 end;
 function M.Tick(bot)
-    if Profile.name~="all_test" or Profile.ally_ward_free_shop~=true or not bot
+    if (Profile.name~="all_test" and Profile.name~="tower_pressure_test") or Profile.ally_ward_free_shop~=true or not bot
         or U.Call(bot,"IsHero")~=true or U.Call(bot,"IsIllusion")~=false
         or U.Call(bot,"GetUnitName")=="npc_dota_hero_nevermore"
         or U.Global("IsPlayerBot",U.Call(bot,"GetPlayerID"))~=true then return end;
