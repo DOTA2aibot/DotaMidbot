@@ -49,6 +49,7 @@ function M.Emit( s, kind, data )
 end
 function M.Action( bot, kind, ability, location, reason )
     local s = M.State( bot ); if not s then return end;
+    if kind == "cast" or kind == "existing_face_move" then s.ability_order_at = A.Time() end;
     local point;
     if location then
         local ok, value = pcall( function() return { x = location.x, y = location.y } end );
