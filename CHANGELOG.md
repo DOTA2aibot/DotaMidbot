@@ -1,3 +1,7 @@
+## v0.3.26-water-guard-test — temporary T039 mitigation
+
+Skip broken south-water trips; pickup is NOT fixed. North water and south power runes remain enabled. See docs/WORK_v0326.md.
+
 ## v0.3.25-pressure-deward-test — кандидат T039
 
 Короткие covered trades, высокий локальный приоритет видимых Observer/Sentry и защита от неверного движения к южной водяной. [Разбор и ограничения](docs/WORK_v0325.md). Новый Dota-тест нужен.

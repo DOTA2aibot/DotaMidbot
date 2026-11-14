@@ -17,6 +17,16 @@ local function SouthWater(rune)
     return RUNE_POWERUP_2~=nil and rune==RUNE_POWERUP_2
         and global("GetRuneType",rune)==(RUNE_WATER or DOTA_RUNE_WATER or 7);
 end;
+-- Match9090636135: even at distance0, PickUpRune(1) sends SF NW.
+-- Temporary API mitigation, not a pickup fix. Reject BEFORE travelling.
+local function UnsupportedWater(rune)
+    if C.skip_broken_south_water ~= true or RUNE_POWERUP_2 == nil or rune ~= RUNE_POWERUP_2 then return false end;
+    if SouthWater(rune) then return true end;
+    local now, kind = A.Time(), global("GetRuneType",rune);
+    return A.Number(now) and now >= C.rune_first_scout_time and now < 360
+        and (kind == nil or kind == (RUNE_INVALID or -1));
+end;
+
 
 -- T035 (ревью GPT по PR53, матч 9082994995): подтверждение подбора по факту,
 -- а не по смене action. Бутылка — самый надёжный readback: заряды растут
@@ -151,7 +161,7 @@ function M.Decide( bot )
         for _, rune in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
             local loc = global( "GetRuneSpawnLocation", rune );
             if loc and global( "IsLocationVisible", loc ) == true then
-                if global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE and not IsBounty( rune ) then
+                if global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE and not IsBounty( rune ) and not UnsupportedWater( rune ) then
                     prior.known_runes[rune] = now;
                 else prior.known_runes[rune] = nil end;
             end;
@@ -182,6 +192,7 @@ function M.Decide( bot )
     -- No river rune exists before the 2:00 water spawn. Only allow the short pre-spawn approach.
     if now < C.rune_first_scout_time then return nil, "before_first_water_window" end;
     if prior and prior.owned_order and IsBounty( prior.rune ) then return nil, "bounty_rune_ignored" end;
+    if prior.owned_order and UnsupportedWater(prior.rune) then return nil,"south_water_api_unsupported" end;
     if prior and now < ( prior.retry_after or -math.huge ) then return nil, "rune_retry_cooldown" end;
     -- T028: таймаут считается по deadline попытки (distance/280+3 при заказе,
     -- продлевается после реального старта pickup движком), а не тупо от первого
@@ -353,7 +364,7 @@ function M.Decide( bot )
         local floc = global( "GetRuneSpawnLocation", rune );
         if floc and p and global( "IsLocationVisible", floc ) == true
             and global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE
-            and not IsBounty( rune )
+            and not IsBounty( rune ) and not UnsupportedWater( rune )
             and A.Distance( p, floc ) <= C.rune_free_grab_dist
             and not ( prior and prior.done_cycle and prior.done_cycle[rune] == cycle_now ) then free_grab = true end; -- решённая руна не пересматривается
     end;
@@ -410,6 +421,7 @@ function M.Decide( bot )
         local fail = nil;
         if not ( valid and location and A.Number( d ) ) then fail = "spawn_location_unknown"
         elseif IsBounty( rune ) then fail = "bounty_rune_ignored"
+        elseif UnsupportedWater(rune) then fail = "south_water_api_unsupported"
         elseif not safe then fail = "unsafe"
         elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
@@ -515,6 +527,7 @@ end;
 -- ИДЁМ через Action_MoveToLocation, а PickUp отдаём только в rune_pickup_range.
 function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     if IsBounty( s.rune ) then return nil, "ignored_bounty" end;
+    if UnsupportedWater(s.rune) then return nil,"unsupported_water" end;
     local d = distance;
     if not A.Number( d ) then
         local okd, dd = pcall( function()
@@ -596,6 +609,7 @@ end;
 function M.Think( bot )
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
     if s.owned_order and IsBounty( s.rune ) then M.Leave( bot, "bounty_rune_ignored" ); return end;
+    if s.owned_order and UnsupportedWater(s.rune) then M.Leave(bot,"south_water_api_unsupported");return end;
 
     -- T026 (матч 9082418779): пока попытка наша — НЕ отменяем её из-за
     -- транзиентных гейтов Decide: именно они сносили все 8 приказов матча
@@ -689,6 +703,7 @@ function M.Think( bot )
             -- в матче 4 pickup подряд уходили в одну и ту же позицию d=200.
             local force_backoff = ( s.failed_pickups or 0 ) >= 1 and s.last_kind == "pickup";
             local d, kind = M.Approach( bot, s, nil, nil, true, force_backoff );
+            if kind == "unsupported_water" then M.Leave(bot,"south_water_api_unsupported");return end;
             if kind == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
             s.last_kind = kind;
             if kind == "pickup" then
@@ -745,6 +760,7 @@ function M.Think( bot )
     if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
     local _, kind0 = M.Approach( bot, s, plan.distance, reason );
+    if kind0 == "unsupported_water" then M.Leave(bot,"south_water_api_unsupported");return end;
     if kind0 == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
     s.last_kind = kind0;
     if kind0 == "pickup" then s.first_pickup_at = now end;
