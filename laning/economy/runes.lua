@@ -13,6 +13,10 @@ local function IsBounty( rune )
     local bounty = RUNE_BOUNTY or DOTA_RUNE_BOUNTY or 5;
     return A.Number( kind ) and kind == bounty;
 end;
+local function SouthWater(rune)
+    return RUNE_POWERUP_2~=nil and rune==RUNE_POWERUP_2
+        and global("GetRuneType",rune)==(RUNE_WATER or DOTA_RUNE_WATER or 7);
+end;
 
 -- T035 (ревью GPT по PR53, матч 9082994995): подтверждение подбора по факту,
 -- а не по смене action. Бутылка — самый надёжный readback: заряды растут
@@ -481,7 +485,8 @@ function M.Leave( bot, reason )
     local interrupted = s.finish_interrupted == true;
     local failure_reason = reason;
     if reason == nil or reason == "mode_ended" then failure_reason = decide_reason end;
-    if failure_reason == "rune_pickup_timeout" or failure_reason == "pickup_rejected_at_point_blank" or interrupted then
+    if failure_reason == "rune_pickup_timeout" or failure_reason == "pickup_rejected_at_point_blank"
+        or failure_reason == "pickup_moving_away" or interrupted then
         BumpCycleFail( s, now );
     end;
     if interrupted then
@@ -520,9 +525,10 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     end;
     local called, kind = false, "pickup";
     local loc = global( "GetRuneSpawnLocation", s.rune );
-    if A.Number( d ) and d > C.rune_pickup_range and loc then
+    local water=SouthWater(s.rune);
+    if A.Number( d ) and d > (water and C.south_water_pickup_range or C.rune_pickup_range) and loc then
         kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end );
-    elseif A.Number( d ) and loc and ( d < C.rune_pickup_min
+    elseif not water and A.Number( d ) and loc and ( d < C.rune_pickup_min
         or ( force_backoff and d <= C.rune_rotate_backoff_max_dist ) ) then
         -- T030 (матч 9082480212): стоим ТОЧНО на споте (d≈0) — движок молча
         -- отклоняет pickup (5 эпизодов: t=137, 236, 354, 476, 596). Отступаем
@@ -611,7 +617,25 @@ function M.Think( bot )
         end;
         if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE then
             -- T035: позиция старта pickup — для трассировки rune_pickup_trace.
-            if not s.pickup_seen then s.pickup_seen, s.pickup_seen_at, s.pickup_start_pos = true, now, A.Position( bot ) end;
+            if not s.pickup_seen then
+                s.pickup_seen, s.pickup_seen_at, s.pickup_start_pos = true, now, A.Position( bot );
+                local loc=global("GetRuneSpawnLocation",s.rune);
+                s.pickup_best_distance=loc and s.pickup_start_pos and A.Distance(loc,s.pickup_start_pos) or nil;
+            end;
+            if SouthWater(s.rune) then
+                local p,loc=A.Position(bot),global("GetRuneSpawnLocation",s.rune);
+                local distance=p and loc and A.Distance(p,loc);
+                if A.Number(distance) then
+                    s.pickup_best_distance=math.min(s.pickup_best_distance or distance,distance);
+                    if now-s.pickup_seen_at>=C.rune_pickup_away_grace_s
+                        and distance>s.pickup_best_distance+C.rune_pickup_away_margin then
+                        pcall(function() O.Emit(O.State(bot),"rune_pickup_moving_away",{rune=s.rune,
+                            distance=distance,best_distance=s.pickup_best_distance,x=p.x,y=p.y,
+                            expected_x=loc.x,expected_y=loc.y,outcome="pickup_not_confirmed"}) end);
+                        M.Leave(bot,"pickup_moving_away");return;
+                    end;
+                end;
+            end;
             return; -- движок в пути на руну — не трогаем (продление через M.Deadline)
         end;
         if s.pickup_seen then

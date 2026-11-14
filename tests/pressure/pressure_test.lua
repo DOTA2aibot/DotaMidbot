@@ -98,11 +98,18 @@ test("startup, rune, retreat and last-hit opportunities have priority",function(
     local creep=s.unit("npc_dota_creep_badguys_melee",3,-400,0);creep.hp=50;s.creeps={creep};eq(s.P.GetDesire(s.bot),0);
 end);
 test("pressure closes for near Raze instead of stopping at attack range",function()
-    local s=scenario();s.bot.x=-420;s:start();s.P.Think(s.bot);eq(#s.orders,1);eq(s.orders[1].kind,"face");assert(s.orders[1].location.x>s.bot.x);
+    local s=scenario();s.bot.x=-420;s.enemy.hp=150;s:start();s.P.Think(s.bot);eq(#s.orders,1);eq(s.orders[1].kind,"face");assert(s.orders[1].location.x>s.bot.x);
 end);
 test("same-frame and unchanged movement orders are not spammed",function()
     local s=scenario();s:start();s.P.Think(s.bot);eq(#s.orders,1);
     s.P.Think(s.bot);eq(#s.orders,1);s.action=1;s:advance(.5);s.P.Think(s.bot);eq(#s.orders,1);
+end);
+test("non-lethal covered pressure attacks from range instead of forcing a near-Raze walk",function()
+    local s=scenario();s.bot.x=-420;s:start();s.P.Think(s.bot);eq(#s.orders,1);eq(s.orders[1].kind,"attack");eq(s.orders[1].target,s.enemy);
+end);
+test("a living creep currently taking tower shots remains cover when SF is closer",function()
+    local s=scenario();s.bot.x=-350;s.ally.x=-500;eq(s.R.Cover(s.bot,s.tower),s.ally);eq(s.R.DeaggroTarget(s.bot,s.tower),nil);
+    assert(s:evaluate());
 end);
 test("pending Raze and recent own Raze turn cannot be overwritten",function()
     local s=scenario();s:start();s.state.raze_facing={at=s.time};s.P.Think(s.bot);eq(#s.orders,0);

@@ -34,8 +34,9 @@ function M.Cover(bot,tower)
     if not U.Visible(target) or U.Call(target,"GetTeam")~=U.Call(bot,"GetTeam") or U.Call(target,"IsHero")~=false
         or not U.Call(target,"GetUnitName") or not U.Call(target,"GetUnitName"):find("creep",1,true) then return nil end;
     local hp=U.Call(target,"GetHealth");local damage=U.Number(raw) and U.Call(target,"GetActualIncomingDamage",raw,DAMAGE_TYPE_PHYSICAL);
+    local range=U.Call(tower,"GetAttackRange");
     if not tp or not p or not U.Pos(target) or not U.Number(hp) or not U.Number(damage) or damage<=0
-        or hp<damage*1.5 or U.Distance(U.Pos(target),tp)>=U.Distance(p,tp) then return nil end;
+        or not U.Number(range) or U.Distance(U.Pos(target),tp)>range or hp<damage*1.5 then return nil end;
     return target;
 end;
 function M.DeaggroTarget(bot,tower)
@@ -100,6 +101,17 @@ function M.Evaluate(bot,target,tower,allowDeaggro)
     end;
     if count~=1 then return nil,"multiple_or_missing_enemies" end;
     local goal=U.Distance(p,e)<=C.target_distance and p or pointAlong(e,p,C.target_distance);
+    local cover=M.Cover(bot,tower);
+    local deaggro=allowDeaggro and U.Call(tower,"GetAttackTarget")==bot and M.DeaggroTarget(bot,tower);
+    local combo=goal and M.Combo(bot,target,goal,U.Distance(p,goal)/speed);
+    if not combo then return nil,"combo_unknown" end;
+    if not cover and not combo.lethal and not deaggro then return nil,"no_creeps_no_lethal" end;
+    local closeForRaze=combo.lethal;
+    if cover and not closeForRaze then
+        local attackRange=U.Call(bot,"GetAttackRange");if not U.Number(attackRange) then return nil,"attack_range_unknown" end;
+        local distance=math.max(400,attackRange-C.poke_range_margin);
+        goal=U.Distance(p,e)<=distance and p or pointAlong(e,p,distance);
+    elseif deaggro and not closeForRaze then goal=p end;
     local exit=M.Exit(bot,tower);
     if not goal or not exit or not passable(goal) then return nil,"exit_or_goal_unknown" end;
     for _,f in ipairs({.25,.5,.75}) do
@@ -120,11 +132,11 @@ function M.Evaluate(bot,target,tower,allowDeaggro)
         local sp=U.Pos(second);local sr=U.Call(second,"GetAttackRange");
         if second and sp and (not U.Number(sr) or U.Distance(sp,goal)<=sr+150 or U.Distance(sp,exit)<=sr+150) then return nil,"second_mid_tower" end;
     end;
-    local combo=M.Combo(bot,target,goal,travel);if not combo then return nil,"combo_unknown" end;
-    local cover=M.Cover(bot,tower);
-    local deaggro=allowDeaggro and U.Call(tower,"GetAttackTarget")==bot and M.DeaggroTarget(bot,tower);
+    combo=M.Combo(bot,target,goal,travel);if not combo then return nil,"combo_unknown" end;
     if not cover and not combo.lethal and not deaggro then return nil,"no_creeps_no_lethal" end;
-    local engage=deaggro and 1 or (combo.lethal and combo.seconds or C.covered_session_s+travel);
+    -- Covered pressure budgets the next hit plus an exit, then rechecks live HP each callback.
+    local attackPoint=U.Call(bot,"GetAttackPoint");if not U.Number(attackPoint) then return nil,"attack_timing_unknown" end;
+    local engage=deaggro and 1 or (closeForRaze and combo.seconds or travel+math.max(C.covered_hit_horizon_s,attackPoint+.3));
     local horizon=engage+escape+.5;
     local enemyDamage=U.Call(target,"GetEstimatedDamageToTarget",true,bot,horizon,DAMAGE_TYPE_ALL);
     local towerHit=U.Call(bot,"GetActualIncomingDamage",raw,DAMAGE_TYPE_PHYSICAL);
@@ -132,7 +144,7 @@ function M.Evaluate(bot,target,tower,allowDeaggro)
     -- Even with creeps, budget switching aggro and an already airborne projectile.
     local projectiles=U.Call(bot,"GetIncomingTrackingProjectiles");if type(projectiles)~="table" then return nil,"projectiles_unknown" end;
     local airborne=0;for _,p in ipairs(projectiles) do if p.is_attack==true and p.caster==tower then airborne=airborne+1 end end;
-    local shots=math.max(2,math.ceil(((cover and not combo.lethal) and escape+.8 or horizon)/cycle)+math.max(1,airborne));
+    local shots=math.max(2,math.ceil(((cover and not closeForRaze) and escape or horizon)/cycle)+math.max(1,airborne));
     local creeps=U.Call(bot,"GetNearbyLaneCreeps",1200,true);if type(creeps)~="table" then return nil,"creep_scan_unknown" end;
     local creepDamage=0;
     for _,c in ipairs(creeps) do if U.Visible(c) and U.Distance(U.Pos(c),goal)<=600 then
@@ -144,8 +156,9 @@ function M.Evaluate(bot,target,tower,allowDeaggro)
     end end;
     local incoming=towerHit*C.tower_damage_margin*shots+enemyDamage*C.enemy_damage_margin+creepDamage+C.unknown_control_margin;
     local reserve=math.max(C.reserve_min,maxhp*C.reserve_fraction);
-    if hp-incoming<reserve then return nil,"survival_budget" end;
-    return {target=target,tower=tower,goal=goal,exit=exit,cover=cover,lethal=combo.lethal,
+    if hp-incoming<reserve then return nil,"survival_budget",{hp=hp,incoming=incoming,reserve=reserve,
+        tower_shots=shots,covered=cover~=nil,escape_seconds=escape,enemy_damage=enemyDamage,creep_damage=creepDamage} end;
+    return {target=target,tower=tower,goal=goal,exit=exit,cover=cover,lethal=combo.lethal,close_for_raze=closeForRaze,
         damage=combo.damage,combo_seconds=combo.seconds,tower_shots=shots,airborne_tower_shots=airborne,incoming=incoming,
         reserve=reserve,escape_seconds=escape,hp_after_estimate=hp-incoming},"risk_budget_ok";
 end;

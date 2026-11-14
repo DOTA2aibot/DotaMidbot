@@ -16,7 +16,7 @@ class PressurePackage(unittest.TestCase):
   with tempfile.TemporaryDirectory(dir=R,prefix='.pressure-package-') as d:
    archive=Path(d)/'test.zip';m=p.build('tower_pressure_test',archive,'scope-test',R)
    self.assertEqual(p.verify(archive),m)
-   self.assertEqual(m['version'],'v0.3.24-tower-pressure-test')
+   self.assertEqual(m['version'],'v0.3.25-pressure-deward-test')
    self.assertTrue(m['economy_enabled']);self.assertTrue(m['wards_enabled'])
    with zipfile.ZipFile(archive) as z:self.assertIn(b'Native ROAM ganks/objective trips are not available',z.read('INSTALL.txt'))
  def test_all_test_control_has_no_pressure_entrypoints(self):

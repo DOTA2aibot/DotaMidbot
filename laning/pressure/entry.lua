@@ -11,13 +11,14 @@ local function state(bot) return B.State(bot) end;
 local function enabled(bot) return Profile.tower_pressure_enabled==true and U.Actor(bot) end;
 function M.Holds(bot) local s=enabled(bot) and state(bot);return s and s.pressure~=nil or false end;
 function M.Exiting(bot) local s=enabled(bot) and state(bot);return s and s.pressure and s.pressure.exiting==true or false end;
-local function report(s,reason,plan)
+local function report(s,reason,plan,details)
     if U.Now()<(s.pressure_report_after or -math.huge) and s.pressure_report_reason==reason then return end;
     s.pressure_report_after=U.Now()+2;s.pressure_report_reason=reason;
     B.Emit(s,"tower_pressure_decision",{reason=reason,allowed=plan~=nil,lethal=plan and plan.lethal,
         tower_shots=plan and plan.tower_shots,damage_estimate=plan and plan.damage,
         incoming_estimate=plan and plan.incoming,reserve=plan and plan.reserve,
         hp_after_estimate=plan and plan.hp_after_estimate,escape_seconds=plan and plan.escape_seconds,
+        rejected_budget=details,
         covered=plan and plan.cover~=nil,kill="unproven",safety="estimate_not_guarantee"});
 end;
 local function beginExit(bot,s,reason)
@@ -36,12 +37,13 @@ local function farmDue(bot)
     local creeps=U.Call(bot,"GetNearbyLaneCreeps",1200,true);local p=U.Pos(bot);
     local damage,range=U.Call(bot,"GetAttackDamage"),U.Call(bot,"GetAttackRange");
     if type(creeps)~="table" or not p or not U.Number(damage) or not U.Number(range) then return true end;
+    local near=0;
     for _,c in ipairs(creeps) do if U.Visible(c) then
         local hp=U.Call(c,"GetHealth");local actual=U.Call(c,"GetActualIncomingDamage",damage,DAMAGE_TYPE_PHYSICAL);
         if not U.Number(hp) or not U.Number(actual) then return true end;
-        if U.Distance(p,U.Pos(c))<=range+50 and hp<=actual*1.5 then return true end;
+        if U.Distance(p,U.Pos(c))<=range+50 then near=near+1;if hp<=actual*1.5 then return true end end;
     end end;
-    return false;
+    return near>=3;
 end;
 function M.Decide(bot)
     if not enabled(bot) then return nil,"profile_disabled" end;
@@ -87,7 +89,9 @@ function M.Decide(bot)
     local target;for _,h in ipairs(heroes) do if U.Enemy(bot,h) then
         if target then return nil,"multiple_enemies" end;target=h;
     end end;
-    local plan,reason=Risk.Evaluate(bot,target,tower);report(s,reason,plan);
+    if not target then report(s,"no_visible_enemy");return nil,"no_visible_enemy" end;
+    local plan,reason,details=Risk.Evaluate(bot,target,tower);report(s,reason,plan,details);
+    if plan and not plan.lethal and U.Now()<(s.next_deaggro or -math.huge) then return nil,"deaggro_cooldown" end;
     if plan then s.pressure_candidate=plan;s.pressure_candidate_at=now;return {phase="pressure",desire=C.desire},reason end;
     return nil,reason;
 end;
@@ -162,7 +166,7 @@ function M.Think(bot)
     local range=U.Call(bot,"GetAttackRange");
     if not U.Number(range) then beginExit(bot,s,"attack_range_unknown");return end;
     local nearRaze=U.Call(bot,"GetAbilityByName","nevermore_shadowraze1");
-    local needClose=U.Ready(nearRaze) and U.Distance(p,U.Pos(phase.target))>390;
+    local needClose=phase.plan.close_for_raze and U.Ready(nearRaze) and U.Distance(p,U.Pos(phase.target))>390;
     if U.Distance(p,U.Pos(phase.target))<=range and not needClose then
         if U.Call(bot,"GetCurrentActionType")==BOT_ACTION_TYPE_ATTACK then return end;
         B.Fire(bot,s,"tower_pressure_attack",nil,"bounded_hero_pressure",function() return bot:Action_AttackUnit(phase.target,false) end,false);

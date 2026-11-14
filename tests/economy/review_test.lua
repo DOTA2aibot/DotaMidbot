@@ -473,4 +473,35 @@ test( "double damage type zero and water remain eligible", function()
     end;
 end );
 
+local function southWater()
+    local s = scenario(); pickup(s);s.time=130;s.mode=7;
+    s.status_map={[0]=3,[1]=1};s.env.GetRuneType=function() return 7 end;
+    s.x=1400;s.bot.GetLocation=function() return {x=s.x,y=0} end;
+    return s;
+end;
+test("south water approaches the real point closely before asking the engine to pick up",function()
+    local s=southWater();s.rune_policy.Think(s.bot);eq(#s.runes,0);eq(#s.moves,1);eq(s.moves[1].x,2000);
+    s.x=1950;s.time=131;s.rune_policy.Think(s.bot);eq(#s.runes,1);eq(s.runes[1],1);
+end);
+test("south water at the point uses pickup without the old backoff loop",function()
+    local s=southWater();s.x=2000;s.rune_policy.Think(s.bot);eq(#s.runes,1);eq(#s.moves,0);
+end);
+test("wrong-way south-water pickup is cancelled and repeated failures exhaust its cycle budget",function()
+    local s=southWater();
+    for _,t in ipairs({130,145}) do
+        s.time=t;s.x=1950;s.action=0;assert(s.rune_policy.GetDesire(s.bot)>0);s.rune_policy.Think(s.bot);
+        s.time=t+.1;s.rune_policy.Think(s.bot);
+        s.x=1700;s.time=t+.7;s.rune_policy.Think(s.bot);
+    end;
+    eq(s.cancelled,2);s.time=157;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.time=245;assert(s.rune_policy.GetDesire(s.bot)>0);
+end);
+test("towards-point water movement and foreign spells are never cleared by the direction guard",function()
+    local s=southWater();s.x=1950;s.rune_policy.Think(s.bot);s.time=130.1;s.rune_policy.Think(s.bot);
+    s.x=1980;s.time=130.7;s.rune_policy.Think(s.bot);eq(s.cancelled,nil);
+    s.x=1700;s.time=131;s.casting=true;s.rune_policy.Think(s.bot);eq(s.cancelled,nil);
+end);
+test("the close-water workaround does not alter normal power-rune pickup range",function()
+    local s=southWater();s.env.GetRuneType=function() return 0 end;s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,1);
+end);
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
