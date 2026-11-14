@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_LUA = ('hero_selection.lua', 'ability_item_usage_nevermore.lua', 'item_purchase_nevermore.lua')
 PROBE_ENTRY = 'mode_laning_nevermore.lua'
 RUNE_ENTRY = 'mode_rune_nevermore.lua'
+GENERIC_RUNE_ENTRY = 'mode_rune_generic.lua'
 ALLY_PURCHASE_ENTRY = 'item_purchase_generic.lua'
 WARD_ENTRY = 'mode_ward_nevermore.lua'
 ITEM_ENTRY = 'mode_item_nevermore.lua'
@@ -74,6 +75,7 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         below(source, root)
         files[RUNE_ENTRY] = source.read_bytes()
     if profile == 'all_test':
+        files[GENERIC_RUNE_ENTRY] = (root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY).read_bytes()
         source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
         below(source, root)
         files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
@@ -203,6 +205,7 @@ def verify(path):
             expected_entries.add(WARD_ENTRY)
         if profile == 'all_test':
             expected_entries.add(ITEM_ENTRY)
+            expected_entries.add(GENERIC_RUNE_ENTRY)
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}

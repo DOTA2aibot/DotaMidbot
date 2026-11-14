@@ -578,6 +578,8 @@ function GetCurrentRazeImpact( npcBot, i )
 end
 
 function CastRaze( npcBot, razeAbility, vLoc )
+	-- Do not restart our submitted Raze or turn towards a new target during its windup.
+	if RazeGuard and RazeGuard.Pending(npcBot) then return end;
 	-- Прерывание подготовки: в отступлении не ходим к цели и не кастуем.
 	-- (Остальные прерывания — устаревшая цель/мана/доступность — ловятся сами:
 	-- Consider-функции пересчитываются каждый тик и просто перестанут звать CastRaze.)
