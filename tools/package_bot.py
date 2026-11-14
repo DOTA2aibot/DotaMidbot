@@ -75,16 +75,11 @@ def collect(profile, root=ROOT, revision='uncommitted'):
         below(source, root)
         files[RUNE_ENTRY] = source.read_bytes()
     if profile == 'all_test':
+        files[GENERIC_RUNE_ENTRY] = (root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY).read_bytes()
         source = root / 'profiles/all_test' / ALLY_PURCHASE_ENTRY
         below(source, root)
         files[ALLY_PURCHASE_ENTRY] = source.read_bytes()
         files[ITEM_ENTRY] = (root / 'profiles/all_test' / ITEM_ENTRY).read_bytes()
-        # T025 (Олег 09.11): чистый тест рун — глушим rune mode у дефолтных
-        # ботов (союзников и врагов), чтобы они не воровали руны у нашего SF.
-        # У nevermore персональный файл приоритетнее generic — он не затронут.
-        source = root / 'profiles/lane_economy' / GENERIC_RUNE_ENTRY
-        below(source, root)
-        files[GENERIC_RUNE_ENTRY] = source.read_bytes()
     if profile in WARD_PROFILES:
         files[WARD_ENTRY] = (root / 'profiles/vision' / WARD_ENTRY).read_bytes()
     return files
@@ -94,7 +89,7 @@ def build(profile, output, revision='uncommitted', root=ROOT):
     files = collect(profile, root, revision)
     controller, enabled = PROFILES[profile]
     manifest = {
-        'format': 'midbot-bundle-1', 'version': 'v0.3.15-ward-recovery-pt', 'profile': profile,
+        'format': 'midbot-bundle-1', 'version': 'v0.3.21-ward-startup-test', 'profile': profile,
         'controller': controller, 'runtime_enabled': enabled,
         'observer_enabled': not enabled, 'wards_enabled': profile in ('valve_wards', 'valve_lane_economy', 'all_test'),
         'economy_enabled': profile in ('valve_lane_economy', 'all_test'),
@@ -105,8 +100,17 @@ def build(profile, output, revision='uncommitted', root=ROOT):
         if not enabled else 'MIDBOT diagnostic runtime; not a full-match policy',
         'files_sha256': {name: sha(data) for name, data in sorted(files.items())},
     }
-    readme = '''MIDBOT v0.3.15-ward-recovery-pt / PROFILE: %s
+    readme = '''MIDBOT v0.3.21-ward-startup-test / PROFILE: %s
 
+v0321 TEST CANDIDATE: Dire Observer and shared Sentry use human-calibrated coordinates.
+Starting Sentry purchase does not require manual coordinate calibration. Windows:0/6min.
+Dire Observer and shared Sentry were calibrated in match9083785339. Radiant point is preserved.
+Raze requires a fresh stable facing sample; only an owned active cast may be cancelled on drift.
+Sentry coverage is required before Observer; after confirmed Sentry placement, up to two local enemy-Sentry attacks may finish before farm.
+No chase: local cleanup yields to danger and stays bounded. Observer yields to farm/combat/runes.
+Startup0-30 ward desire is.99; later farm remains higher. Dispenser switches via self-targeted cast.
+Raze and PT/resource logic are unchanged from0320. A new Dota match is required.
+No new Stick/Wand/PT changes beyond the previously prepared0316 logic.
 Install the entire bots folder into game/dota/scripts/vscripts/bots.
 IMPORTANT: replace the OLD bots folder, never overlay/extract over it.
 An old root mode_laning_nevermore.lua would keep overriding Valve laning.
@@ -196,13 +200,12 @@ def verify(path):
         if archive.read('bots/laning/profile.lua') != expected_profile:
             raise ValueError('Runtime profile mismatch')
         entries = {n for n in files if '/' not in n and (n.startswith('mode_') or n.startswith('bot_'))}
-        expected_entries = {PROBE_ENTRY} if enabled else (
-            {RUNE_ENTRY, GENERIC_RUNE_ENTRY} if profile == 'all_test'
-            else ({RUNE_ENTRY} if profile == 'valve_lane_economy' else set()))
+        expected_entries = {PROBE_ENTRY} if enabled else ({RUNE_ENTRY} if profile in ('valve_lane_economy', 'all_test') else set())
         if profile in WARD_PROFILES:
             expected_entries.add(WARD_ENTRY)
         if profile == 'all_test':
             expected_entries.add(ITEM_ENTRY)
+            expected_entries.add(GENERIC_RUNE_ENTRY)
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}

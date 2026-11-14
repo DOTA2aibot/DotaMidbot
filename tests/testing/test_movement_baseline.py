@@ -9,10 +9,13 @@ package = importlib.util.module_from_spec(spec); spec.loader.exec_module(package
 
 
 class MovementBaseline(unittest.TestCase):
-    def test_requested_v0312_movement_vision_and_ability_bytes_are_preserved(self):
+    def test_requested_movement_and_ability_bytes_outside_authorised_ward_changes_are_preserved(self):
         files = package.collect('all_test', ROOT, 'baseline-check')
         self.assertEqual(REFERENCE['version'], 'v0.3.12-ward-recovery')
         for name, expected in REFERENCE['files_sha256'].items():
+            # v0316 changes wards; v0317 explicitly aligns Raze margins/turn limits. Reference is historical.
+            if name.startswith('laning/vision/') or name in {'item_purchase_nevermore.lua', 'mode_ward_nevermore.lua', 'laning/tactical/wards.lua', 'ability_item_usage_nevermore.lua'}:
+                continue
             with self.subTest(path=name):
                 self.assertEqual(hashlib.sha256(files[name]).hexdigest(), expected)
 

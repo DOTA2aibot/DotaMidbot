@@ -9,7 +9,7 @@ local Supply=require(GetScriptDirectory().."/laning/vision/supply");
 local Schedule=require(GetScriptDirectory().."/laning/vision/schedule");
 local M={};
 function M.Poll(bot,s)
-    if not s or not Site.Radiant(bot) or C.calibration_only or not T.enabled or not T.wards
+    if not s or not Site.ObserverSupported(bot) or C.calibration_only or not T.enabled or not T.wards
         or Profile.wards_enabled~=true or Profile.ward_phase_enabled~=true or Profile.runtime_enabled==true then return end;
     local now=U.Now();if not now or now<45 then return end;
     if Schedule.Stopped(now,s) then
@@ -22,7 +22,7 @@ function M.Poll(bot,s)
     s.vision_checked_minute=minute;
     local nextWindow=Schedule.NextWindow(now);
     local data={check_at=now,next_check=due+60,next_window=nextWindow and nextWindow.start};
-    local spot,why=Site.Geometry();local exists,unknown;
+    local spot,why=Site.Geometry(bot);local exists,unknown;
     if spot then exists,unknown=Site.Existing(spot) else unknown=why or "geometry_unknown" end;
     local stock=Supply.StockDetails(bot);
     s.vision_recovery_purchase=nil;

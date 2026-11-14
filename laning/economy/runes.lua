@@ -6,6 +6,14 @@ local Profile = require( GetScriptDirectory() .. "/laning/profile" );
 local O = require( GetScriptDirectory() .. "/laning/observer/core" );
 local M, states = {}, setmetatable( {}, { __mode = "k" } );
 local function global( name, ... ) return O.Global( name, ... ) end;
+-- Rune TYPE and spawn-location ID are different enums. Never treat a bounty as a power rune.
+-- Fallback 5 matches the client DOTA_RUNES enum; prefer the Bot API constant when present.
+local function IsBounty( rune )
+    local kind = global( "GetRuneType", rune );
+    local bounty = RUNE_BOUNTY or DOTA_RUNE_BOUNTY or 5;
+    return A.Number( kind ) and kind == bounty;
+end;
+
 -- T035 (ревью GPT по PR53, матч 9082994995): подтверждение подбора по факту,
 -- а не по смене action. Бутылка — самый надёжный readback: заряды растут
 -- (0→3 водяная/силовая) только при реальном подборе руны.
@@ -76,6 +84,7 @@ function M.FinishVerdict( bot, s )
     local now = A.Time();
     local bottle_now = BottleCharges( bot );
     if A.Number( bottle_now ) and A.Number( s.bottle_start ) and bottle_now > s.bottle_start then
+        s.picked_cycle = math.floor( now / 120 );
         return "confirmed", bottle_now;
     end;
     local loc = global( "GetRuneSpawnLocation", s.rune );
@@ -98,11 +107,52 @@ function M.PickupTrace( bot, s, verdict, bottle_now )
             owner = "midbot_rune_only", outcome = "unknown" } );
     end );
 end;
+-- Prepare the mid wave inside the rune mode, without replacing the lane controller.
+local function WaveState( bot )
+    local team = A.Call( bot, "GetTeam" );
+    if team == nil or TEAM_RADIANT == nil or TEAM_DIRE == nil or LANE_MID == nil or TOWER_MID_1 == nil then return nil end;
+    local other = team == TEAM_RADIANT and TEAM_DIRE or ( team == TEAM_DIRE and TEAM_RADIANT or nil );
+    if not other then return nil end;
+    local own = global( "GetTower", team, TOWER_MID_1 );
+    local enemy = global( "GetTower", other, TOWER_MID_1 );
+    -- The strategy is defined around living mid T1s; after they fall, retain ordinary rune selection.
+    if A.Call( own, "IsAlive" ) ~= true or A.Call( enemy, "IsAlive" ) ~= true then return nil end;
+    local op, ep = A.Position( own ), A.Position( enemy );
+    local front = global( "GetLaneFrontLocation", team, LANE_MID, 0 );
+    local range = A.Call( enemy, "GetAttackRange" );
+    if not op or not ep or not front or not A.Number( front.x ) or not A.Number( front.y ) or not A.Number( range ) then return nil end;
+    return { pushed = A.Distance( front, ep ) <= range + C.rune_wave_tower_margin
+        and A.Distance( front, op ) > C.rune_wave_own_tower_clearance,
+        own_distance = A.Distance( front, op ), enemy_distance = A.Distance( front, ep ) };
+end;
+local function PushTarget( bot, creeps )
+    local p, range = A.Position( bot ), A.Call( bot, "GetAttackRange" );
+    if not p or not A.Number( range ) then return nil end;
+    local best, health;
+    for _, creep in ipairs( creeps ) do
+        local cp, hp = A.Position( creep ), A.Call( creep, "GetHealth" );
+        if A.Visible( creep ) and A.Call( creep, "IsInvulnerable" ) == false and cp and A.Number( hp )
+            and A.Distance( p, cp ) <= range and ( not health or hp < health ) then best, health = creep, hp end;
+    end;
+    return best;
+end;
 function M.Decide( bot )
     if not Actor.Real(bot) then return nil,"not_real_sf" end;
     local now = A.Time();
     if Profile.economy_enabled ~= true then return nil, "profile_disabled" end;
-    local prior = states[bot];
+    local prior = states[bot] or {}; states[bot] = prior;
+    -- Remember only actually visible rune observations; combat can interrupt the trip.
+    prior.known_runes = prior.known_runes or {};
+    if now and RUNE_POWERUP_1 ~= nil and RUNE_POWERUP_2 ~= nil then
+        for _, rune in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
+            local loc = global( "GetRuneSpawnLocation", rune );
+            if loc and global( "IsLocationVisible", loc ) == true then
+                if global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE and not IsBounty( rune ) then
+                    prior.known_runes[rune] = now;
+                else prior.known_runes[rune] = nil end;
+            end;
+        end;
+    end;
     -- T027 (гайд Олега 09.11): пустая бутылка (0 зарядов) + маны меньше одного
     -- рейза (< rune_bottle_mana) + потенциальная руна = идём ВСЕГДА: слепое окно
     -- шире (tmod >= 100), дистанция до rune_distance_desperate, без cap 15 минут,
@@ -125,6 +175,9 @@ function M.Decide( bot )
         end;
     end;
     if not now or now < 0 or ( now > C.rune_window_end and not desperate ) then return nil, "outside_rune_window" end;
+    -- No river rune exists before the 2:00 water spawn. Only allow the short pre-spawn approach.
+    if now < C.rune_first_scout_time then return nil, "before_first_water_window" end;
+    if prior and prior.owned_order and IsBounty( prior.rune ) then return nil, "bounty_rune_ignored" end;
     if prior and now < ( prior.retry_after or -math.huge ) then return nil, "rune_retry_cooldown" end;
     -- T028: таймаут считается по deadline попытки (distance/280+3 при заказе,
     -- продлевается после реального старта pickup движком), а не тупо от первого
@@ -221,17 +274,14 @@ function M.Decide( bot )
     if not A.Number( hp ) or not A.Number( maxhp ) or maxhp <= 0 or hp / maxhp < C.rune_min_hp then return nil, "health_or_unknown" end;
     local creeps = A.Call( bot, "GetNearbyLaneCreeps", C.lane_radius, true );
     if type( creeps ) ~= "table" then return nil, "lane_unknown" end;
-    -- T022: блокируют только крипы ВПЛОТНУЮ к боту (rune_creep_block_radius).
-    -- Раньше любой видимый крип в lane_radius=1200 отменял руну — на миде крипы
-    -- видны почти всегда, поэтому desire ни разу не поднялся выше 0.
-    -- T027: при пустой бутылке и низкой мане крипы не блокируют поход вовсе.
+    -- Defer the wave decision until a safe rune candidate has actually been found.
+    local wave = WaveState( bot );
+    local nearby_wave = false;
     local bp0 = A.Position( bot );
-    if not desperate then
-        for _, creep in ipairs( creeps ) do
-            if A.Visible( creep ) then
-                local cp = A.Position( creep );
-                if not cp or not bp0 or A.Distance( bp0, cp ) <= C.rune_creep_block_radius then return nil, "lane_creeps_first" end;
-            end;
+    for _, creep in ipairs( creeps ) do
+        if A.Visible( creep ) then
+            local cp = A.Position( creep );
+            if not cp or not bp0 or A.Distance( bp0, cp ) <= C.rune_creep_block_radius then nearby_wave = true end;
         end;
     end;
     local target = A.Call( bot, "GetTarget" );
@@ -251,7 +301,8 @@ function M.Decide( bot )
                         if A.Visible( creep ) then
                             local cp = A.Position( creep );
                             if cp and A.Distance( tp, cp ) <= C.rune_lane_defense_radius then
-                                return nil, "lane_defense_first";
+                                nearby_wave = true;
+                                if wave then wave.pushed = false end;
                             end;
                         end;
                     end;
@@ -298,6 +349,7 @@ function M.Decide( bot )
         local floc = global( "GetRuneSpawnLocation", rune );
         if floc and p and global( "IsLocationVisible", floc ) == true
             and global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE
+            and not IsBounty( rune )
             and A.Distance( p, floc ) <= C.rune_free_grab_dist
             and not ( prior and prior.done_cycle and prior.done_cycle[rune] == cycle_now ) then free_grab = true end; -- решённая руна не пересматривается
     end;
@@ -325,7 +377,7 @@ function M.Decide( bot )
     local max_distance = desperate and C.rune_distance_desperate or C.rune_distance;
     local towers = A.Call( bot, "GetNearbyTowers", 1600, true );
     if type( towers ) ~= "table" then return nil, "tower_data_unknown" end;
-    local best, distance;
+    local best, distance, best_rank;
     -- T025: диагностика отказов — запоминаем, почему не подошла БЛИЖАЙШАЯ руна.
     -- Матч 9082384109: 71× «no_nearby» без деталей, причина была невидима.
     local dmin, dwhy = math.huge, "none_checked";
@@ -353,13 +405,19 @@ function M.Decide( bot )
         local taken = visible and A.Number( status ) and status ~= RUNE_STATUS_AVAILABLE;
         local fail = nil;
         if not ( valid and location and A.Number( d ) ) then fail = "spawn_location_unknown"
+        elseif IsBounty( rune ) then fail = "bounty_rune_ignored"
         elseif not safe then fail = "unsafe"
         elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
         elseif prior and prior.done_cycle and prior.done_cycle[rune] == math.floor( now / 120 ) then fail = "already_resolved" -- T031: решённая в этом цикле руна
         elseif CycleFailed( prior, rune, now ) then fail = "cycle_fail_budget" -- T035 P2: лимит неудач на (руна, цикл)
+        elseif prior.picked_cycle == math.floor( now / 120 ) and now >= 360
+            and not ( visible and status == RUNE_STATUS_AVAILABLE ) then fail = "power_cycle_already_picked"
         elseif global( "IsLocationPassable", location ) ~= true then fail = "not_passable"
-        elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE ) ) then fail = "not_visible_outside_blind"
+        elseif not ( blind_window or ( visible and status == RUNE_STATUS_AVAILABLE )
+            or ( prior.known_runes[rune] and now - prior.known_runes[rune] <= C.rune_memory_s
+                and math.floor( prior.known_runes[rune] / 120 ) == math.floor( now / 120 ) ) )
+            then fail = "not_visible_outside_blind"
         end;
         -- T026 (review GPT PR53): причина без числовой дистанции
         -- (spawn_location_unknown) раньше терялась — dmin оставался math.huge
@@ -369,13 +427,28 @@ function M.Decide( bot )
                 if d < dmin then dmin, dwhy = d, fail end;
             elseif dwhy == "none_checked" then dwhy = fail end;
         end;
-        if not fail and ( not distance or d < distance ) then best, distance = rune, d end;
+        local remembered = prior.known_runes[rune] and now - prior.known_runes[rune] <= C.rune_memory_s
+            and math.floor( prior.known_runes[rune] / 120 ) == math.floor( now / 120 );
+        local rank = ( visible and status == RUNE_STATUS_AVAILABLE ) and 2 or ( remembered and 1 or 0 );
+        if not fail and ( not best_rank or rank > best_rank or ( rank == best_rank and d < distance ) ) then
+            best, distance, best_rank = rune, d, rank;
+        end;
     end;
     if not best
     then
         local dd = ( dmin < math.huge ) and tostring( math.floor( dmin ) ) or "?";
         return nil, "no_nearby_river_rune:" .. dwhy .. ":d=" .. dd;
     end;
+    if wave and not wave.pushed then
+        local cycle = math.floor( ( now + 20 ) / 120 );
+        if prior.push_cycle ~= cycle then prior.push_cycle, prior.push_started_at = cycle, now end;
+        if now - prior.push_started_at >= C.rune_push_budget_s then return nil, "push_budget_return_to_lane" end;
+        local creep = PushTarget( bot, creeps );
+        if not creep then return nil, "push_wave_native_approach" end;
+        return { rune = best, distance = distance, desire = C.rune_push_desire, phase = "push_wave", target = creep,
+            wave_own_distance = wave.own_distance, wave_enemy_distance = wave.enemy_distance }, "push_wave_before_rune";
+    end;
+    if nearby_wave and not ( wave and wave.pushed ) then return nil, "lane_creeps_first" end;
     return { rune = best, distance = distance, desire = C.rune_desire },
         desperate and "bottle_empty_rune_run" or "nearby_river_rune_after_lane";
 end;
@@ -385,8 +458,10 @@ function M.Report( bot, plan, reason )
     if now < ( s.next_report or -math.huge ) then return end;
     s.next_report = now + 5;
     O.Emit( O.State( bot ), "rune_priority", { reason = reason, desire = plan and plan.desire or 0,
-        rune = plan and plan.rune, distance = plan and plan.distance, owner = "midbot_rune_only",
-        policy = "safe_rune_window_outranks_lane_close_creeps_combat_block" } );
+        rune = plan and plan.rune, distance = plan and plan.distance, phase = plan and plan.phase,
+        wave_own_distance = plan and plan.wave_own_distance, wave_enemy_distance = plan and plan.wave_enemy_distance,
+        owner = "midbot_rune_only",
+        policy = "prepare_mid_wave_then_rune_combat_first" } );
 end;
 function M.GetDesire( bot )
     local ok, plan, reason = pcall( M.Decide, bot );
@@ -404,7 +479,9 @@ function M.Leave( bot, reason )
     -- 9082994995: та же пустая южная точка выбиралась снова каждые ~10с
     -- (4 похода, ~61с потерь). cycle_fails не чистим.
     local interrupted = s.finish_interrupted == true;
-    if reason == "rune_pickup_timeout" or reason == "pickup_rejected_at_point_blank" or interrupted then
+    local failure_reason = reason;
+    if reason == nil or reason == "mode_ended" then failure_reason = decide_reason end;
+    if failure_reason == "rune_pickup_timeout" or failure_reason == "pickup_rejected_at_point_blank" or interrupted then
         BumpCycleFail( s, now );
     end;
     if interrupted then
@@ -425,13 +502,14 @@ function M.Leave( bot, reason )
     if can_cancel then submitted = pcall( function() bot:Action_ClearActions( true ) end ) end;
     pcall( function() O.Emit( O.State( bot ), "rune_cancel", { reason = reason or "mode_ended",
         submitted = submitted, current_action = action, owner = "midbot_rune_only", outcome = "unknown",
-        last_decide_reason = decide_reason, pickup_seen = seen,
+        last_decide_reason = decide_reason, failure_reason = failure_reason, pickup_seen = seen,
         guard = can_cancel and "owned_pickup_empty_queue_no_cast" or "preserve_other_or_unknown_action" } ) end );
 end;
 -- T028 (матч 9082444290): движок молча отклоняет Action_PickUpRune ДО СПАВНА
 -- руны и часто издалека (8 перевыдач за 8с — бот стоял IDLE). Теперь до точки
 -- ИДЁМ через Action_MoveToLocation, а PickUp отдаём только в rune_pickup_range.
 function M.Approach( bot, s, distance, reason, reissue, force_backoff )
+    if IsBounty( s.rune ) then return nil, "ignored_bounty" end;
     local d = distance;
     if not A.Number( d ) then
         local okd, dd = pcall( function()
@@ -511,6 +589,8 @@ local function IndexScan( bot, s )
 end;
 function M.Think( bot )
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
+    if s.owned_order and IsBounty( s.rune ) then M.Leave( bot, "bounty_rune_ignored" ); return end;
+
     -- T026 (матч 9082418779): пока попытка наша — НЕ отменяем её из-за
     -- транзиентных гейтов Decide: именно они сносили все 8 приказов матча
     -- (кластеры 0.2с — мгновенное схлопывание desire, 3с — конец grace без
@@ -519,7 +599,16 @@ function M.Think( bot )
         if not now or now >= ( M.Deadline( s ) or now ) then
             M.Leave( bot, "rune_pickup_timeout" ); return;
         end;
+        for _, method in ipairs( { "IsUsingAbility", "IsChanneling", "IsStunned", "IsHexed", "IsRooted" } ) do
+            if A.Call( bot, method ) ~= false then return end;
+        end;
+        if A.Call( bot, "NumQueuedActions" ) ~= 0 then return end;
+        local observer = O.State( bot );
+        if observer and observer.ability_order_at and now - observer.ability_order_at < .25 then return end;
         local action = A.Call( bot, "GetCurrentActionType" );
+        if BOT_ACTION_TYPE_ATTACK ~= nil and action == BOT_ACTION_TYPE_ATTACK then
+            M.Leave( bot, "combat_action_first" ); return;
+        end;
         if BOT_ACTION_TYPE_PICK_UP_RUNE ~= nil and action == BOT_ACTION_TYPE_PICK_UP_RUNE then
             -- T035: позиция старта pickup — для трассировки rune_pickup_trace.
             if not s.pickup_seen then s.pickup_seen, s.pickup_seen_at, s.pickup_start_pos = true, now, A.Position( bot ) end;
@@ -576,6 +665,7 @@ function M.Think( bot )
             -- в матче 4 pickup подряд уходили в одну и ту же позицию d=200.
             local force_backoff = ( s.failed_pickups or 0 ) >= 1 and s.last_kind == "pickup";
             local d, kind = M.Approach( bot, s, nil, nil, true, force_backoff );
+            if kind == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
             s.last_kind = kind;
             if kind == "pickup" then
                 s.next_order = now + C.rune_pickup_reissue_s;
@@ -591,6 +681,25 @@ function M.Think( bot )
     local ok, plan, reason = pcall( M.Decide, bot );
     if not ok or not plan or BOT_MODE_RUNE == nil or A.Call( bot, "GetActiveMode" ) ~= BOT_MODE_RUNE then
         M.Leave( bot, "plan_invalid_or_mode_changed" ); return;
+    end;
+    if plan.phase == "push_wave" then
+        -- Do not restart an attack or override the existing Raze turn/cast.
+        if Actor.Blocked( bot ) or A.Call( bot, "GetCurrentActionType" ) == BOT_ACTION_TYPE_ATTACK then return end;
+        local observer = O.State( bot );
+        if observer and observer.last_rune_push_action and now - observer.last_rune_push_action < C.rune_push_order_interval then return end;
+        local ok, broker = pcall( require, GetScriptDirectory() .. "/laning/tactical/broker" );
+        local tactical = ok and broker.State( bot ) or nil;
+        if not tactical or not broker.Free( tactical ) or tactical.raze_cast
+            or ( tactical.raze_facing and now - tactical.raze_facing.at < .2 ) then return end;
+        if observer and observer.ability_order_at and now - observer.ability_order_at < .25 then return end;
+        local action = A.Call( bot, "GetCurrentActionType" );
+        if action ~= BOT_ACTION_TYPE_NONE and action ~= BOT_ACTION_TYPE_IDLE
+            and action ~= BOT_ACTION_TYPE_MOVE_TO then return end;
+        local fired = broker.Fire( bot, tactical, "rune_wave_attack", nil, "push_wave_before_rune", function()
+            return bot:Action_AttackUnit( plan.target, false );
+        end, false );
+        if fired and observer then observer.last_rune_push_action = now end;
+        return;
     end;
     if not now or now < ( s.next_order or -math.huge ) then return end;
     s.next_order = now + 1;
@@ -612,6 +721,7 @@ function M.Think( bot )
     if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
     local _, kind0 = M.Approach( bot, s, plan.distance, reason );
+    if kind0 == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
     s.last_kind = kind0;
     if kind0 == "pickup" then s.first_pickup_at = now end;
 end;

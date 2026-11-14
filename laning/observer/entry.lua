@@ -54,6 +54,10 @@ end
 function M.BeforeAction( ... )
     if Profile.observer_enabled == true then return O.BeforeAction( ... ) end;
 end
+function M.RazeTurnDecision(bot,data)
+    if Profile.observer_enabled~=true or not Actor.Real(bot) then return end;
+    local s=O.State(bot);if s then O.Emit(s,"raze_turn_decision",data) end;
+end;
 function M.AfterAbilities( bot )
     if not Actor.Real( bot ) then return end;
     if Profile.wards_enabled ~= true or Profile.observer_enabled ~= true then return end;

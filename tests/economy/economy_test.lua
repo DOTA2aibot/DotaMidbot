@@ -199,10 +199,11 @@ test( "empty bottle and low mana always pursue a potential rune", function()
     s.time = 1000; assert( s.rune_policy.Decide( s.bot ) ); -- cap 15 минут не действует
     s.mana = 200; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- мана есть: не desperate, окно закрыто
 end );
-test( "empty bottle run ignores close creeps but respects danger and taken runes", function()
+test( "empty bottle preserves the wave and respects danger and taken runes", function()
     local s = scenario(); s.items[0] = s:item( "item_bottle", 0 ); s.mana = 60;
     s.creeps = { s:unit() }; -- вплотную: обычно блокирует
-    assert( s.rune_policy.Decide( s.bot ) ); -- desperate: крипы не блокируют
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- the wave still has priority
+    s.creeps = {}; assert( s.rune_policy.Decide( s.bot ) );
     s.enemies = { s:unit() }; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- враг рядом: опасность блокирует
     s.enemies = {}; s.status = 3; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- руну забрали на глазах
 end );

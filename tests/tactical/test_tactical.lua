@@ -218,7 +218,7 @@ test("dispenser true mode matches real-log observer calibration",function()
 end);
 test("dispenser toggles and reads back before placing a different kind",function()
     local s=SCENARIO();s:item("item_ward_dispenser",0,{toggle=false,charges=1,secondary=1});local w=s:mod("wards");
-    w.Tick(s.bot,s.state);eq(s.orders[1].kind,"self");s:advance(1.1);w.Tick(s.bot,s.state);eq(s.orders[2].kind,"ward");eq(s.orders[2].ward_kind,"observer");
+    w.Tick(s.bot,s.state);eq(s.orders[1].kind,"entity");s:advance(1.1);w.Tick(s.bot,s.state);eq(s.orders[2].kind,"ward");eq(s.orders[2].ward_kind,"observer");
 end);
 test("ward placement gets charge/entity evidence and quality readback",function()
     local s=SCENARIO();s:item("item_ward_observer",0);local w=s:mod("wards");w.Tick(s.bot,s.state);assert(s.state.ward_pending);

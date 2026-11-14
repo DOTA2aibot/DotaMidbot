@@ -2,14 +2,17 @@ local U=require(GetScriptDirectory().."/laning/tactical/util");
 local C=require(GetScriptDirectory().."/laning/tactical/config");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local Q=require(GetScriptDirectory().."/laning/tactical/requiem");
+local Raze=require(GetScriptDirectory().."/laning/tactical/raze");
 local Resources=require(GetScriptDirectory().."/laning/tactical/resources");
 local Finisher=require(GetScriptDirectory().."/laning/tactical/finisher");
+local Trades=require(GetScriptDirectory().."/laning/tactical/trades");
+local Sentry=require(GetScriptDirectory().."/laning/vision/sentry");
 local Items=require(GetScriptDirectory().."/laning/tactical/items");
 local Threat=require(GetScriptDirectory().."/laning/tactical/threats");
 local PT=require(GetScriptDirectory().."/laning/tactical/treads");
 local Neutral=require(GetScriptDirectory().."/laning/tactical/neutrals");
 local Ward=require(GetScriptDirectory().."/laning/tactical/wards");
-local Phase=require(GetScriptDirectory().."/laning/vision/phase");
+local Phase=require(GetScriptDirectory().."/laning/vision/service");
 local VisionDiagnostics=require(GetScriptDirectory().."/laning/vision/diagnostics");
 local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
@@ -20,7 +23,9 @@ local function fail(s,where,err)
 end;
 local function enabled(s) return C.enabled==true and s and U.Now()>=(s.error_until or -math.huge) end;
 local function tick(bot,s)
-    B.Poll(bot,s);Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
+    B.Poll(bot,s);
+    if enabled(s) and Raze.Poll(bot,s) then return true end;
+    Ward.Poll(bot,s);VisionDiagnostics.Tick(bot,s);Phase.Poll(bot,s);
     if not enabled(s) then return not B.Free(s) end;
     if Threat.Tick(bot,s) then Phase.Leave(bot,"emergency_bkb");return true end;
     if Q.Tick(bot,s) then Phase.Leave(bot,"requiem_control");return true end;
@@ -76,6 +81,10 @@ function M.BindLegacy(env)
             if not B.Free(s) then return 0 end;
             local a;
             local result={old[name](bot,...)};
+            if name=="ConsiderRazeOnHero" then
+                local success,desire,location,ability=pcall(Trades.Consider,bot,s);
+                if success and desire and desire>(result[1] or 0) then result={desire,location,ability} end;
+            end;
             if type(result[1])=="number" and result[1]>0 then
                 if index then a=result[index] else a=U.Call(bot,"GetAbilityByName",abilityName) end;
                 if not a or not prepare(bot,s,a) then return 0 end;
@@ -130,6 +139,7 @@ function M.BindLegacy(env)
             elseif not valid then fail(s,"neutrals",plan) end;
         end;
         local result=old.AbilityUsageThink();
+        if enabled(s) and B.Free(s) then pcall(Sentry.Restore,bot,s) end;
         -- PT is leftover work: casts/turning/wards already had the order budget.
         if enabled(s) and B.Free(s) and not s.ward_pending and not Phase.Holds(bot,s) then
             local maintained,ptError=pcall(PT.Tick,bot,s);if not maintained then fail(s,"pt_maintenance",ptError) end;

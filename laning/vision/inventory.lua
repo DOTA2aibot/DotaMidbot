@@ -34,7 +34,7 @@ local function safe(bot)
     end end;return true;
 end;
 function M.Tick(bot,s)
-    if not Site.Radiant(bot) or not B.Free(s) or not safe(bot) or type(bot.ActionImmediate_SwapItems)~="function" then return false end;
+    if not Site.ObserverSupported(bot) or not B.Free(s) or not safe(bot) or type(bot.ActionImmediate_SwapItems)~="function" then return false end;
     local previous=s.vision_swap;
     if previous then
         local active=U.Call(bot,"GetItemInSlot",previous.active);

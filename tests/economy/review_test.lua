@@ -277,4 +277,200 @@ test( "interrupted pickup keeps the rune unresolved and budget blocks repeats", 
     s.time = 140; eq( s.rune_policy.GetDesire( s.bot ), 0 ); -- rune 0 заблокирована бюджетом, rune 1 too_far
     s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 ); -- новый цикл: бюджет сброшен
 end );
+
+test( "mode ended timeout consumes the persistent failure budget exactly once", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.env.GetRuneSpawnLocation = function( rune ) return { x = rune == 0 and 400 or 9000, y = 0 } end;
+    for _, t in ipairs( { 130, 160 } ) do
+        s.time = t; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
+        s.rune_policy.Think( s.bot );
+        s.time = t + 16; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+        s.rune_policy.Leave( s.bot, "mode_ended" );
+        s.rune_policy.Leave( s.bot, "mode_ended" ); -- idempotent
+    end;
+    s.time = 190; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 245; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
+end );
+
+test( "reachable creep wave beats a new desperate rune trip", function()
+    local s = scenario(); pickup( s ); s.items[0] = s:item( "item_bottle", 0 );
+    local creep = s:unit(); creep.GetLocation = function() return { x = 600, y = 0 } end;
+    s.creeps = { creep }; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.creeps = {}; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
+end );
+
+test( "visible southern rune wins over a closer blind northern check", function()
+    local s = scenario(); pickup( s ); s.time = 370;
+    s.env.IsLocationVisible = function( p ) return p.x == 2000 end;
+    local plan = assert( s.rune_policy.Decide( s.bot ) ); eq( plan.rune, 1 );
+end );
+
+test( "rune seen before combat is remembered briefly and expires", function()
+    local s = scenario(); pickup( s ); s.time = 410; s.mode = 2;
+    s.env.IsLocationVisible = function( p ) return p.x == 2000 end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 415; s.mode = 1; s.visible = false;
+    s.env.IsLocationVisible = function() return false end;
+    local plan = assert( s.rune_policy.Decide( s.bot ) ); eq( plan.rune, 1 );
+    s.time = 436; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+end );
+
+test( "visible disappearance clears remembered rune immediately", function()
+    local s = scenario(); pickup( s ); s.time = 410;
+    assert( s.rune_policy.Decide( s.bot ) );
+    s.time = 411; s.status = 3; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 412; s.visible = false; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+end );
+
+test( "confirmed bottle refill prevents a blind cross river check until next spawn", function()
+    local s = scenario(); pickup( s ); s.time = 370; s.mode = 7;
+    s.items[0] = s:item( "item_bottle", 0 ); s.rune_policy.Think( s.bot );
+    s.rune_policy.Think( s.bot );
+    s.time = 371; s.items[0] = s:item( "item_bottle", 3 ); s.action = 2;
+    s.rune_policy.Think( s.bot );
+    s.time = 382; s.visible = false; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.time = 485; assert( s.rune_policy.GetDesire( s.bot ) > 0 );
+end );
+
+test( "rune reissues never overwrite a cast or a combat attack", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); s.action = 2; s.casting = true; s.time = 134;
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( #s.moves, 0 );
+    s.casting = false; s.action = 4; s.rune_policy.Think( s.bot );
+    eq( #s.runes, 1 ); eq( s.cancelled, nil ); eq( s.action, 4 );
+end );
+
+local function waveScenario()
+    local s = scenario(); pickup( s ); s.time = 350;
+    s.env.TEAM_RADIANT, s.env.TEAM_DIRE, s.env.LANE_MID, s.env.TOWER_MID_1 = 2, 3, 2, 1;
+    s.env.BOT_ACTION_TYPE_IDLE, s.env.BOT_ACTION_TYPE_NONE, s.env.BOT_ACTION_TYPE_MOVE_TO = 0, 0, 2;
+    s.bot.GetTeam = function() return 2 end;
+    s.bot.GetAttackRange = function() return 550 end;
+    s.front = 1000;
+    s.env.GetLaneFrontLocation = function() return { x = s.front, y = 0 } end;
+    s.env.GetTower = function( team ) return {
+        IsAlive = function() return not s.tower_dead end,
+        GetLocation = function() return { x = team == 2 and 0 or 4000, y = 0 } end,
+        GetAttackRange = function() return 600 end } end;
+    local creep = s:unit(); creep.GetHealth = function() return 300 end;
+    creep.IsInvulnerable = function() return false end;
+    s.creeps = { creep }; s.attacks = {};
+    s.bot.Action_AttackUnit = function( _, target, once )
+        eq( once, false ); s.attacks[#s.attacks + 1] = target; s.action = 4;
+    end;
+    return s;
+end;
+
+test( "unshoved wave starts continuous attack rather than the rune trip", function()
+    local s = waveScenario();
+    local plan = assert( s.rune_policy.Decide( s.bot ) ); eq( plan.phase, "push_wave" );
+    eq( plan.desire, .42 ); s.mode = 7; s.rune_policy.Think( s.bot );
+    eq( #s.attacks, 1 ); eq( #s.moves, 0 ); eq( #s.runes, 0 );
+    s.time = 350.1; s.rune_policy.Think( s.bot ); eq( #s.attacks, 1 );
+end );
+
+test( "wave near enemy T1 frees the rune window despite nearby creeps", function()
+    local s = waveScenario(); s.front = 3200;
+    local plan = assert( s.rune_policy.Decide( s.bot ) ); eq( plan.phase, nil ); eq( plan.desire, .85 );
+    s.mode = 7; s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( #s.attacks, 0 );
+end );
+
+test( "unreachable wave keeps native laning and never chases a creep", function()
+    local s = waveScenario(); s.creeps[1].GetLocation = function() return { x = 800, y = 0 } end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.mode = 7; s.rune_policy.Think( s.bot );
+    eq( #s.attacks, 0 ); eq( #s.moves, 0 ); eq( #s.runes, 0 );
+end );
+
+test( "push does not override a recent Raze turn or an existing attack", function()
+    local s = waveScenario(); s.mode = 7;
+    local o = s.env.require( "bots/laning/observer/core" );
+    o.Action( s.bot, "existing_face_move", nil, { x = 1, y = 2 }, "existing_raze_turn" );
+    s.rune_policy.Think( s.bot ); eq( #s.attacks, 0 );
+    s.time = 350.3; s.rune_policy.Think( s.bot ); eq( #s.attacks, 1 );
+    s.time = 351; s.rune_policy.Think( s.bot ); eq( #s.attacks, 1 );
+end );
+
+test( "combat and low health beat push preparation", function()
+    local s = waveScenario(); s.mode = 2; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.mode = 1; s.hp = 300; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+end );
+
+test( "wave preparation times out to native laning instead of holding the mode", function()
+    local s = waveScenario(); assert( s.rune_policy.Decide( s.bot ) );
+    s.time = 363; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    eq( #s.attacks, 0 ); eq( #s.moves, 0 );
+end );
+
+test( "fallen T1 or unavailable wave API falls back without inventing geometry", function()
+    local s = waveScenario(); s.tower_dead = true; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+    s.tower_dead = false; s.env.GetLaneFrontLocation = nil; eq( s.rune_policy.GetDesire( s.bot ), 0 );
+end );
+
+test( "Dire uses its own tower direction for wave preparation", function()
+    local s = waveScenario(); s.bot.GetTeam = function() return 3 end;
+    s.front = 3000; eq( assert( s.rune_policy.Decide( s.bot ) ).phase, "push_wave" );
+    s.front = 800; eq( assert( s.rune_policy.Decide( s.bot ) ).phase, nil );
+end );
+
+test( "push selects the lowest health reachable creep", function()
+    local s = waveScenario(); local low = s:unit();
+    low.GetHealth = function() return 40 end; low.IsInvulnerable = function() return false end;
+    s.creeps[2] = low; eq( assert( s.rune_policy.Decide( s.bot ) ).target, low );
+end );
+
+test( "pickup retry also yields to a recent Raze turn", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); s.action = 2; s.time = 134;
+    local o = s.env.require( "bots/laning/observer/core" );
+    o.Action( s.bot, "existing_face_move", nil, { x = 1, y = 2 }, "existing_raze_turn" );
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); eq( #s.moves, 0 );
+end );
+
+test( "early available or unknown spots never send SF away before water preparation", function()
+    for _, now in ipairs( { 0, 35.1, 64.67, 83, 99.9 } ) do
+        local s = scenario(); pickup( s ); s.time = now; s.mode = 7;
+        s.items[0] = s:item( "item_bottle", 0 ); s.mana = 0;
+        eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+        eq( #s.moves, 0 ); eq( #s.runes, 0 );
+    end;
+end );
+
+test( "known bounty runes are ignored even with an empty bottle and low mana", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.items[0] = s:item( "item_bottle", 0 );
+    s.env.RUNE_BOUNTY = 5; s.env.GetRuneType = function() return 5 end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+    eq( #s.moves, 0 ); eq( #s.runes, 0 );
+end );
+
+test( "a farther water rune wins over a visible nearby bounty", function()
+    local s = scenario(); pickup( s ); s.time = 130;
+    s.env.GetRuneType = function( rune ) return rune == 0 and 5 or 7 end;
+    eq( assert( s.rune_policy.Decide( s.bot ) ).rune, 1 );
+end );
+
+test( "an owned pickup identified as bounty is stopped once without another order", function()
+    local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.rune_policy.Think( s.bot ); eq( #s.runes, 1 );
+    s.env.GetRuneType = function() return 5 end;
+    eq( s.rune_policy.GetDesire( s.bot ), 0 ); s.rune_policy.Think( s.bot );
+    eq( s.cancelled, 1 ); eq( #s.runes, 1 ); eq( #s.moves, 0 );
+    s.rune_policy.Leave( s.bot, "mode_ended" ); eq( s.cancelled, 1 );
+end );
+
+test( "last moment approach guard cannot submit a bounty pickup", function()
+    local s = scenario(); pickup( s ); s.time = 130;
+    s.env.GetRuneType = function() return 5 end;
+    local _, kind = s.rune_policy.Approach( s.bot, { rune = 0 }, 400 );
+    eq( kind, "ignored_bounty" ); eq( #s.runes, 0 ); eq( #s.moves, 0 );
+end );
+
+test( "double damage type zero and water remain eligible", function()
+    for _, kind in ipairs( { 0, 7 } ) do
+        local s = scenario(); pickup( s ); s.time = 130;
+        s.env.GetRuneType = function() return kind end;
+        assert( s.rune_policy.Decide( s.bot ) );
+    end;
+end );
+
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

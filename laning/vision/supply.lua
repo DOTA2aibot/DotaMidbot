@@ -56,7 +56,7 @@ end;
 local function supply(bot) local d=M.StockDetails(bot);return d and d.total end;
 M.Stock=supply;
 local function phaseProfile(bot)
-    return Site.Radiant(bot) and C.calibration_only~=true and Profile.ward_phase_enabled==true
+    return Site.ObserverSupported(bot) and C.calibration_only~=true and Profile.ward_phase_enabled==true
         and Profile.wards_enabled==true and Profile.runtime_enabled~=true;
 end;
 function M.Observe(bot)
@@ -132,7 +132,7 @@ function M.TryPurchase(bot)
     local request=phase and Schedule.Request(ctx.now,broker) or nil;
     if phase and (not request or Schedule.Completed(broker,request)) then return false end;
     if ctx.now<(s.nextCheck or -math.huge) then return false end;s.nextCheck=phase and math.min(ctx.now+1,Schedule.NextCheck(ctx.now)) or ctx.now+1;
-    local spot,reason;if phase then spot,reason=Site.Geometry() else spot,reason=Site.Get(bot) end;if not spot then
+    local spot,reason;if phase then spot,reason=Site.Geometry(bot) else spot,reason=Site.Get(bot) end;if not spot then
         if reason~=s.reason then emit(bot,s,"vision_supply_skip",{reason=reason or "site_unknown"});s.reason=reason end;return false;
     end;
     local count=supply(bot);if count==nil then return false end;

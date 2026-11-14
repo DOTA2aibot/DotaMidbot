@@ -14,9 +14,13 @@ return {
     -- (выход в 1:50, пешком ~5.5с — успевает к спавну). Компромисс: враг у руны
     -- может быть вне скана 1600, пока бот далеко — окно вслепую, риск принят
     -- для тестового этапа.
+    rune_first_scout_time = 100, -- no early empty/bounty trips; earliest pre-water approach is 1:40
     lane_radius = 1200, rune_distance = 2200, rune_desire = 0.85,
     rune_enemy_radius = 500, rune_min_hp = 0.35, rune_window_end = 900,
-    rune_creep_block_radius = 250,
+    rune_creep_block_radius = 700, -- finish the reachable wave before a new rune trip
+    rune_wave_tower_margin = 550, rune_wave_own_tower_clearance = 1600,
+    rune_push_budget_s = 12, rune_push_desire = 0.42, rune_push_order_interval = 0.6,
+    rune_memory_s = 25, -- visible observations only, never across spawn cycles
     rune_lane_defense_radius = 900, -- T024: враги у нашей вышки → сначала лайн
     -- T024b: grace держит desire, пока движок начинает наш pickup (матч 9082231706:
     -- схлопывание через 0.13с); timeout 8с — пешком до дальней руны ~1100 ед. ≈ 3.5с.
