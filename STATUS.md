@@ -1,3 +1,7 @@
+## T040 -- v0.4.2 recovery candidate
+
+Matches9091709760/9091733471 exposed WARD idle0-30 and over-restrictive cleanup. Independent watchdog and expanded cleanup eligibility added. Runtime passive-item behavior instructions removed; purchase order preserved. Dota test outstanding.
+
 ## T040 -- v0.4.1 candidate
 
 User reports full-game v0.4.0 purchase success. This candidate changes Kaya order, late crit items and idle consumable cleanup; game test outstanding. See docs/SF_BUILD_v04.md.

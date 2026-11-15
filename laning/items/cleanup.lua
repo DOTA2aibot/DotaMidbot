@@ -1,4 +1,4 @@
--- Low-priority discard, 15:00 <= time < 18:00. Never walk, sell or attack an item.
+-- Mandatory window task with combat/cast safety, 15:00 <= time < 18:00. Never walk, sell or attack an item.
 local U=require(GetScriptDirectory().."/laning/tactical/util");
 local B=require(GetScriptDirectory().."/laning/tactical/broker");
 local P=require(GetScriptDirectory().."/laning/profile");
@@ -13,11 +13,13 @@ function M.Tick(bot,s)
  s.cleanup_after=now+1;
  if s.pressure or s.vision_phase or s.vision_support or s.ward_pending or s.raze_cast or s.pt_spell or s.delivery_pickup then return false end;
  local mode=U.Call(bot,"GetActiveMode");local action=U.Call(bot,"GetCurrentActionType");
- local idleMode=(BOT_MODE_NONE~=nil and mode==BOT_MODE_NONE) or (BOT_MODE_LANING~=nil and mode==BOT_MODE_LANING)
-  or (BOT_MODE_FARM~=nil and mode==BOT_MODE_FARM);
- local idleAction=(BOT_ACTION_TYPE_IDLE~=nil and action==BOT_ACTION_TYPE_IDLE)
-  or (BOT_ACTION_TYPE_NONE~=nil and action==BOT_ACTION_TYPE_NONE);
- if not idleMode or not idleAction or U.Call(bot,"NumQueuedActions")~=0 then return false end;
+ local forbidden=mode==nil or mode==BOT_MODE_RETREAT or mode==BOT_MODE_ATTACK or mode==BOT_MODE_RUNE
+  or (BOT_MODE_EVASIVE_MANEUVERS~=nil and mode==BOT_MODE_EVASIVE_MANEUVERS)
+  or (BOT_MODE_ROAM~=nil and mode==BOT_MODE_ROAM) or (BOT_MODE_TEAM_ROAM~=nil and mode==BOT_MODE_TEAM_ROAM);
+ local freeAction=(BOT_ACTION_TYPE_IDLE~=nil and action==BOT_ACTION_TYPE_IDLE)
+  or (BOT_ACTION_TYPE_NONE~=nil and action==BOT_ACTION_TYPE_NONE)
+  or (BOT_ACTION_TYPE_MOVE_TO~=nil and action==BOT_ACTION_TYPE_MOVE_TO);
+ if forbidden or not freeAction or U.Call(bot,"NumQueuedActions")~=0 then return false end;
  local hp=U.HP(bot);local recent=U.Call(bot,"TimeSinceDamagedByAnyHero");
  if not hp or hp<.6 or not U.Number(recent) or recent<4 then return false end;
  local groups={U.Call(bot,"GetNearbyHeroes",1200,true,BOT_MODE_NONE),U.Call(bot,"GetNearbyTowers",1000,true),
@@ -40,7 +42,7 @@ function M.Tick(bot,s)
    local cost=U.Global("GetItemCost",name);
    if U.Number(cost) and cost>=0 and cost<150 then
     s.discarded_items=s.discarded_items or {};s.discarded_items[item]=true;
-    return B.Fire(bot,s,"inventory_discard",item,"idle_consumable_under150_15to18",function()
+    return B.Fire(bot,s,"inventory_discard",item,"window_consumable_under150_15to18",function()
      return bot:Action_DropItem(item,U.Vector(pos));
     end,false);
    end;

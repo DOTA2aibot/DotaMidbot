@@ -8,10 +8,6 @@ local MAX_RECIPE_DEPTH = 16; -- защита от циклического/по�
 local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> скипаем предмет, не встаём насмерть
 -- T026: один стартовый Observer, дальнейшее пополнение — vision supply.
 -- Sentry is still purchased by the existing TryStartup service after Observer.
--- Kaya: +16 INT, +10% spell amp, +20% mana-regen amplification (reference15Nov2026).
--- No mana-cost discount or cast speed on Kaya. YashaKaya: +12% spell amp, +30% mana-regen amp, +25% cast speed.
--- YashaKaya adds cast-speed; engine mana values are live, old damage/aim estimates are not fully adaptive.
--- Crystalys/Daedalus crits are probabilistic and must not count as guaranteed last-hit/kill damage.
 local tableItemsToBuy = {
     "item_tango", "item_ward_observer", "item_branches",
     "item_bottle", "item_boots", "item_magic_wand", "item_power_treads",
