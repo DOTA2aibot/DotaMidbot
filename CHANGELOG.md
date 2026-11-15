@@ -1,3 +1,31 @@
+## v0.3.30-water-queue-test
+
+Queued transport only for south water; north water and power runes remain direct. Engine pickup still unproven. See docs/WORK_v0330.md.
+
+## v0.3.29-close-rune-test
+
+Visible river rune within500 overrides resource/wave preferences with survival checks. Direct/queued transports are separate game experiments; south-water pickup is unproven. See docs/WORK_v0329.md.
+
+## v0.3.28-recovery-test -- T039
+
+Rollback water-pair experiment to v0.3.25 policy. Disable native watcher selection via its own mode; remove reactive capture cancellations. Unknown south-water type also gets close/away protection. Actual south-water pickup remains unresolved. See docs/WORK_v0328.md.
+
+## v0.3.27-water-pair-test — T039 experiment
+
+Re-enable south water, clear shared water pickup bookkeeping while preserving location history, allow the second water rune at full resources. Engine pickup remains unproven. See docs/WORK_v0327.md.
+
+## v0.3.26-water-guard-test — temporary T039 mitigation
+
+Skip broken south-water trips; pickup is NOT fixed. North water and south power runes remain enabled. See docs/WORK_v0326.md.
+
+## v0.3.25-pressure-deward-test — кандидат T039
+
+Короткие covered trades, высокий локальный приоритет видимых Observer/Sentry и защита от неверного движения к южной водяной. [Разбор и ограничения](docs/WORK_v0325.md). Новый Dota-тест нужен.
+
+## v0.3.24-tower-pressure-test — T039, отдельный кандидат
+
+Профиль tower_pressure_test: ограниченное давление под мидовой T1, оценка lethal dive/отхода, переагр с readback и запрет capture смотрителей. [Описание и ограничения](docs/WORK_v0324.md). Хорошая v0.3.23 сохранена как контроль. Новый игровой тест нужен; в main не слито.
+
 ## v0.3.23-no-bounty-test — кандидат
 
 Нет ранних rune-походов до1:40, явный запрет Bounty, guard от повторной подачи собственного Raze. [Разбор матча и ограничения](docs/WORK_v0323.md). Игровой тест ещё нужен.

@@ -54,36 +54,65 @@ local function inRange(bot,target)
     return U.Number(range) and range>0 and U.Distance(U.Pos(bot),U.Pos(target))<=range;
 end;
 function M.Safe(bot,p)
-    if not M.Enabled(bot) or U.Call(bot,"IsAlive")~=true then return false,"disabled_or_dead" end;
+    if (p.local_observer and not Sentry.Enabled(bot)) or (not p.local_observer and not M.Enabled(bot))
+        or U.Call(bot,"IsAlive")~=true then return false,"disabled_or_dead" end;
     if not U.CanUse(bot) then return false,"busy" end;
     local mode=U.Call(bot,"GetActiveMode");
     if mode==nil or mode==BOT_MODE_RETREAT or mode==BOT_MODE_RUNE
         or (BOT_MODE_EVASIVE_MANEUVERS~=nil and mode==BOT_MODE_EVASIVE_MANEUVERS) then return false,"priority_mode" end;
     local hp=U.HP(bot);local recent=U.Call(bot,"TimeSinceDamagedByAnyHero");
-    if not hp or hp<.55 or not U.Number(recent) or recent<1.5 then return false,"health_or_recent_damage" end;
+    if p.local_observer then
+        if not hp or hp<.5 then return false,"health_or_recent_damage" end;
+    elseif not hp or hp<.55 or not U.Number(recent) or recent<1.5 then return false,"health_or_recent_damage" end;
     local pos=U.Pos(bot);local heroes=U.Call(bot,"GetNearbyHeroes",1599,true,BOT_MODE_NONE);
     local towers=U.Call(bot,"GetNearbyTowers",1599,true);local projectiles=U.Call(bot,"GetIncomingTrackingProjectiles");
     if not pos or type(heroes)~="table" or type(towers)~="table" or type(projectiles)~="table" then return false,"safety_unknown" end;
+    local estimatedDamage,enemyCount=0,0;
     for _,e in ipairs(heroes) do if U.Visible(e) then
+        enemyCount=enemyCount+1;
         local distance=U.Distance(pos,U.Pos(e));local range=U.Call(e,"GetAttackRange");
-        if distance<=450 or (U.Call(e,"GetAttackTarget")==bot and (not U.Number(range) or distance<=range+150))
+        if p.local_observer then
+            local damage=U.Call(e,"GetEstimatedDamageToTarget",true,bot,C.local_deward_risk_s,DAMAGE_TYPE_ALL);
+            if not U.Number(damage) or damage<0 then return false,"deward_damage_unknown" end;
+            estimatedDamage=estimatedDamage+damage;
+            if U.Call(e,"IsUsingAbility")==true and (U.Call(e,"GetTarget")==bot or U.Call(e,"GetAbilityTarget")==bot) then return false,"direct_hero_threat" end;
+        elseif distance<=450
+            or (U.Call(e,"GetAttackTarget")==bot and (not U.Number(range) or distance<=range+150))
             or (U.Call(e,"IsUsingAbility")==true and (U.Call(e,"GetTarget")==bot or U.Call(e,"GetAbilityTarget")==bot)) then
             return false,"direct_hero_threat";
         end;
     end end;
     for _,shot in ipairs(projectiles) do
-        if shot.caster and U.Call(shot.caster,"IsHero")==true and U.Call(shot.caster,"GetTeam")~=U.Call(bot,"GetTeam") then return false,"incoming_hero_projectile" end;
+        if shot.caster and U.Call(shot.caster,"IsHero")==true and U.Call(shot.caster,"GetTeam")~=U.Call(bot,"GetTeam") then
+            if not p.local_observer or shot.is_attack~=true then return false,"incoming_hero_projectile" end;
+            local raw=U.Call(shot.caster,"GetAttackDamage");local actual=U.Number(raw) and U.Call(bot,"GetActualIncomingDamage",raw,DAMAGE_TYPE_PHYSICAL);
+            if not U.Number(actual) then return false,"deward_damage_unknown" end;estimatedDamage=estimatedDamage+actual;
+        end;
+    end;
+    if p.local_observer then
+        local current,maxhp=U.Call(bot,"GetHealth"),U.Call(bot,"GetMaxHealth");
+        if enemyCount>1 then return false,"deward_outnumbered" end;
+        if not U.Number(current) or not U.Number(maxhp) or current-estimatedDamage-C.local_deward_damage_buffer<math.max(200,maxhp*.35) then return false,"deward_damage_budget" end;
     end;
     for _,t in ipairs(towers) do if U.Visible(t) then local range=U.Call(t,"GetAttackRange");
-        if not U.Number(range) or U.Distance(pos,U.Pos(t))<=range+150 then return false,"tower_threat" end;
+        if not U.Number(range) or U.Distance(pos,U.Pos(t))<=range+150
+            or (p.local_observer and U.Distance(p.location,U.Pos(t))<=range+150) then return false,"tower_threat" end;
+        if p.local_observer then
+            local goal=p.location;local tp=U.Pos(t);local dx,dy=goal.x-pos.x,goal.y-pos.y;local d=dx*dx+dy*dy;
+            local f=d>0 and math.max(0,math.min(1,((tp.x-pos.x)*dx+(tp.y-pos.y)*dy)/d)) or 0;
+            if U.Distance(tp,{x=pos.x+dx*f,y=pos.y+dy*f})<=range+150 then return false,"tower_threat" end;
+        end;
     end end;
     local action=U.Call(bot,"GetCurrentActionType");
     if action==BOT_ACTION_TYPE_ATTACK then
         local target=U.Call(bot,"GetAttackTarget");
-        if target~=p.target and U.Call(target,"IsHero")~=false then return false,"hero_or_unknown_attack_priority" end;
+        local hero=U.Call(target,"IsHero");
+        if target~=p.target and (hero==nil or (hero~=false and not p.local_observer)) then return false,"hero_or_unknown_attack_priority" end;
     elseif action~=BOT_ACTION_TYPE_IDLE and action~=BOT_ACTION_TYPE_NONE and action~=BOT_ACTION_TYPE_MOVE_TO then return false,"native_action" end;
     -- Lane creeps intentionally do not preempt this one local completion step.
-    if not Deward.Valid(bot,p.target) or not inRange(bot,p.target) then return false,"target_hidden_or_out_of_range" end;
+    local range=U.Call(bot,"GetAttackRange");
+    local reach=U.Number(range) and U.Distance(U.Pos(bot),U.Pos(p.target))<=range+(p.local_observer and C.local_deward_approach-25 or 0);
+    if not Deward.Valid(bot,p.target) or not reach then return false,"target_hidden_or_out_of_range" end;
     return true;
 end;
 function M.Poll(bot,s)

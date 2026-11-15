@@ -11,14 +11,14 @@ class ShopPackage(unittest.TestCase):
     def test_only_explicit_test_profile_contains_generic_purchase(self):
         for profile in p.PROFILES:
             files=p.collect(profile,ROOT,'test-shop')
-            self.assertEqual('item_purchase_generic.lua' in files,profile=='all_test')
-            self.assertEqual(b'ally_ward_free_shop = true' in files['laning/profile.lua'],profile=='all_test')
+            self.assertEqual('item_purchase_generic.lua' in files,profile in ('all_test','tower_pressure_test'))
+            self.assertEqual(b'ally_ward_free_shop = true' in files['laning/profile.lua'],profile in ('all_test','tower_pressure_test'))
             self.assertIn('item_purchase_nevermore.lua',files)
-            self.assertNotIn('mode_roam_nevermore.lua',files)
+            self.assertEqual('mode_roam_nevermore.lua' in files,profile=='tower_pressure_test')
             self.assertNotIn(b'delivery_lane_guard',files['laning/profile.lua'])
             self.assertFalse(any('delivery_guard' in n for n in files))
-            self.assertEqual('mode_item_nevermore.lua' in files,profile=='all_test')
-            self.assertEqual(b'stationary_delivery_enabled = true' in files['laning/profile.lua'],profile=='all_test')
+            self.assertEqual('mode_item_nevermore.lua' in files,profile in ('all_test','tower_pressure_test'))
+            self.assertEqual(b'stationary_delivery_enabled = true' in files['laning/profile.lua'],profile in ('all_test','tower_pressure_test'))
     def test_test_archive_preserves_personal_sf_and_tango(self):
         with tempfile.TemporaryDirectory(prefix='.package-shop-',dir=ROOT) as d:
             path=Path(d)/'test.zip';m=p.build('all_test',path,'test-shop',ROOT);self.assertEqual(p.verify(path),m)

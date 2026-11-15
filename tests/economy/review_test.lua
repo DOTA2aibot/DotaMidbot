@@ -473,4 +473,92 @@ test( "double damage type zero and water remain eligible", function()
     end;
 end );
 
+local function southWater()
+    local s = scenario(); pickup(s);s.time=130;s.mode=7;
+    s.status_map={[0]=3,[1]=1};s.env.GetRuneType=function() return 7 end;
+    s.x=1400;s.bot.GetLocation=function() return {x=s.x,y=0} end;
+    return s;
+end;
+test("south water approaches the real point closely before asking the engine to pick up",function()
+    local s=southWater();s.rune_policy.Think(s.bot);eq(#s.runes,0);eq(#s.moves,1);eq(s.moves[1].x,2000);
+    s.x=1950;s.time=131;s.rune_policy.Think(s.bot);eq(#s.runes,1);eq(s.runes[1],1);
+end);
+test("south water at the point uses pickup without the old backoff loop",function()
+    local s=southWater();s.x=2000;s.rune_policy.Think(s.bot);eq(#s.runes,1);eq(#s.moves,0);
+end);
+test("wrong-way south-water pickup is cancelled and repeated failures exhaust its cycle budget",function()
+    local s=southWater();
+    for _,t in ipairs({130,145}) do
+        s.time=t;s.x=1950;s.action=0;assert(s.rune_policy.GetDesire(s.bot)>0);s.rune_policy.Think(s.bot);
+        s.time=t+.1;s.rune_policy.Think(s.bot);
+        s.x=1700;s.time=t+.7;s.rune_policy.Think(s.bot);
+    end;
+    eq(s.cancelled,2);s.time=157;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.time=245;assert(s.rune_policy.GetDesire(s.bot)>0);
+end);
+test("towards-point water movement and foreign spells are never cleared by the direction guard",function()
+    local s=southWater();s.x=1950;s.rune_policy.Think(s.bot);s.time=130.1;s.rune_policy.Think(s.bot);
+    s.x=1980;s.time=130.7;s.rune_policy.Think(s.bot);eq(s.cancelled,nil);
+    s.x=1700;s.time=131;s.casting=true;s.rune_policy.Think(s.bot);eq(s.cancelled,nil);
+end);
+test("the close-water workaround does not alter normal power-rune pickup range",function()
+    local s=southWater();s.env.GetRuneType=function() return 0 end;s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,1);
+end);
+
+test("unknown south water type still gets close approach and wrong-way protection",function()
+    local s=southWater();s.env.GetRuneType=function() return -1 end;
+    s.rune_policy.Think(s.bot);eq(#s.runes,0);eq(#s.moves,1);
+    s.x=1950;s.time=131;s.rune_policy.Think(s.bot);eq(#s.runes,1);
+    s.time=131.1;s.rune_policy.Think(s.bot);s.x=1700;s.time=131.8;s.rune_policy.Think(s.bot);eq(s.cancelled,1);
+end);
+test("unknown south power after six minutes keeps ordinary pickup range",function()
+    local s=southWater();s.time=365;s.env.GetRuneType=function() return -1 end;
+    s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,1);
+end);
+
+local function closeRune()
+    local s=scenario();pickup(s);s.time=245;s.mode=7;s.mana=300;s.items[0]=s:item("item_bottle",3);
+    s.env.require("bots/laning/economy/config").rune_nearby_priority=true;
+    return s;
+end;
+test("visible rune within500 bypasses full resources and a nearby wave",function()
+    local s=closeRune();s.creeps={s:unit()};eq(assert(s.rune_policy.Decide(s.bot)).rune,0);
+end);
+test("one low damage opponent does not block a close rune but lethal danger does",function()
+    local s=closeRune();s.mode=2;s.env.DAMAGE_TYPE_ALL=7;local e=s:unit();s.enemies={e};
+    e.GetEstimatedDamageToTarget=function() return 50 end;eq(assert(s.rune_policy.Decide(s.bot)).rune,0);
+    e.GetEstimatedDamageToTarget=function() return 1000 end;eq(s.rune_policy.GetDesire(s.bot),0);
+end);
+test("close rule preserves retreat casts empty spots and bounty exclusion",function()
+    local s=closeRune();s.mode=4;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.mode=7;s.casting=true;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.casting=false;s.env.GetRuneType=function() return 5 end;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.env.GetRuneType=function() return 7 end;s.status_map={[0]=3,[1]=3};eq(s.rune_policy.GetDesire(s.bot),0);
+end);
+test("queued transport submits one pickup and is not reported as a successful pickup",function()
+    local s=closeRune();s.env.BOT_ACTION_TYPE_NONE=0;s.env.require("bots/laning/economy/config").rune_pickup_transport="queued";
+    local n=0;s.bot.ActionQueue_PickUpRune=function(_,r) eq(r,0);n=n+1;s.action=8 end;
+    s.rune_policy.Think(s.bot);eq(n,1);eq(#s.runes,0);s.rune_policy.Think(s.bot);eq(n,1);
+end);
+
+test("targeted queue affects only southern water including unknown type",function()
+    for _,c in ipairs({{130,1,7,true},{245,1,-1,true},{245,0,7,false},{365,1,0,false},{485,1,-1,false}}) do
+        local s=scenario();pickup(s);s.time=c[1];s.env.BOT_ACTION_TYPE_IDLE=1;s.action=1;
+        s.env.GetRuneType=function() return c[3] end;
+        s.env.require("bots/laning/economy/config").rune_pickup_transport="south_water_queued";
+        local queued=0;s.bot.ActionQueue_PickUpRune=function(_,r) eq(r,c[2]);queued=queued+1 end;
+        s.rune_policy.Approach(s.bot,{rune=c[2]},50);
+        eq(queued,c[4] and 1 or 0);eq(#s.runes,c[4] and 0 or 0);
+        -- Normal power at distance50 uses its preserved backoff, not queued pickup.
+        if not c[4] then s.rune_policy.Approach(s.bot,{rune=c[2]},400);eq(#s.runes,1);eq(queued,0) end;
+    end;
+end);
+test("targeted queue never appends behind movement combat or another queued action",function()
+    for _,action in ipairs({2,4}) do
+        local s=scenario();pickup(s);s.time=245;s.action=action;s.env.GetRuneType=function() return 7 end;
+        s.env.BOT_ACTION_TYPE_IDLE=1;s.env.require("bots/laning/economy/config").rune_pickup_transport="south_water_queued";
+        local queued=0;s.bot.ActionQueue_PickUpRune=function() queued=queued+1 end;
+        local _,kind=s.rune_policy.Approach(s.bot,{rune=1},30);eq(kind,"queue_wait_idle");eq(queued,0);
+    end;
+end);
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

@@ -24,7 +24,7 @@ class MovementBaseline(unittest.TestCase):
         self.assertFalse(list((ROOT/'laning/items').glob('delivery_guard*.lua')))
         for profile in package.PROFILES:
             files = package.collect(profile, ROOT, 'baseline-check')
-            self.assertNotIn('mode_roam_nevermore.lua', files)
+            self.assertEqual('mode_roam_nevermore.lua' in files,profile=='tower_pressure_test')
             self.assertFalse(any('delivery_guard' in n for n in files))
             self.assertNotIn(b'delivery_lane_guard', files['laning/profile.lua'])
 

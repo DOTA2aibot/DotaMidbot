@@ -9,6 +9,7 @@
 -- часто ниже 50% HP (health_or_unknown ×31) — а руна как раз заряжает ботл.
 -- rune_distance 1100 + enemy_radius 500: scan 1600 — предел API GetNearbyHeroes.
 return {
+    rune_nearby_priority = true, rune_pickup_transport = "south_water_queued",
     -- T025: матч 9082402589 — диагностика показала реальные дистанции до рун
     -- с позиции мидера: 1600-2700! Лимит 1400 не доставал НИ РАЗУ. Ставим 2200
     -- (выход в 1:50, пешком ~5.5с — успевает к спавну). Компромисс: враг у руны
@@ -37,6 +38,7 @@ return {
     -- движком продлеваем ещё на rune_commit_extend_s (t=122.5: живой pickup
     -- убит таймаутом у порога руны).
     rune_pickup_range = 900, rune_commit_extend_s = 6,
+    south_water_pickup_range = 90, rune_pickup_away_margin = 180, rune_pickup_away_grace_s = .4,
     -- T029: сколько перевыдач pickup ВПЛОТНУЮ к споту после спавна терпим, прежде
     -- чем признать точку пустой (матч 9082458295, t=297-306: d=1.0, 4 молчаливых
     -- отказа движка). До спавна ожидание на точке — норма, не считается.

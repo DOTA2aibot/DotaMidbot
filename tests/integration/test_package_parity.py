@@ -1,6 +1,6 @@
 """Keep the historical reference, test current packaging without freezing HEAD."""
 from pathlib import Path
-import hashlib,importlib.util,json,tempfile,unittest,zipfile
+import hashlib,importlib.util,json,re,tempfile,unittest,zipfile
 ROOT=Path(__file__).resolve().parents[2]
 REFERENCE=json.loads(Path(__file__).with_name('installed_v036.json').read_text(encoding='utf-8'))
 spec=importlib.util.spec_from_file_location('package_parity',ROOT/'tools/package_bot.py')
@@ -32,7 +32,8 @@ class PackageParity(unittest.TestCase):
             self.assertEqual(package.verify(path),manifest)
             expected=package.collect('all_test',ROOT,'review-current')
             self.assertEqual(manifest['files_sha256'],{n:package.sha(b) for n,b in sorted(expected.items())})
-            self.assertEqual(manifest['version'],'v0.3.21-ward-startup-test')
+            named_version=re.search(r'"MIDBOT (v[^\"]+)"',(ROOT/'hero_selection.lua').read_text(encoding='utf-8')).group(1)
+            self.assertEqual(manifest['version'],named_version)
             self.assertTrue(manifest['economy_enabled']);self.assertFalse(manifest['runtime_enabled'])
             with zipfile.ZipFile(path) as archive:
                 for name,data in expected.items():self.assertEqual(archive.read('bots/'+name),data,name)

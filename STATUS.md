@@ -1,3 +1,31 @@
+## T039 -- v0.3.30 targeted pickup experiment
+
+Direct south-water pickup failed in match9090705636. Targeted queued candidate ready for a game test. See docs/WORK_v0330.md.
+
+## T039 -- v0.3.29 direct/queued experiments
+
+Rule500 candidate, game tests outstanding. v0.3.28 remains installed. See docs/WORK_v0329.md.
+
+## T039 -- v0.3.28 recovery candidate
+
+v0.3.27 failed its game test. Watcher cancellation loop found; water-pair experiment reverted. Game test of recovery still required. See docs/WORK_v0328.md.
+
+## T039 — v0.3.27 water-pair experiment
+
+User-requested water bookkeeping experiment; south water re-enabled. Game result unproven. See docs/WORK_v0327.md.
+
+## T039 — кандидат v0.3.26
+
+Временный пропуск неисправной южной водяной. Её подбор НЕ исправлен. [Ограничения](docs/WORK_v0326.md). Игра ещё не проверена.
+
+## T039 — кандидат v0.3.25
+
+Artem (GPT), Issue62: правки по матчу9090586313. [Разбор](docs/WORK_v0325.md). Офлайн проверки пройдены; новый игровой тест ещё нужен. Контроль v0.3.23 сохранён.
+
+## T039 — кандидат v0.3.24, контроль v0.3.23
+
+Artem (GPT), Issue62: отдельный тестовый профиль давления под T1 и запрета смотрителей. [Описание](docs/WORK_v0324.md), [контроль](docs/BASELINE_v0323.md). Офлайн-проверки пройдены; Dota-тест/независимый review ещё нужны.
+
 # STATUS
 
 ## v0.3.21 — кандидат startup/switch исправления
