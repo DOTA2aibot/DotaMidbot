@@ -69,11 +69,11 @@ function GetBotNames()
 	if ( profile() )
 	then
 		return {
-			"MIDBOT v0.3.30-water-queue-test",
+			"MIDBOT v0.3.31-native-rune-probe",
 		};
 	end
 	return {
-		"MIDBOT v0.3.30-water-queue-test",
+		"MIDBOT v0.3.31-native-rune-probe",
 		"MIDBOT teammate 2",
 		"MIDBOT teammate 3",
 		"MIDBOT teammate 4",

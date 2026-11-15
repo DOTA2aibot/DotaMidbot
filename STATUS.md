@@ -1,3 +1,7 @@
+## T039 -- v0.3.31 native-rune diagnosis
+
+Isolated native-rune probe prepared. No gameplay success claim. See docs/WORK_v0331.md.
+
 ## T039 -- v0.3.30 targeted pickup experiment
 
 Direct south-water pickup failed in match9090705636. Targeted queued candidate ready for a game test. See docs/WORK_v0330.md.
