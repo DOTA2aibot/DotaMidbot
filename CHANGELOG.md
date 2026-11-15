@@ -1,7 +1,3 @@
-## v0.3.31-native-rune-probe
-
-Separate diagnostic native-rune archive; both scripted rune entries removed, own rune helper inert. Other runtime features preserved. Not a release. See docs/WORK_v0331.md.
-
 ## v0.3.30-water-queue-test
 
 Queued transport only for south water; north water and power runes remain direct. Engine pickup still unproven. See docs/WORK_v0330.md.
