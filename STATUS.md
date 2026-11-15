@@ -1,10 +1,6 @@
-## T040 -- v0.4.2 recovery candidate
+## v0.4.3-v040-base-test
 
-Matches9091709760/9091733471 exposed WARD idle0-30 and over-restrictive cleanup. Independent watchdog and expanded cleanup eligibility added. Runtime passive-item behavior instructions removed; purchase order preserved. Dota test outstanding.
-
-## T040 -- v0.4.1 candidate
-
-User reports full-game v0.4.0 purchase success. This candidate changes Kaya order, late crit items and idle consumable cleanup; game test outstanding. See docs/SF_BUILD_v04.md.
+v0.4.0 baseline restored, Yasha before Kaya. Keep only tested cleanup15–18 from v0.4.2 and Crystalys → Daedalus after BKB. PR65 remains separate from main; Dota test pending.
 
 ## T040 -- v0.4.0 build candidate
 

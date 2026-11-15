@@ -1,10 +1,6 @@
-## v0.4.2-recovery-test -- T040
+## v0.4.3-v040-base-test
 
-Keep Kaya-first/Daedalus build; remove passive-item behavior guidance. Bound WARD mode independently by2s no movement /8s total; log helper failures. Cleanup15-18 now allows safe push/defend movement, with combat/cast protections. Dota test required.
-
-## v0.4.1-build-cleanup-test -- T040
-
-Kaya before Yasha; Crystalys then Daedalus after BKB. Idle-only consumable discard during15:00-18:00, under150 gold, protected items retained and dropped items not re-picked. Item bonuses documented; Blink unchanged.
+v0.4.0 baseline restored, Yasha before Kaya. Keep only tested cleanup15–18 from v0.4.2 and Crystalys → Daedalus after BKB. PR65 remains separate from main; Dota test pending.
 
 ## v0.4.0-build-test -- T040
 

@@ -11,7 +11,7 @@ local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> с
 local tableItemsToBuy = {
     "item_tango", "item_ward_observer", "item_branches",
     "item_bottle", "item_boots", "item_magic_wand", "item_power_treads",
-    "item_kaya", "item_yasha", "item_yasha_and_kaya", "item_blink", "item_black_king_bar", "item_lesser_crit", "item_greater_crit",
+    "item_yasha", "item_kaya", "item_yasha_and_kaya", "item_blink", "item_black_king_bar", "item_lesser_crit", "item_greater_crit",
 };
 local pendingComponents = nil;
 local nextAttemptTime = -math.huge;

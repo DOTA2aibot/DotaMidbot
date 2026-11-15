@@ -8,5 +8,3 @@ lua.globals().CURRENT_OWNER_SOURCE=str(ROOT/'ability_item_usage_nevermore.lua').
 lua.execute((ROOT/'tests/vision_trades/vision_trades_test.lua').read_text(encoding='utf-8'))
 for p in ROOT.rglob('*.lua'):lua.execute('assert(loadstring(...))',p.read_text(encoding='utf-8'))
 print('VISION/TRADES Lua5.1 compile passed')
-
-lua.execute((Path(__file__).resolve().parents[2]/"tests/vision_trades/ward_watchdog_test.lua").read_text(encoding="utf-8"))

@@ -1,36 +1,9 @@
-# SF v0.4: build и контекст усилений
+# v0.4.3: v0.4.0 base with selected additions
 
-T040 / Artem (GPT), reviewer Олег (Kimi). Основа: принятая v0.3.30, main7ea4856. Это изменение закупа, не новая политика движения/боя. Новая ветка task/T040-v04-item-build, Issue64.
+Requested baseline: exact v0.4.0 gameplay and Yasha before Kaya. No ward watchdog from v0.4.2.
 
-## Основной порядок
+Purchase: Tango, Observer, Branch; existing startup service buys Sentry. Then Bottle, Boots, Magic Wand, Power Treads, Yasha, Kaya, Yasha and Kaya, Blink, BKB, Crystalys, Daedalus. Existing ward/HP/mana supplies retained.
 
-СтартTango, Observer, Sentry(существующийstartup supply), однаBranch.
-Bottle → Boots → Wand → PT → Kaya → Yasha → YashaKaya → Blink → BKB → Crystalys → Daedalus.
-Рецепты/цены читаются из игры. ИмеющиесяBoots, Branch иCrystalys учитываются в герое/рюкзаке/стэше/своём курьере.
-`plan_complete` означает завершение оплаты/планирования компонентов, не доказательство физической сборки или доставки. Ни этот статус, ни позиция в очереди не включают бонусы предмета. Ручного active-use контроллера Kaya/Yasha/YashaKaya нет. Рекомендации «после покупки изменить агрессию» удалены по поручению Artem.
+Only gameplay additions to v0.4.0: Crystalys/Daedalus queue after BKB; exact tested v0.4.2 consumable cleanup at 15:00–18:00 with its tactical hook and dropped-item pickup exclusion. Cleanup retains combat, danger and cast protections, discards selected consumables under150 gold, does not move the hero and does not discard Bottle/Wand/equipment.
 
-## Расходники и сохранённые механики
-
-ManaEconomy и vision/sentry supply сохранены побайтно. Вызов mana-докупки разрешён после завершения стадии Bottle, чтобы не отложить ранний Bottle ради Clarity/Mango. Это подтверждение плана оплаты/наличия, не доставки. Остальные прежние условия mana-сервиса сохранены.
-
-У прежней v0.3.30 не было отдельной повторной закупки HP: единственная Flask стояла в основной очереди. Вместо удаления этой возможности оставлена одна опциональная Flask: после Bottle, до10мин, HP ниже50% и недостаёт хотя бы250HP, Bottle пуст, нет Tango/Flask у героя/в рюкзаке/стэше/курьере и активного лечения. После неизвестного результата повторной траты нет. Явный отказ можно повторить через5с. Это сохранение прежнего лимита одной Flask по необходимости, не бесконечная закупка HP. Автодокупка Tango ранее отсутствовала и сейчас не добавлена; прежнее использование Tango сохранено.
-
-Курьер, постановка/обновление вардов, PT/Stick, койлы/Requiem, агрессия и руныv0.3.30 не переписываются. Blink покупается; новую комбинацию Blink→Requiem этот PR не реализует. Отдельная диагностика native runev0.3.31 не включена. Нижняя вода остаётся известным ограничением.
-
-## Учёт характеристик
-
-Текущие HP/mana/maxMana/attack_damage и стоимость способности читаются из игры. Наличие предметов для закупа проверяется через GetItemInSlot; завершение плана не объявляет их доставленными. По поручению Artem инструкции по использованию пассивных Kaya/Yasha/YashaKaya из этого документа и закупа удалены. Это не меняет свойства, которые применяет сам движок. Полный учёт spell amplification и cast-speed в ручных прогнозах пока не реализован; старое упреждение Raze0.55 сохранено, здесь оно не менялось.
-
-## Проверка в игре после review
-
-Новый матч, журнал `[MIDBOT purchase]`: стартовые расходники/варды, затем Bottle→Boots→Wand→PT→Kaya→Yasha/YK→Blink→BKB→Crystalys→Daedalus. Проверить отсутствие второго Boots и повторных компонентов Yasha, фактическую сборку/доставку и пополнение вардов/маны. Условная Flask должна появляться только при нужде. Офлайн-рецепты синтетические, не доказательство текущей автосборки Dota. Полный инвентарь/курьер и отложенные ошибки — отдельные наблюдаемые ограничения старой системы, не заявлены исправленными здесь.
-
-
-
-## v0.4.2 recovery
-
-В матчах9091709760/9091733471 не былоLua/helper errors; на0–30с SF оставался WARD/IDLE бездвижения, LH0. Новыйcleanup до15мин никакихприказов невыдаёт, поэтому причинность раннего простоя ему не приписывается. Ward service и руны вv0.4.1 были побайтно идентичны прежней базе. Втораяигра15–18мин:144snapshot, режимыpush/defend/attack/retreat, ни одногоNONE/LANING/FARM; очистка невыдалаdrop. Старая фильтрация по режимам делала задачу недостижимой.
-
-Новый wrapperвардинга независимо от helper-state отпускает режим при2с безперемещения40units или8с общейзадачи. На старте повтор до30.1с запрещён, позже cooldown15с. НикакихClearActions/Move; ошибкиhelper пишутся [MIDBOT ward_mode], освобождается desire. Это предохранитель стоимости зависания, не установленная первопричина и не доказанная успешная постановка.
-
-Cleanup сноваактивен15–18мин. Проверка нечаще1с, режимыpush/defend и безвражеское перемещение разрешены. Бой/руна/отступление/ганг/каст/очередь/свежийурон/близкие враги и фарм/ownlease остаются выше. По одномуwhitelistрасходнику<150 из0–8, dropнаместе; TP/Bottle/Wand/компоненты защищены, обратныйподбор исключён. Движение незадаётся и пути нестроятся; собственныйdrop может кратко занять action-slot, это проверяется в игре. Абсолютной гарантииочистки в постоянном бою нет. Отложенный остаток после18мин не выбрасывается. УспехвDota ещёнепроверен.
+No changes to runes, movement, abilities, Power Treads, Wand, pressure or ward behavior. No new passive-item controller or Blink usage logic. Offline tests do not replace a Dota match.
