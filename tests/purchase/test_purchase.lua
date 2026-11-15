@@ -117,7 +117,7 @@ test( "invalid costs never submit", function()
 end );
 test( "all targets terminate without duplicate spending", function()
 	local s = scenario(); for i = 1, 30 do s:tick() end;
-	eq( #s.calls, 12 ); eq( s.calls[12], "item_black_king_bar" ); eq( s.nextCost, 0 );
+	eq( #s.calls, 14 ); eq( s.calls[14], "item_greater_crit" ); eq( s.nextCost, 0 );
 end );
 test( "shop and stock failures retain position", function()
 	for _, result in ipairs( { 1, 2, 3, 5, 6, 7 } ) do

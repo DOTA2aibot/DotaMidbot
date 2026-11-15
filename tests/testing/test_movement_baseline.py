@@ -17,7 +17,13 @@ class MovementBaseline(unittest.TestCase):
             if name.startswith('laning/vision/') or name in {'item_purchase_nevermore.lua', 'mode_ward_nevermore.lua', 'laning/tactical/wards.lua', 'ability_item_usage_nevermore.lua'}:
                 continue
             with self.subTest(path=name):
-                self.assertEqual(hashlib.sha256(files[name]).hexdigest(), expected)
+                data=files[name]
+                if name=='laning/items/delivery_mode.lua':
+                    # T040 authorised delta: ignore only items deliberately discarded by cleanup.
+                    guard=b'            and not (s.discarded_items and s.discarded_items[it])\n'
+                    self.assertEqual(data.count(guard),1)
+                    data=data.replace(guard,b'')
+                self.assertEqual(hashlib.sha256(data).hexdigest(), expected)
 
     def test_courier_roam_experiment_is_absent_from_source_and_every_bundle(self):
         self.assertFalse((ROOT/'profiles/all_test/mode_roam_nevermore.lua').exists())

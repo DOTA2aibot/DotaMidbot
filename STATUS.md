@@ -1,3 +1,7 @@
+## T040 -- v0.4.1 candidate
+
+User reports full-game v0.4.0 purchase success. This candidate changes Kaya order, late crit items and idle consumable cleanup; game test outstanding. See docs/SF_BUILD_v04.md.
+
 ## T040 -- v0.4.0 build candidate
 
 Separate branch task/T040-v04-item-build, Issue64. Core purchase order changed; basev0.3.30 and existing gameplay preserved. Game smoke/review required. See docs/SF_BUILD_v04.md.

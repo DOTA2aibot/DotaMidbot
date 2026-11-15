@@ -18,6 +18,7 @@ local Delivery=require(GetScriptDirectory().."/laning/items/delivery_mode");
 local Recovery=require(GetScriptDirectory().."/laning/vision/recovery");
 local Pressure=require(GetScriptDirectory().."/laning/pressure/entry");
 local Watchers=require(GetScriptDirectory().."/laning/pressure/watchers");
+local Cleanup=require(GetScriptDirectory().."/laning/items/cleanup");
 local M={};
 local function fail(s,where,err)
     B.Emit(s,"helper_error",{where=where,error=tostring(err):sub(1,180)});
@@ -76,6 +77,7 @@ function M.BindLegacy(env)
         if Pressure.Holds(bot) then return end;
         local s=B.State(bot);if not enabled(s) or not U.Actor(bot) or not B.Free(s) then return end;
         local success,err=pcall(Ward.Tick,bot,s);if not success then fail(s,"wards",err) end;
+        local cleanOK,cleanErr=pcall(Cleanup.Tick,bot,s);if not cleanOK then fail(s,"cleanup",cleanErr) end;
     end;
     local function select(name,abilityName,index)
         env[name]=function(bot,...)

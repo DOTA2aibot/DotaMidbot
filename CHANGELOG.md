@@ -1,3 +1,7 @@
+## v0.4.1-build-cleanup-test -- T040
+
+Kaya before Yasha; Crystalys then Daedalus after BKB. Idle-only consumable discard during15:00-18:00, under150 gold, protected items retained and dropped items not re-picked. Item bonuses documented; Blink unchanged.
+
 ## v0.4.0-build-test -- T040
 
 New purchase build on accepted v0.3.30: Bottle, Boots, Wand, PT, Yasha, Kaya/YashaKaya, Blink, BKB. One starting Branch; ward supply retained. Optional one-salve HP allowance and existing mana supply after Bottle. No combat/movement rewrite. See docs/SF_BUILD_v04.md.
