@@ -1,3 +1,7 @@
+## v0.4.0-build-test -- T040
+
+New purchase build on accepted v0.3.30: Bottle, Boots, Wand, PT, Yasha, Kaya/YashaKaya, Blink, BKB. One starting Branch; ward supply retained. Optional one-salve HP allowance and existing mana supply after Bottle. No combat/movement rewrite. See docs/SF_BUILD_v04.md.
+
 ## v0.3.30-water-queue-test
 
 Queued transport only for south water; north water and power runes remain direct. Engine pickup still unproven. See docs/WORK_v0330.md.

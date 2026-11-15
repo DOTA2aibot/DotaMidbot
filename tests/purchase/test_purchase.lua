@@ -32,7 +32,7 @@ local function scenario( opt )
 	env.GetBot = function() if ( opt.noBot ) then return nil end; return bot end;
 	env.GameTime = function() return s.now end;
     env.GetScriptDirectory=function() return "bots" end;local cache={};
-    env.require=function(path) local p=assert(path:match("laning/.*"));if p=="laning/profile" then return {economy_enabled=false} end;
+    env.require=function(path) local p=assert(path:match("laning/.*"));if opt.modules and opt.modules[p] then return opt.modules[p] end;if p=="laning/profile" then return {economy_enabled=false} end;
         if not cache[p] then local f=assert(loadfile(p..".lua"));setfenv(f,env);cache[p]=f() end;return cache[p];end;
 	env.GetItemCost = opt.cost or function() return 100 end;
 	env.GetItemComponents = opt.recipe or function() return {} end;
@@ -76,25 +76,25 @@ test( "attempt throttling", function()
 end );
 test( "nested recipe, repeated component and first variant", function()
 	local s = scenario( { recipe = function( name )
-		if ( name == "item_wraith_band" ) then return { { "part_a", "bundle", "part_a" }, { "unused" } } end;
+		if ( name == "item_magic_wand" ) then return { { "part_a", "bundle", "part_a" }, { "unused" } } end;
 		if ( name == "bundle" ) then return { "part_b", "part_c" } end; return {};
 	end } );
-	for i = 1, 18 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,part_c,part_a,item_magic_wand" );
+	for i = 1, 17 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_bottle,item_boots,part_a,part_b,part_c,part_a,item_power_treads" );
 end );
 test( "stash and own courier credit; other courier excluded", function()
 	local s = scenario( { slots = { [9] = "part_a" },
 		couriers = { { owner = 7, slots = { [0] = "part_b" } }, { owner = 8, slots = { [0] = "part_a" } } },
-		recipe = function( name ) if ( name == "item_wraith_band" ) then return { { "part_a", "part_a", "part_b" } } end; return {} end,
+		recipe = function( name ) if ( name == "item_magic_wand" ) then return { { "part_a", "part_a", "part_b" } } end; return {} end,
 	} );
-	for i = 1, 15 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_branches,item_bottle,item_flask,part_a,item_magic_wand" );
+	for i = 1, 14 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_bottle,item_boots,part_a,item_power_treads" );
 end );
 test( "delayed delivery and auto-combination do not rebuild paid components", function()
 	local s = scenario( { recipe = function( name )
-		if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {};
+		if ( name == "item_magic_wand" ) then return { { "part_a", "part_b" } } end; return {};
 	end } );
 	-- Инвентарь пуст даже после успеха: компоненты могут ещё доставляться/собираться.
-	for i = 1, 16 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,item_magic_wand" );
+	for i = 1, 15 do s:tick() end; eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_bottle,item_boots,part_a,part_b,item_power_treads" );
 end );
 test( "cycle blocks and log is deduplicated", function()
 	local s = scenario( { recipe = function( name )
@@ -117,7 +117,7 @@ test( "invalid costs never submit", function()
 end );
 test( "all targets terminate without duplicate spending", function()
 	local s = scenario(); for i = 1, 30 do s:tick() end;
-	eq( #s.calls, 14 ); eq( s.calls[14], "item_satanic" ); eq( s.nextCost, 0 );
+	eq( #s.calls, 12 ); eq( s.calls[12], "item_black_king_bar" ); eq( s.nextCost, 0 );
 end );
 test( "shop and stock failures retain position", function()
 	for _, result in ipairs( { 1, 2, 3, 5, 6, 7 } ) do
@@ -134,7 +134,7 @@ test( "missing bot is harmless", function()
 end );
 test( "failed middle component retries without repurchasing paid predecessor", function()
 	local s = scenario( { recipe = function( name )
-		if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {};
+		if ( name == "item_magic_wand" ) then return { { "part_a", "part_b" } } end; return {};
 	end, purchase = function( state, name )
 		if name == "part_b" then
 			state.part_b_calls = ( state.part_b_calls or 0 ) + 1;
@@ -142,15 +142,15 @@ test( "failed middle component retries without repurchasing paid predecessor", f
 		end;
 		return 0;
 	end } );
-	for i = 1, 18 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_branches,item_bottle,item_flask,part_a,part_b,part_b,part_b,item_magic_wand" );
+	for i = 1, 17 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_bottle,item_boots,part_a,part_b,part_b,part_b,item_power_treads" );
 end );
 test( "inventory and backpack components are reused", function()
 	local s = scenario( { slots = { [0] = "part_a", [6] = "part_b" },
-		recipe = function( name ) if ( name == "item_wraith_band" ) then return { { "part_a", "part_b" } } end; return {} end,
+		recipe = function( name ) if ( name == "item_magic_wand" ) then return { { "part_a", "part_b" } } end; return {} end,
 	} );
-	for i = 1, 14 do s:tick() end;
-	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_branches,item_bottle,item_flask,item_magic_wand" );
+	for i = 1, 13 do s:tick() end;
+	eq( table.concat( s.calls, "," ), "item_tango,item_ward_observer,item_branches,item_bottle,item_boots,item_power_treads" );
 end );
 test( "zero cost is a valid purchase rather than a queue blocker", function()
 	local s = scenario( { cost = function() return 0 end } ); s:tick(); eq( s.calls[1], "item_tango" );
@@ -162,3 +162,5 @@ test( "known unavailable result skips target but nil still retries", function()
 	t:tick(); t:tick(); eq( t.calls[1], "item_tango" ); eq( t.calls[2], "item_tango" );
 end );
 print( "PURCHASE PASSED " .. passed .. " tests (mock API, not a Dota runtime test)" );
+
+PURCHASE_BUILD_SCENARIO=scenario;

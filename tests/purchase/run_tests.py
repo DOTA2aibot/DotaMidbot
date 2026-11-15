@@ -12,3 +12,5 @@ if source:
     lua.globals().PURCHASE_SOURCE = str(source)
 print('Runtime:', lua.eval('_VERSION'), flush=True)
 lua.execute((root / 'tests/purchase/test_purchase.lua').read_text(encoding='utf-8'))
+
+lua.execute((root / "tests/purchase/build_v04.lua").read_text(encoding="utf-8"))

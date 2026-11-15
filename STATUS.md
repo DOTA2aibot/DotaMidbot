@@ -1,3 +1,7 @@
+## T040 -- v0.4.0 build candidate
+
+Separate branch task/T040-v04-item-build, Issue64. Core purchase order changed; basev0.3.30 and existing gameplay preserved. Game smoke/review required. See docs/SF_BUILD_v04.md.
+
 ## T039 -- v0.3.30 targeted pickup experiment
 
 Direct south-water pickup failed in match9090705636. Targeted queued candidate ready for a game test. See docs/WORK_v0330.md.

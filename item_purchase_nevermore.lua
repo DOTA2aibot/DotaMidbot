@@ -7,18 +7,23 @@ local PURCHASE_INTERVAL = 0.5; -- секунды между попытками, 
 local MAX_RECIPE_DEPTH = 16; -- защита от циклического/повреждённого рецепта
 local MAX_COMPONENT_FAILURES = 20; -- ~10 сек подряд неудач -> скипаем предмет, не встаём насмерть
 -- T026: один стартовый Observer, дальнейшее пополнение — vision supply.
+-- Sentry is still purchased by the existing TryStartup service after Observer.
 local tableItemsToBuy = {
-	"item_tango", "item_ward_observer",
-	"item_branches", "item_branches", "item_bottle", "item_flask",
-	"item_wraith_band", "item_magic_wand",
-	"item_power_treads", "item_dragon_lance", "item_black_king_bar", "item_desolator",
-	"item_butterfly", "item_satanic",
+    "item_tango", "item_ward_observer", "item_branches",
+    "item_bottle", "item_boots", "item_magic_wand", "item_power_treads",
+    "item_yasha", "item_kaya", "item_yasha_and_kaya", "item_blink", "item_black_king_bar",
 };
 local pendingComponents = nil;
 local nextAttemptTime = -math.huge;
 local lastMessage = nil;
 local componentFailures = 0; -- подряд неудачные попытки купить текущий компонент
 local startupObserverPending = true; -- supply не конкурирует со стартовой очередью
+local bottleStageComplete = false;
+local HealthSupply;
+do
+    local ok,mod=pcall(require,GetScriptDirectory().."/laning/economy/health_supply");
+    if ok then HealthSupply=mod end;
+end;
 local ManaEconomy;
 local VisionSupply;
 local SentrySupply;
@@ -198,7 +203,11 @@ function ItemPurchaseThinkInner( bot )
         ok,attempted=pcall(SentrySupply.TryPurchase,bot);
         if ok and attempted then return end;
     end;
-	if ManaEconomy then
+    if bottleStageComplete and HealthSupply then
+        local ok,attempted=pcall(HealthSupply.TryPurchase,bot);
+        if ok and attempted then return end;
+    end;
+	if bottleStageComplete and ManaEconomy then
 		local ok, attempted = pcall( ManaEconomy.TryPurchase, bot );
 		if ok and attempted then return end;
 	end;
@@ -237,6 +246,7 @@ function ItemPurchaseThinkInner( bot )
 	end
 	if ( #pendingComponents == 0 ) then
 		if target=="item_ward_observer" then startupObserverPending=false end;
+        if target=="item_bottle" then bottleStageComplete=true end;
 		table.remove( tableItemsToBuy, 1 );
 		pendingComponents = nil;
 		componentFailures = 0;
