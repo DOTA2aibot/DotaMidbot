@@ -143,9 +143,14 @@ test( "healthy low mana skips salve only in explicit profile", function()
     local s = scenario(); eq( s.mana_policy.SkipFlask( s.bot ), true ); s.hp = 400; eq( s.mana_policy.SkipFlask( s.bot ), false );
     local t = scenario( true ); eq( t.mana_policy.SkipFlask( t.bot ), false );
 end );
-test( "actual purchase callback issues at most one buy and baseline queue continues", function()
-    local s = scenario(); s:load( "item_purchase_nevermore.lua" ); s.env.ItemPurchaseThink();
-    eq( #s.calls, 1 ); eq( s.calls[1], "item_clarity" ); s.time = 101; s.env.ItemPurchaseThink(); eq( s.calls[2], "item_tango" );
+test( "actual purchase callback issues at most one supplemental buy after Bottle and queue continues", function()
+    local s=scenario();
+    s.items[0]=s:item("item_tango",3);s.items[1]=s:item("item_ward_observer",1);
+    s.items[2]=s:item("item_branches",0);s.items[3]=s:item("item_bottle",0);
+    s:load("item_purchase_nevermore.lua");
+    for i=1,4 do s.time=100+i;s.env.ItemPurchaseThink();eq(#s.calls,0) end;
+    s.time=105;s.env.ItemPurchaseThink();eq(#s.calls,1);eq(s.calls[1],"item_clarity");
+    s.time=106;s.env.ItemPurchaseThink();eq(#s.calls,2);eq(s.calls[2],"item_boots");
 end );
 test( "actual purchase callback preserves baseline when module fails", function()
     local s = scenario();local original=s.env.require;

@@ -42,6 +42,7 @@ local function candidate(bot,s,wanted)
             and type(name)=="string" and name:sub(1,5)=="item_"
             and (drop.owner==bot or name=="item_rapier") and p
             and U.Global("IsLocationVisible",U.Vector(p))==true and distance<=RADIUS
+            and not (s.discarded_items and s.discarded_items[it])
             and not carried(bot,it) and (not nearest or distance<nearest.distance) then
             nearest={item=it,location=p,distance=distance,name=name};
         end;

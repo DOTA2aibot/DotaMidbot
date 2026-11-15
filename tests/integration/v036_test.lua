@@ -67,10 +67,10 @@ local function courierScenario()
     end;
     return s,courier;
 end;
-test("global courier state works with mana purchases and local logger",function()
+test("global courier state works with the early core build and local logger",function()
     local s,c=courierScenario();s.env.GetCourierState=function(unit) eq(unit,c);return 0 end;
     c.GetCourierState=function() error("global binding must be preferred") end;
-    s:load("item_purchase_nevermore.lua");s.env.ItemPurchaseThink();eq(s.courierCalls,1);eq(s.calls[1],"item_clarity");
+    s:load("item_purchase_nevermore.lua");s.env.ItemPurchaseThink();eq(s.courierCalls,1);eq(s.calls[1],"item_tango");
     assert(table.concat(s.logs,"\n"):find("take_and_transfer submitted",1,true));
     s.time=s.time+1;s.env.ItemPurchaseThink();eq(s.courierCalls,1);
 end);

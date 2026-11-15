@@ -1,3 +1,11 @@
+## v0.4.3-v040-base-test
+
+v0.4.0 baseline restored, Yasha before Kaya. Keep only tested cleanup15–18 from v0.4.2 and Crystalys → Daedalus after BKB. PR65 remains separate from main; Dota test pending.
+
+## T040 -- v0.4.0 build candidate
+
+Separate branch task/T040-v04-item-build, Issue64. Core purchase order changed; basev0.3.30 and existing gameplay preserved. Game smoke/review required. See docs/SF_BUILD_v04.md.
+
 ## T039 -- v0.3.30 targeted pickup experiment
 
 Direct south-water pickup failed in match9090705636. Targeted queued candidate ready for a game test. See docs/WORK_v0330.md.
