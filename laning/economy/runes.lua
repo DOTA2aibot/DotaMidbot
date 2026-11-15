@@ -94,17 +94,38 @@ end;
 -- руны там уже нет. Иначе — interrupted (ловушка старой логики: ЛЮБАЯ смена
 -- action после pickup_seen считалась успехом; матч 9082994995 t=240.7-246.7:
 -- pickup прерван, бутылка 0→0, руна AVAILABLE — а rune_done выдан).
+-- Only our Lua bookkeeping is reset. Engine-side rune state is not accessible.
+local function RecordPickup(bot,s,now,bottle_confirmed)
+    local cycle=math.floor(now/120);
+    local water_window=now>=120 and now<360
+        and (s.rune==RUNE_POWERUP_1 or s.rune==RUNE_POWERUP_2);
+    if C.water_pair_memory_experiment==true and water_window then
+        local previous=s.picked_cycle;s.picked_cycle=nil;
+        -- Keep done_cycle[location] and cycle_fails[location] intact.
+        -- They prevent repeated trips to the same resolved/failed location.
+        if s.water_reset_cycle~=cycle or s.water_reset_location~=s.rune then
+            s.water_reset_cycle,s.water_reset_location=cycle,s.rune;
+            pcall(function() O.Emit(O.State(bot),"rune_water_memory_reset",{
+                rune=s.rune,cycle=cycle,previous_shared_cycle=previous,
+                location_history_preserved=true,failure_budget_preserved=true,
+                pickup_evidence=bottle_confirmed and "bottle_increased" or "visible_location_empty",
+                own_pickup_confirmed=bottle_confirmed,engine_memory_reset=false,
+                owner="midbot_rune_only",outcome="experiment_not_proven"}) end);
+        end;
+    elseif bottle_confirmed then s.picked_cycle=cycle end;
+end;
 function M.FinishVerdict( bot, s )
     local now = A.Time();
     local bottle_now = BottleCharges( bot );
     if A.Number( bottle_now ) and A.Number( s.bottle_start ) and bottle_now > s.bottle_start then
-        s.picked_cycle = math.floor( now / 120 );
+        RecordPickup(bot,s,now,true);
         return "confirmed", bottle_now;
     end;
     local loc = global( "GetRuneSpawnLocation", s.rune );
     local st = loc and global( "GetRuneStatus", s.rune ) or nil;
     if loc and global( "IsLocationVisible", loc ) == true and RUNE_STATUS_AVAILABLE ~= nil
         and A.Number( st ) and st ~= RUNE_STATUS_AVAILABLE then
+        RecordPickup(bot,s,now,false);
         return "confirmed", bottle_now;
     end;
     return "interrupted", bottle_now;
@@ -372,7 +393,7 @@ function M.Decide( bot )
     -- Взяли одну и ресурсы близки к полным → фарм важнее, за второй не бежим.
     -- Идём, когда просели (мана <= 40% или хп <= 20%). Если точку видно и там
     -- пусто — поход уже блокирует taken-гейт ниже, время не теряется.
-    if not desperate and not free_grab and tmod <= 45 then
+    if C.water_pair_memory_experiment ~= true and not desperate and not free_grab and tmod <= 45 then
         local cycle = math.floor( now / 120 );
         if ( cycle == 1 or cycle == 2 ) and prior and prior.done_cycle then
             local resolved = false;

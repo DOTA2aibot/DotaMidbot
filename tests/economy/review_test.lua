@@ -224,6 +224,7 @@ test( "second water rune waits until resources drop", function()
     -- ресурсах; идём, когда просели по мане или хп. Явно пустую точку уже
     -- блокирует taken-гейт — время на проверку вживую не теряется.
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.env.require("bots/laning/economy/config").water_pair_memory_experiment=false;
     s.mana = 300; -- полная мана (max 300), hp=1000/1000
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
     s.status_map = { [0] = 3 }; -- T035: руна видимо исчезла → подбор подтверждён
@@ -236,6 +237,7 @@ test( "visible close rune is always taken even with full resources", function()
     -- T033 (Олег 09.11): железное правило — видимую руну ближе 700 берём всегда;
     -- порог второй водяной не должен оставлять бота стоять рядом с руной.
     local s = scenario(); pickup( s ); s.time = 130; s.mode = 7;
+    s.env.require("bots/laning/economy/config").water_pair_memory_experiment=false;
     s.mana = 300; -- полная мана (max 300), hp=1000/1000
     s.rune_policy.Think( s.bot ); eq( #s.runes, 1 ); -- первая водяная (rune 0)
     s.status_map = { [0] = 3 }; -- T035: руна видимо исчезла → подбор подтверждён
@@ -510,6 +512,7 @@ end);
 test("unsupported south water never starts travel even desperate",function()
     for _,time in ipairs({125,245}) do
         local s=scenario();pickup(s);s.time=time;s.mode=7;s.status_map={[0]=3,[1]=1};
+        s.env.require("bots/laning/economy/config").skip_broken_south_water=true;
         s.env.GetRuneType=function() return 7 end;s.items[0]=s:item("item_bottle",0);s.mana=0;
         eq(s.rune_policy.GetDesire(s.bot),0);s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,0);
     end;
@@ -517,6 +520,7 @@ end);
 test("unseen south water pre-spawn cannot start a wasted trip",function()
     for _,time in ipairs({100,115,230}) do
         local s=scenario();pickup(s);s.time=time;s.mode=7;s.status_map={[0]=3,[1]=0};
+        s.env.require("bots/laning/economy/config").skip_broken_south_water=true;
         s.env.GetRuneType=function() return -1 end;
         eq(s.rune_policy.GetDesire(s.bot),0);s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,0);
     end;
@@ -530,6 +534,51 @@ test("north water and south power remain actionable",function()
 end);
 test("last-moment south water guard issues no command",function()
     local s=scenario();pickup(s);s.time=245;s.env.GetRuneType=function() return 7 end;
+    s.env.require("bots/laning/economy/config").skip_broken_south_water=true;
     local _,kind=s.rune_policy.Approach(s.bot,{rune=1},0);eq(kind,"unsupported_water");eq(#s.moves,0);eq(#s.runes,0);
+end);
+
+-- Full callback regression: same rune TYPE, different location IDs.
+test("both water cycles allow the second location with full resources after a confirmed pickup",function()
+    for _,t in ipairs({130,245}) do
+        local s=scenario();pickup(s);s.time=t;s.mode=7;s.mana=300;
+        s.env.GetRuneType=function() return 7 end;
+        s.items[0]=s:item("item_bottle",0);
+        s.rune_policy.Think(s.bot);eq(s.runes[1],0);s.rune_policy.Think(s.bot);
+        s.items[0]=s:item("item_bottle",2);s.status_map={[0]=3,[1]=1};s.action=2;s.time=t+1;
+        s.rune_policy.Think(s.bot);
+        assert(table.concat(s.logs,"\n"):find("rune_water_memory_reset",1,true));
+        s.time=t+12;eq(assert(s.rune_policy.Decide(s.bot)).rune,1);
+        -- Even a stale AVAILABLE status cannot reopen the already-resolved north point.
+        s.status_map[0]=1;eq(assert(s.rune_policy.Decide(s.bot)).rune,1);
+        s.bot.GetLocation=function() return {x=1950,y=0} end;
+        s.rune_policy.Think(s.bot);eq(s.runes[2],1);
+        s.rune_policy.Think(s.bot);s.status_map[1]=3;s.action=2;s.time=t+13;
+        s.rune_policy.Think(s.bot);s.time=t+25;
+        s.status_map={[0]=1,[1]=1};eq(s.rune_policy.GetDesire(s.bot),0);
+    end;
+end);
+test("water reset clears only shared pickup memory, not location or failure history",function()
+    local s=scenario();pickup(s);s.time=131;s.env.GetRuneType=function() return 7 end;
+    local state={rune=0,bottle_start=0,picked_cycle=1,done_cycle={[0]=1},cycle_fails={[1]={cycle=1,count=2}}};
+    s.items[0]=s:item("item_bottle",2);
+    eq(s.rune_policy.FinishVerdict(s.bot,state),"confirmed");eq(state.picked_cycle,nil);
+    eq(state.done_cycle[0],1);eq(state.cycle_fails[1].count,2);
+end);
+test("interrupted water pickup never resets memory or claims success",function()
+    local s=scenario();pickup(s);s.time=131;s.env.GetRuneType=function() return 7 end;
+    local state={rune=0,bottle_start=0,picked_cycle=1};s.items[0]=s:item("item_bottle",0);
+    eq(s.rune_policy.FinishVerdict(s.bot,state),"interrupted");eq(state.picked_cycle,1);
+end);
+test("after six minutes shared power pickup memory is preserved",function()
+    local s=scenario();pickup(s);s.time=365;s.env.GetRuneType=function() return 0 end;
+    local state={rune=1,bottle_start=0};s.items[0]=s:item("item_bottle",3);
+    eq(s.rune_policy.FinishVerdict(s.bot,state),"confirmed");eq(state.picked_cycle,3);
+end);
+test("water location history expires at the next spawn, not before",function()
+    local s=scenario();pickup(s);s.time=130;s.mode=7;s.env.GetRuneType=function() return 7 end;
+    s.rune_policy.Think(s.bot);s.rune_policy.Think(s.bot);s.status_map={[0]=3,[1]=3};s.action=2;s.time=131;s.rune_policy.Think(s.bot);
+    s.time=145;s.status_map={[0]=1,[1]=3};eq(s.rune_policy.GetDesire(s.bot),0);
+    s.time=245;eq(assert(s.rune_policy.Decide(s.bot)).rune,0);
 end);
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

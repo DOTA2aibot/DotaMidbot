@@ -1,3 +1,7 @@
+## T039 — v0.3.27 water-pair experiment
+
+User-requested water bookkeeping experiment; south water re-enabled. Game result unproven. See docs/WORK_v0327.md.
+
 ## T039 — кандидат v0.3.26
 
 Временный пропуск неисправной южной водяной. Её подбор НЕ исправлен. [Ограничения](docs/WORK_v0326.md). Игра ещё не проверена.

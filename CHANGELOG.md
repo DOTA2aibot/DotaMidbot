@@ -1,3 +1,7 @@
+## v0.3.27-water-pair-test — T039 experiment
+
+Re-enable south water, clear shared water pickup bookkeeping while preserving location history, allow the second water rune at full resources. Engine pickup remains unproven. See docs/WORK_v0327.md.
+
 ## v0.3.26-water-guard-test — temporary T039 mitigation
 
 Skip broken south-water trips; pickup is NOT fixed. North water and south power runes remain enabled. See docs/WORK_v0326.md.
