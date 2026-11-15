@@ -63,6 +63,7 @@ local function scenario( disabled )
     function s:load( path ) local f = assert( loadfile( path ) ); setfenv( f, env ); return f() end;
     s.mana_policy = env.require( "bots/laning/economy/mana" );
     s.rune_policy = env.require( "bots/laning/economy/runes" );
+    env.require("bots/laning/economy/config").rune_nearby_priority=false; -- legacy-policy cases; dedicated close-rune cases enable it
     return s;
 end;
 test( "disabled profile never buys or enables rune desire", function()

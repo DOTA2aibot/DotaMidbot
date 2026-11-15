@@ -1,3 +1,7 @@
+## T039 -- v0.3.29 direct/queued experiments
+
+Rule500 candidate, game tests outstanding. v0.3.28 remains installed. See docs/WORK_v0329.md.
+
 ## T039 -- v0.3.28 recovery candidate
 
 v0.3.27 failed its game test. Watcher cancellation loop found; water-pair experiment reverted. Game test of recovery still required. See docs/WORK_v0328.md.

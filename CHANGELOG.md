@@ -1,3 +1,7 @@
+## v0.3.29-close-rune-test
+
+Visible river rune within500 overrides resource/wave preferences with survival checks. Direct/queued transports are separate game experiments; south-water pickup is unproven. See docs/WORK_v0329.md.
+
 ## v0.3.28-recovery-test -- T039
 
 Rollback water-pair experiment to v0.3.25 policy. Disable native watcher selection via its own mode; remove reactive capture cancellations. Unknown south-water type also gets close/away protection. Actual south-water pickup remains unresolved. See docs/WORK_v0328.md.

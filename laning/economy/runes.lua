@@ -58,6 +58,48 @@ local function CycleFailed( prior, rune, now )
     return rec ~= nil and rec.cycle == math.floor( now / 120 )
         and rec.count >= C.rune_cycle_fail_budget;
 end;
+-- Opportunistic visible river rune: bypass economy/wave/combat preference, never survival.
+local function NearbyRune(bot,prior,now)
+    if C.rune_nearby_priority~=true or now<120 or now>C.rune_window_end then return nil end;
+    if A.Call(bot,"NumQueuedActions")~=0 or BOT_ACTION_TYPE_PICK_UP_RUNE==nil then return nil end;
+    local p=A.Position(bot);local hp,mhp=A.Call(bot,"GetHealth"),A.Call(bot,"GetMaxHealth");
+    if not p or not A.Number(hp) or not A.Number(mhp) or hp<mhp*.5 then return nil end;
+    local towers=A.Call(bot,"GetNearbyTowers",1600,true);
+    local enemies=A.Call(bot,"GetNearbyHeroes",1600,true,BOT_MODE_NONE);
+    if type(towers)~="table" or type(enemies)~="table" then return nil end;
+    local best,dist;
+    if RUNE_POWERUP_1==nil or RUNE_POWERUP_2==nil or RUNE_STATUS_AVAILABLE==nil then return nil end;
+    for _,rune in ipairs({RUNE_POWERUP_1,RUNE_POWERUP_2}) do
+        local loc=global("GetRuneSpawnLocation",rune);local d=loc and A.Distance(p,loc);
+        if A.Number(d) and d<=500 and global("IsLocationVisible",loc)==true
+            and global("GetRuneStatus",rune)==RUNE_STATUS_AVAILABLE and not IsBounty(rune)
+            and not CycleFailed(prior,rune,now)
+            and not (prior.done_cycle and prior.done_cycle[rune]==math.floor(now/120))
+            and global("IsLocationPassable",loc)==true then
+            local safe=true;local damage=100;local count=0;
+            for _,tower in ipairs(towers) do
+                if A.Visible(tower) then
+                    local tp,range=A.Position(tower),A.Call(tower,"GetAttackRange");
+                    if not tp or not A.Number(range) or A.Distance(p,tp)<=range+150 or A.Distance(loc,tp)<=range+150 then safe=false end;
+                end;
+            end;
+            for _,enemy in ipairs(enemies) do
+                if A.Visible(enemy) then
+                    local ep=A.Position(enemy);
+                    if not ep then safe=false
+                    elseif math.min(A.Distance(p,ep),A.Distance(loc,ep))<=1000 then
+                        count=count+1;
+                        local hit=DAMAGE_TYPE_ALL and A.Call(enemy,"GetEstimatedDamageToTarget",true,bot,3,DAMAGE_TYPE_ALL);
+                        if not A.Number(hit) or hit<0 then safe=false else damage=damage+hit*1.5 end;
+                    end;
+                end;
+            end;
+            if count>1 or hp-damage<math.max(200,mhp*.35) then safe=false end;
+            if safe and (not dist or d<dist) then best,dist=rune,d end;
+        end;
+    end;
+    if best~=nil then return {rune=best,distance=dist,desire=C.rune_desire},"visible_river_within_500" end;
+end;
 -- T035: трассировка позиций попытки подбора — GPT запросил по загадке
 -- «PICK_UP_RUNE на южную rune1, бот пошёл на северо-запад» (9082994995).
 local function TracePos( p )
@@ -259,6 +301,9 @@ function M.Decide( bot )
     end;
     local mode = A.Call( bot, "GetActiveMode" );
     if mode == nil or BOT_MODE_RETREAT == nil or BOT_MODE_ATTACK == nil then return nil, "mode_unknown" end;
+    if mode~=BOT_MODE_RETREAT and (BOT_MODE_EVASIVE_MANEUVERS==nil or mode~=BOT_MODE_EVASIVE_MANEUVERS) then
+        local near,why=NearbyRune(bot,prior,now);if near then return near,why end;
+    end;
     if mode == BOT_MODE_RETREAT or mode == BOT_MODE_ATTACK then return nil, "combat_or_retreat" end;
     if BOT_MODE_EVASIVE_MANEUVERS ~= nil and mode == BOT_MODE_EVASIVE_MANEUVERS then return nil, "evasion_first" end;
     -- T022: текущая атака больше не блокирует руну — бот на линии почти всегда
@@ -561,11 +606,26 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
             bot:Action_MoveToLocation( okv and back or { x = bx, y = by } );
         end );
     end;
-    if kind == "pickup" then called = pcall( function() bot:Action_PickUpRune( s.rune ) end ) end;
+    if kind == "pickup" and C.rune_pickup_transport=="queued" then
+        local action=A.Call(bot,"GetCurrentActionType");
+        if A.Call(bot,"NumQueuedActions")~=0 or type(bot.ActionQueue_PickUpRune)~="function"
+            or not ((BOT_ACTION_TYPE_IDLE~=nil and action==BOT_ACTION_TYPE_IDLE)
+                or (BOT_ACTION_TYPE_NONE~=nil and action==BOT_ACTION_TYPE_NONE)) then
+            kind="queue_wait_idle";
+        end;
+    end;
+    if kind == "pickup" then
+        called = pcall(function()
+            if C.rune_pickup_transport=="queued" then
+                if A.Call(bot,"NumQueuedActions")~=0 or type(bot.ActionQueue_PickUpRune)~="function" then return false end;
+                bot:ActionQueue_PickUpRune(s.rune);
+            else bot:Action_PickUpRune(s.rune) end;
+        end);
+    end;
     -- T029: статус и видимость точки в событии — матч 9082458295, t=297-306:
     -- бот стоял НА споте (d=1.0), 4 pickup молча отклонены движком.
     pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = s.rune, distance = d,
-        submitted = called, kind = kind, rule = reason, reissue = reissue or nil,
+        submitted = called, kind = kind, transport = C.rune_pickup_transport, rule = reason, reissue = reissue or nil,
         rune_status = global( "GetRuneStatus", s.rune ),
         -- T035: тип руны в лог — GPT запросил по загадке «pickup на южную
         -- rune1, бот пошёл на северо-запад» (матч 9082994995): проверим, не

@@ -515,4 +515,29 @@ test("unknown south power after six minutes keeps ordinary pickup range",functio
     local s=southWater();s.time=365;s.env.GetRuneType=function() return -1 end;
     s.rune_policy.Think(s.bot);eq(#s.moves,0);eq(#s.runes,1);
 end);
+
+local function closeRune()
+    local s=scenario();pickup(s);s.time=245;s.mode=7;s.mana=300;s.items[0]=s:item("item_bottle",3);
+    s.env.require("bots/laning/economy/config").rune_nearby_priority=true;
+    return s;
+end;
+test("visible rune within500 bypasses full resources and a nearby wave",function()
+    local s=closeRune();s.creeps={s:unit()};eq(assert(s.rune_policy.Decide(s.bot)).rune,0);
+end);
+test("one low damage opponent does not block a close rune but lethal danger does",function()
+    local s=closeRune();s.mode=2;s.env.DAMAGE_TYPE_ALL=7;local e=s:unit();s.enemies={e};
+    e.GetEstimatedDamageToTarget=function() return 50 end;eq(assert(s.rune_policy.Decide(s.bot)).rune,0);
+    e.GetEstimatedDamageToTarget=function() return 1000 end;eq(s.rune_policy.GetDesire(s.bot),0);
+end);
+test("close rule preserves retreat casts empty spots and bounty exclusion",function()
+    local s=closeRune();s.mode=4;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.mode=7;s.casting=true;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.casting=false;s.env.GetRuneType=function() return 5 end;eq(s.rune_policy.GetDesire(s.bot),0);
+    s.env.GetRuneType=function() return 7 end;s.status_map={[0]=3,[1]=3};eq(s.rune_policy.GetDesire(s.bot),0);
+end);
+test("queued transport submits one pickup and is not reported as a successful pickup",function()
+    local s=closeRune();s.env.BOT_ACTION_TYPE_NONE=0;s.env.require("bots/laning/economy/config").rune_pickup_transport="queued";
+    local n=0;s.bot.ActionQueue_PickUpRune=function(_,r) eq(r,0);n=n+1;s.action=8 end;
+    s.rune_policy.Think(s.bot);eq(n,1);eq(#s.runes,0);s.rune_policy.Think(s.bot);eq(n,1);
+end);
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );
