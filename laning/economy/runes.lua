@@ -577,6 +577,8 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     local called, kind = false, "pickup";
     local loc = global( "GetRuneSpawnLocation", s.rune );
     local water=SouthWater(s.rune);
+    local transport=C.rune_pickup_transport;
+    if transport=="south_water_queued" then transport=water and "queued" or "direct" end;
     if A.Number( d ) and d > (water and C.south_water_pickup_range or C.rune_pickup_range) and loc then
         kind = "move"; called = pcall( function() bot:Action_MoveToLocation( loc ) end );
     elseif not water and A.Number( d ) and loc and ( d < C.rune_pickup_min
@@ -606,7 +608,7 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
             bot:Action_MoveToLocation( okv and back or { x = bx, y = by } );
         end );
     end;
-    if kind == "pickup" and C.rune_pickup_transport=="queued" then
+    if kind == "pickup" and transport=="queued" then
         local action=A.Call(bot,"GetCurrentActionType");
         if A.Call(bot,"NumQueuedActions")~=0 or type(bot.ActionQueue_PickUpRune)~="function"
             or not ((BOT_ACTION_TYPE_IDLE~=nil and action==BOT_ACTION_TYPE_IDLE)
@@ -616,7 +618,7 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     end;
     if kind == "pickup" then
         called = pcall(function()
-            if C.rune_pickup_transport=="queued" then
+            if transport=="queued" then
                 if A.Call(bot,"NumQueuedActions")~=0 or type(bot.ActionQueue_PickUpRune)~="function" then return false end;
                 bot:ActionQueue_PickUpRune(s.rune);
             else bot:Action_PickUpRune(s.rune) end;
@@ -625,7 +627,7 @@ function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     -- T029: статус и видимость точки в событии — матч 9082458295, t=297-306:
     -- бот стоял НА споте (d=1.0), 4 pickup молча отклонены движком.
     pcall( function() O.Emit( O.State( bot ), "rune_order", { rune = s.rune, distance = d,
-        submitted = called, kind = kind, transport = C.rune_pickup_transport, rule = reason, reissue = reissue or nil,
+        submitted = called, kind = kind, transport = transport, rule = reason, reissue = reissue or nil,
         rune_status = global( "GetRuneStatus", s.rune ),
         -- T035: тип руны в лог — GPT запросил по загадке «pickup на южную
         -- rune1, бот пошёл на северо-запад» (матч 9082994995): проверим, не

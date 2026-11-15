@@ -540,4 +540,25 @@ test("queued transport submits one pickup and is not reported as a successful pi
     local n=0;s.bot.ActionQueue_PickUpRune=function(_,r) eq(r,0);n=n+1;s.action=8 end;
     s.rune_policy.Think(s.bot);eq(n,1);eq(#s.runes,0);s.rune_policy.Think(s.bot);eq(n,1);
 end);
+
+test("targeted queue affects only southern water including unknown type",function()
+    for _,c in ipairs({{130,1,7,true},{245,1,-1,true},{245,0,7,false},{365,1,0,false},{485,1,-1,false}}) do
+        local s=scenario();pickup(s);s.time=c[1];s.env.BOT_ACTION_TYPE_IDLE=1;s.action=1;
+        s.env.GetRuneType=function() return c[3] end;
+        s.env.require("bots/laning/economy/config").rune_pickup_transport="south_water_queued";
+        local queued=0;s.bot.ActionQueue_PickUpRune=function(_,r) eq(r,c[2]);queued=queued+1 end;
+        s.rune_policy.Approach(s.bot,{rune=c[2]},50);
+        eq(queued,c[4] and 1 or 0);eq(#s.runes,c[4] and 0 or 0);
+        -- Normal power at distance50 uses its preserved backoff, not queued pickup.
+        if not c[4] then s.rune_policy.Approach(s.bot,{rune=c[2]},400);eq(#s.runes,1);eq(queued,0) end;
+    end;
+end);
+test("targeted queue never appends behind movement combat or another queued action",function()
+    for _,action in ipairs({2,4}) do
+        local s=scenario();pickup(s);s.time=245;s.action=action;s.env.GetRuneType=function() return 7 end;
+        s.env.BOT_ACTION_TYPE_IDLE=1;s.env.require("bots/laning/economy/config").rune_pickup_transport="south_water_queued";
+        local queued=0;s.bot.ActionQueue_PickUpRune=function() queued=queued+1 end;
+        local _,kind=s.rune_policy.Approach(s.bot,{rune=1},30);eq(kind,"queue_wait_idle");eq(queued,0);
+    end;
+end);
 print( "ECONOMY_REVIEW PASSED " .. passed .. " cases" );

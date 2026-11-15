@@ -1,3 +1,7 @@
+## v0.3.30-water-queue-test
+
+Queued transport only for south water; north water and power runes remain direct. Engine pickup still unproven. See docs/WORK_v0330.md.
+
 ## v0.3.29-close-rune-test
 
 Visible river rune within500 overrides resource/wave preferences with survival checks. Direct/queued transports are separate game experiments; south-water pickup is unproven. See docs/WORK_v0329.md.
