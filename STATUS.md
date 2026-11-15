@@ -1,3 +1,7 @@
+## T039 -- v0.3.28 recovery candidate
+
+v0.3.27 failed its game test. Watcher cancellation loop found; water-pair experiment reverted. Game test of recovery still required. See docs/WORK_v0328.md.
+
 ## T039 — v0.3.27 water-pair experiment
 
 User-requested water bookkeeping experiment; south water re-enabled. Game result unproven. See docs/WORK_v0327.md.

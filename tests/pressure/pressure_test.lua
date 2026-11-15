@@ -151,19 +151,20 @@ test("root turn permission uses risk and only the evaluated mid T1",function()
     eq(s.P.AllowStep(s.bot,{x=-600,y=0},s.home),false);
     s.enemy_dps=300;eq(s.P.AllowStep(s.bot,{x=-600,y=0},s.tower),false);
 end);
-test("only the exact watcher capture can interrupt a channel",function()
-    local s=scenario();local a=s:ability("ability_lamp_use");s.active=a;s.channel=true;
-    eq(s.W.Tick(s.bot,s.state),true);eq(#s.orders,1);eq(s.orders[1].kind,"clear");
-    s=scenario();s.active=s.abilities.nevermore_requiem;s.channel=true;eq(s.W.Tick(s.bot,s.state),false);eq(#s.orders,0);
+test("watcher diagnostic never cancels a channel even across 120 seconds",function()
+    local s=scenario();s.active=s:ability("ability_lamp_use");s.channel=true;s.mode=28;
+    for i=0,120 do s.time=400+i;eq(s.W.Tick(s.bot,s.state),false) end;
+    eq(#s.orders,0);
+    s.active=s.abilities.nevermore_requiem;eq(s.W.Tick(s.bot,s.state),false);eq(#s.orders,0);
 end);
-test("watcher movement suppression never touches a hero target",function()
-    local s=scenario();eq(s.W.Tick(s.bot,s.state),false);
-    s.bot.target=s.unit("npc_dota_watch_tower",4,0,0);s.mode=6;s.action=1;
-    eq(s.W.Tick(s.bot,s.state),true);eq(s.orders[1].kind,"clear");
+test("watcher targets never cancel movement or consume the order broker",function()
+    local s=scenario();s.bot.target=s.unit("npc_dota_watch_tower",4,0,0);s.mode=6;s.action=1;
+    eq(s.W.Tick(s.bot,s.state),false);eq(#s.orders,0);eq(s.state.order_at,nil);
 end);
-test("disabled watcher policy and repeated callbacks issue no clears",function()
-    local s=scenario();s.active=s:ability("ability_lamp_use");s.profile.ignore_watchers=false;eq(s.W.Tick(s.bot,s.state),false);
-    s.profile.ignore_watchers=true;eq(s.W.Tick(s.bot,s.state),true);eq(s.W.Tick(s.bot,s.state),false);eq(#s.orders,1);
+test("watcher mode exports zero desire and no orders",function()
+    local s=scenario();local f=assert(loadfile("profiles/tower_pressure/mode_watcher_nevermore.lua"));setfenv(f,s.env);f();
+    for i=1,120 do eq(s.env.GetDesire(),0);s.env.OnStart();s.env.Think();s.env.OnEnd() end;
+    eq(#s.orders,0);
 end);
 test("two already airborne tower shots increase the dive budget",function()
     local s=scenario();local before=assert(s:evaluate());

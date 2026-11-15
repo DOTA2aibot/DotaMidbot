@@ -8,6 +8,7 @@ class PressurePackage(unittest.TestCase):
    files=p.collect(profile,R,'scope-test');active=profile=='tower_pressure_test'
    self.assertEqual('mode_roam_nevermore.lua' in files,active)
    self.assertEqual('mode_side_shop_nevermore.lua' in files,active)
+   self.assertEqual('mode_watcher_nevermore.lua' in files,active)
    self.assertEqual(b'tower_pressure_enabled = true' in files['laning/profile.lua'],active)
    self.assertEqual(b'ignore_watchers = true' in files['laning/profile.lua'],active)
    self.assertNotIn('mode_attack_nevermore.lua',files)
@@ -16,7 +17,7 @@ class PressurePackage(unittest.TestCase):
   with tempfile.TemporaryDirectory(dir=R,prefix='.pressure-package-') as d:
    archive=Path(d)/'test.zip';m=p.build('tower_pressure_test',archive,'scope-test',R)
    self.assertEqual(p.verify(archive),m)
-   self.assertEqual(m['version'],'v0.3.27-water-pair-test')
+   self.assertEqual(m['version'],'v0.3.28-recovery-test')
    self.assertTrue(m['economy_enabled']);self.assertTrue(m['wards_enabled'])
    with zipfile.ZipFile(archive) as z:
     self.assertIn(b'Native ROAM ganks/objective trips are not available',z.read('INSTALL.txt'))

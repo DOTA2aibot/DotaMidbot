@@ -14,19 +14,15 @@ local function IsBounty( rune )
     return A.Number( kind ) and kind == bounty;
 end;
 local function SouthWater(rune)
-    return RUNE_POWERUP_2~=nil and rune==RUNE_POWERUP_2
-        and global("GetRuneType",rune)==(RUNE_WATER or DOTA_RUNE_WATER or 7);
+    if RUNE_POWERUP_2==nil or rune~=RUNE_POWERUP_2 then return false end;
+    local kind=global("GetRuneType",rune);
+    if kind==(RUNE_WATER or DOTA_RUNE_WATER or 7) then return true end;
+    -- Match9090670613: type was INVALID although south water was AVAILABLE.
+    -- Still use close approach / wrong-way protection during its water window.
+    local now=A.Time();
+    return A.Number(now) and now>=120 and now<360
+        and (kind==nil or kind==(RUNE_INVALID or -1));
 end;
--- Match9090636135: even at distance0, PickUpRune(1) sends SF NW.
--- Temporary API mitigation, not a pickup fix. Reject BEFORE travelling.
-local function UnsupportedWater(rune)
-    if C.skip_broken_south_water ~= true or RUNE_POWERUP_2 == nil or rune ~= RUNE_POWERUP_2 then return false end;
-    if SouthWater(rune) then return true end;
-    local now, kind = A.Time(), global("GetRuneType",rune);
-    return A.Number(now) and now >= C.rune_first_scout_time and now < 360
-        and (kind == nil or kind == (RUNE_INVALID or -1));
-end;
-
 
 -- T035 (ревью GPT по PR53, матч 9082994995): подтверждение подбора по факту,
 -- а не по смене action. Бутылка — самый надёжный readback: заряды растут
@@ -94,38 +90,17 @@ end;
 -- руны там уже нет. Иначе — interrupted (ловушка старой логики: ЛЮБАЯ смена
 -- action после pickup_seen считалась успехом; матч 9082994995 t=240.7-246.7:
 -- pickup прерван, бутылка 0→0, руна AVAILABLE — а rune_done выдан).
--- Only our Lua bookkeeping is reset. Engine-side rune state is not accessible.
-local function RecordPickup(bot,s,now,bottle_confirmed)
-    local cycle=math.floor(now/120);
-    local water_window=now>=120 and now<360
-        and (s.rune==RUNE_POWERUP_1 or s.rune==RUNE_POWERUP_2);
-    if C.water_pair_memory_experiment==true and water_window then
-        local previous=s.picked_cycle;s.picked_cycle=nil;
-        -- Keep done_cycle[location] and cycle_fails[location] intact.
-        -- They prevent repeated trips to the same resolved/failed location.
-        if s.water_reset_cycle~=cycle or s.water_reset_location~=s.rune then
-            s.water_reset_cycle,s.water_reset_location=cycle,s.rune;
-            pcall(function() O.Emit(O.State(bot),"rune_water_memory_reset",{
-                rune=s.rune,cycle=cycle,previous_shared_cycle=previous,
-                location_history_preserved=true,failure_budget_preserved=true,
-                pickup_evidence=bottle_confirmed and "bottle_increased" or "visible_location_empty",
-                own_pickup_confirmed=bottle_confirmed,engine_memory_reset=false,
-                owner="midbot_rune_only",outcome="experiment_not_proven"}) end);
-        end;
-    elseif bottle_confirmed then s.picked_cycle=cycle end;
-end;
 function M.FinishVerdict( bot, s )
     local now = A.Time();
     local bottle_now = BottleCharges( bot );
     if A.Number( bottle_now ) and A.Number( s.bottle_start ) and bottle_now > s.bottle_start then
-        RecordPickup(bot,s,now,true);
+        s.picked_cycle = math.floor( now / 120 );
         return "confirmed", bottle_now;
     end;
     local loc = global( "GetRuneSpawnLocation", s.rune );
     local st = loc and global( "GetRuneStatus", s.rune ) or nil;
     if loc and global( "IsLocationVisible", loc ) == true and RUNE_STATUS_AVAILABLE ~= nil
         and A.Number( st ) and st ~= RUNE_STATUS_AVAILABLE then
-        RecordPickup(bot,s,now,false);
         return "confirmed", bottle_now;
     end;
     return "interrupted", bottle_now;
@@ -182,7 +157,7 @@ function M.Decide( bot )
         for _, rune in ipairs( { RUNE_POWERUP_1, RUNE_POWERUP_2 } ) do
             local loc = global( "GetRuneSpawnLocation", rune );
             if loc and global( "IsLocationVisible", loc ) == true then
-                if global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE and not IsBounty( rune ) and not UnsupportedWater( rune ) then
+                if global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE and not IsBounty( rune ) then
                     prior.known_runes[rune] = now;
                 else prior.known_runes[rune] = nil end;
             end;
@@ -213,7 +188,6 @@ function M.Decide( bot )
     -- No river rune exists before the 2:00 water spawn. Only allow the short pre-spawn approach.
     if now < C.rune_first_scout_time then return nil, "before_first_water_window" end;
     if prior and prior.owned_order and IsBounty( prior.rune ) then return nil, "bounty_rune_ignored" end;
-    if prior.owned_order and UnsupportedWater(prior.rune) then return nil,"south_water_api_unsupported" end;
     if prior and now < ( prior.retry_after or -math.huge ) then return nil, "rune_retry_cooldown" end;
     -- T028: таймаут считается по deadline попытки (distance/280+3 при заказе,
     -- продлевается после реального старта pickup движком), а не тупо от первого
@@ -385,7 +359,7 @@ function M.Decide( bot )
         local floc = global( "GetRuneSpawnLocation", rune );
         if floc and p and global( "IsLocationVisible", floc ) == true
             and global( "GetRuneStatus", rune ) == RUNE_STATUS_AVAILABLE
-            and not IsBounty( rune ) and not UnsupportedWater( rune )
+            and not IsBounty( rune )
             and A.Distance( p, floc ) <= C.rune_free_grab_dist
             and not ( prior and prior.done_cycle and prior.done_cycle[rune] == cycle_now ) then free_grab = true end; -- решённая руна не пересматривается
     end;
@@ -393,7 +367,7 @@ function M.Decide( bot )
     -- Взяли одну и ресурсы близки к полным → фарм важнее, за второй не бежим.
     -- Идём, когда просели (мана <= 40% или хп <= 20%). Если точку видно и там
     -- пусто — поход уже блокирует taken-гейт ниже, время не теряется.
-    if C.water_pair_memory_experiment ~= true and not desperate and not free_grab and tmod <= 45 then
+    if not desperate and not free_grab and tmod <= 45 then
         local cycle = math.floor( now / 120 );
         if ( cycle == 1 or cycle == 2 ) and prior and prior.done_cycle then
             local resolved = false;
@@ -442,7 +416,6 @@ function M.Decide( bot )
         local fail = nil;
         if not ( valid and location and A.Number( d ) ) then fail = "spawn_location_unknown"
         elseif IsBounty( rune ) then fail = "bounty_rune_ignored"
-        elseif UnsupportedWater(rune) then fail = "south_water_api_unsupported"
         elseif not safe then fail = "unsafe"
         elseif d > max_distance then fail = "too_far"
         elseif taken then fail = "taken"
@@ -548,7 +521,6 @@ end;
 -- ИДЁМ через Action_MoveToLocation, а PickUp отдаём только в rune_pickup_range.
 function M.Approach( bot, s, distance, reason, reissue, force_backoff )
     if IsBounty( s.rune ) then return nil, "ignored_bounty" end;
-    if UnsupportedWater(s.rune) then return nil,"unsupported_water" end;
     local d = distance;
     if not A.Number( d ) then
         local okd, dd = pcall( function()
@@ -630,7 +602,6 @@ end;
 function M.Think( bot )
     local now = A.Time(); local s = states[bot] or {}; states[bot] = s;
     if s.owned_order and IsBounty( s.rune ) then M.Leave( bot, "bounty_rune_ignored" ); return end;
-    if s.owned_order and UnsupportedWater(s.rune) then M.Leave(bot,"south_water_api_unsupported");return end;
 
     -- T026 (матч 9082418779): пока попытка наша — НЕ отменяем её из-за
     -- транзиентных гейтов Decide: именно они сносили все 8 приказов матча
@@ -724,7 +695,6 @@ function M.Think( bot )
             -- в матче 4 pickup подряд уходили в одну и ту же позицию d=200.
             local force_backoff = ( s.failed_pickups or 0 ) >= 1 and s.last_kind == "pickup";
             local d, kind = M.Approach( bot, s, nil, nil, true, force_backoff );
-            if kind == "unsupported_water" then M.Leave(bot,"south_water_api_unsupported");return end;
             if kind == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
             s.last_kind = kind;
             if kind == "pickup" then
@@ -781,7 +751,6 @@ function M.Think( bot )
     if walk < C.rune_order_timeout_s then walk = C.rune_order_timeout_s elseif walk > C.rune_deadline_max_s then walk = C.rune_deadline_max_s end;
     s.deadline = now + walk;
     local _, kind0 = M.Approach( bot, s, plan.distance, reason );
-    if kind0 == "unsupported_water" then M.Leave(bot,"south_water_api_unsupported");return end;
     if kind0 == "ignored_bounty" then M.Leave( bot, "bounty_rune_ignored" ); return end;
     s.last_kind = kind0;
     if kind0 == "pickup" then s.first_pickup_at = now end;

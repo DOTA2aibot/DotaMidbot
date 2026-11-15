@@ -1,3 +1,7 @@
+## v0.3.28-recovery-test -- T039
+
+Rollback water-pair experiment to v0.3.25 policy. Disable native watcher selection via its own mode; remove reactive capture cancellations. Unknown south-water type also gets close/away protection. Actual south-water pickup remains unresolved. See docs/WORK_v0328.md.
+
 ## v0.3.27-water-pair-test — T039 experiment
 
 Re-enable south water, clear shared water pickup bookkeeping while preserving location history, allow the second water rune at full resources. Engine pickup remains unproven. See docs/WORK_v0327.md.

@@ -37,8 +37,6 @@ return {
     -- движком продлеваем ещё на rune_commit_extend_s (t=122.5: живой pickup
     -- убит таймаутом у порога руны).
     rune_pickup_range = 900, rune_commit_extend_s = 6,
-    skip_broken_south_water = false, -- temporary API mitigation, not a pickup fix
-    water_pair_memory_experiment = true, -- separate location history, no shared water pickup cap
     south_water_pickup_range = 90, rune_pickup_away_margin = 180, rune_pickup_away_grace_s = .4,
     -- T029: сколько перевыдач pickup ВПЛОТНУЮ к споту после спавна терпим, прежде
     -- чем признать точку пустой (матч 9082458295, t=297-306: d=1.0, 4 молчаливых

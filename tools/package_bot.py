@@ -62,7 +62,7 @@ def collect(profile, root=ROOT, revision='uncommitted'):
     if profile == 'tower_pressure_test':
         files = collect('all_test', root, revision)
         files['laning/profile.lua'] = profile_source(profile, revision)
-        for name in ('mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua'):
+        for name in ('mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua', 'mode_watcher_nevermore.lua'):
             files[name] = (root / 'profiles/tower_pressure' / name).read_bytes()
         return files
 
@@ -176,7 +176,7 @@ Install the complete bots folder and start a new local match.
 This explicitly replaces SF ROAM with bounded mid-T1 pressure and disables SF SIDE_SHOP neutral capture.
 Native ROAM ganks/objective trips are not available in this test profile.
 Ordinary lane, attack, retreat, shopping, runes, wards, PT and Wand are retained.
-Watcher ability_lamp_use / exact watcher targets are rejected; other channels are untouched.
+Native WATCHER selection is disabled. Capture diagnostics never cancel channels.
 Deaggro is a single attack-order attempt followed by tower-target readback, not a guarantee.
 No-creep dives require a conservative ready-Raze kill estimate and an escape damage budget.
 Unseen enemy cooldowns are not read; safety/kill predictions are estimates.
@@ -236,7 +236,7 @@ def verify(path):
             expected_entries.add(ITEM_ENTRY)
             expected_entries.add(GENERIC_RUNE_ENTRY)
         if profile == 'tower_pressure_test':
-            expected_entries.update({'mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua'})
+            expected_entries.update({'mode_roam_nevermore.lua', 'mode_side_shop_nevermore.lua', 'mode_watcher_nevermore.lua'})
         if entries != expected_entries:
             raise ValueError('Unexpected controller entrypoints')
         purchase_entries = {n for n in files if '/' not in n and n.startswith('item_purchase_')}
